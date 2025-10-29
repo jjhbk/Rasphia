@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useCallback, useEffect } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 
@@ -53,11 +52,11 @@ const App: React.FC = () => {
 
   // Update user info when session is available
   useEffect(() => {
-    if (session?.user) {
+    if (session) {
       setCurrentUser((prev) => ({
         ...prev,
-        name: session.user.name || "",
-        email: session.user.email || "",
+        name: session.user?.name || "",
+        email: session.user?.email || "",
       }));
     }
   }, [session]);
