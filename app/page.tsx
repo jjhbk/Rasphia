@@ -1,65 +1,338 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+import React, { useState, useCallback, useEffect } from "react";
+import { useSession, signIn, signOut } from "next-auth/react";
+
+import ChatWindow from "./components/ChatWindow";
+import ChatInput from "./components/ChatInput";
+import LandingPage from "./components/LandingPage";
+import CheckoutPage from "./components/CheckoutPage";
+import ProfilePage from "./components/ProfilePage";
+import ReviewModal from "./components/ReviewModal";
+import SignInPopup from "./components/SignInPopup";
+import ProfileIcon from "./components/icons/ProfileIcon";
+
+import type {
+  Message,
+  Product,
+  Order,
+  CheckoutCustomer,
+  UserProfile,
+  Review,
+} from "./types";
+
+import { addOrder } from "./data/orders";
+import { products as initialProducts } from "./data/products";
+
+const initialMessage: Message = {
+  author: "ai",
+  text: "Hello, I'm Rasphia. I blend taste with thought to help you find the perfect gift or perfume. Who is this for, and what's the occasion?",
+};
+
+const initialUser: UserProfile = {
+  name: "",
+  email: "",
+  phone: "",
+  address: "",
+  wishlist: [],
+};
+
+const App: React.FC = () => {
+  const { data: session, status } = useSession();
+  const isAuthenticated = !!session?.user;
+
+  const [messages, setMessages] = useState<Message[]>([initialMessage]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [checkoutProduct, setCheckoutProduct] = useState<Product | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isProfileVisible, setIsProfileVisible] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserProfile>(initialUser);
+  const [reviewingOrder, setReviewingOrder] = useState<Order | null>(null);
+  const [isSignInPopupOpen, setIsSignInPopupOpen] = useState(false);
+
+  // Update user info when session is available
+  useEffect(() => {
+    if (session?.user) {
+      setCurrentUser((prev) => ({
+        ...prev,
+        name: session.user.name || "",
+        email: session.user.email || "",
+      }));
+    }
+  }, [session]);
+
+  // AI chat logic
+  const handleSendMessage = useCallback(
+    async (text: string) => {
+      if (!text.trim()) return;
+
+      const userMessage: Message = { author: "user", text };
+      setMessages((prev) => [...prev, userMessage]);
+      setIsLoading(true);
+
+      try {
+        const response = await fetch("/api/curate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chatHistory: [...messages, userMessage],
+            products,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.statusText}`);
+        }
+
+        const aiResponse: Message = await response.json();
+        setMessages((prev) => [...prev, aiResponse]);
+      } catch (error) {
+        console.error("Error fetching AI response:", error);
+        const errorMessage: Message = {
+          author: "ai",
+          text: "I’m sorry — I’m having a bit of trouble connecting right now. Could you please try again in a moment?",
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [messages, products]
+  );
+
+  // Google login + popup
+  const handleLogin = async () => {
+    setIsSignInPopupOpen(true);
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsSignInPopupOpen(false);
+    await signIn("google");
+  };
+
+  const handleLogout = async () => {
+    await signOut({ callbackUrl: "/" });
+    setMessages([initialMessage]);
+    setCheckoutProduct(null);
+    setOrders([]);
+    setCurrentUser(initialUser);
+    setIsProfileVisible(false);
+    setProducts(initialProducts);
+  };
+
+  // Checkout and profile handlers
+  const handleInitiateCheckout = (product: Product) =>
+    setCheckoutProduct(product);
+  const handleCancelCheckout = () => setCheckoutProduct(null);
+
+  const handlePlaceOrder = (customer: CheckoutCustomer, paymentId: string) => {
+    if (!checkoutProduct) return;
+    const newOrder: Order = {
+      id: `ORD-${Date.now()}`,
+      customer,
+      product: checkoutProduct,
+      paymentId,
+      date: new Date().toISOString(),
+      status: "Processing",
+      isReviewed: false,
+    };
+
+    addOrder(newOrder);
+    setOrders((prev) => [...prev, newOrder]);
+
+    // Simulate shipment and delivery
+    setTimeout(() => {
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === newOrder.id
+            ? {
+                ...o,
+                status: "Shipped",
+                trackingNumber: `RS${Math.floor(
+                  100000000 + Math.random() * 900000000
+                )}`,
+              }
+            : o
+        )
+      );
+    }, 5000);
+
+    setTimeout(() => {
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === newOrder.id ? { ...o, status: "Delivered" } : o
+        )
+      );
+    }, 12000);
+
+    setCurrentUser((prev) => ({
+      ...prev,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+      address: customer.address,
+    }));
+
+    setCheckoutProduct(null);
+
+    const confirmationMessage: Message = {
+      author: "ai",
+      text: `Thank you for your purchase of ${checkoutProduct.name}! Your order ID is ${newOrder.id}. We'll notify you once it ships. You can track its status in your profile.`,
+    };
+    setMessages((prev) => [...prev, confirmationMessage]);
+  };
+
+  const handleToggleWishlist = (product: Product) => {
+    setCurrentUser((prevUser) => {
+      const isInWishlist = prevUser.wishlist.some(
+        (item) => item.name === product.name
+      );
+      if (isInWishlist) {
+        return {
+          ...prevUser,
+          wishlist: prevUser.wishlist.filter((i) => i.name !== product.name),
+        };
+      } else {
+        return { ...prevUser, wishlist: [...prevUser.wishlist, product] };
+      }
+    });
+  };
+
+  const handleShowProfile = () => setIsProfileVisible(true);
+  const handleHideProfile = () => setIsProfileVisible(false);
+  const handleSaveProfile = (updatedProfile: UserProfile) => {
+    setCurrentUser(updatedProfile);
+    handleHideProfile();
+  };
+
+  const handleStartReview = (order: Order) => setReviewingOrder(order);
+  const handleCloseReview = () => setReviewingOrder(null);
+
+  const handleAddReview = (
+    orderId: string,
+    rating: number,
+    comment: string
+  ) => {
+    const orderToReview = orders.find((o) => o.id === orderId);
+    if (!orderToReview) return;
+
+    const newReview: Review = {
+      authorName: currentUser.name || "Anonymous",
+      rating,
+      comment,
+      date: new Date().toISOString(),
+    };
+
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.name === orderToReview.product.name
+          ? { ...p, reviews: [...p.reviews, newReview] }
+          : p
+      )
+    );
+
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, isReviewed: true } : o))
+    );
+
+    handleCloseReview();
+  };
+
+  // Render login page if not signed in
+  if (status === "loading") {
+    return (
+      <div className="flex h-screen items-center justify-center text-stone-500">
+        Loading...
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <>
+        <LandingPage onLogin={handleLogin} />
+        <SignInPopup
+          isOpen={isSignInPopupOpen}
+          onClose={() => setIsSignInPopupOpen(false)}
+          onGoogleSignIn={handleGoogleSignIn}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+      </>
+    );
+  }
+
+  if (isProfileVisible) {
+    return (
+      <ProfilePage
+        user={currentUser}
+        orders={orders}
+        onSave={handleSaveProfile}
+        onBack={handleHideProfile}
+        onInitiateCheckout={handleInitiateCheckout}
+        onToggleWishlist={handleToggleWishlist}
+        onStartReview={handleStartReview}
+      />
+    );
+  }
+
+  if (checkoutProduct) {
+    return (
+      <CheckoutPage
+        product={checkoutProduct}
+        user={currentUser}
+        onPlaceOrder={handlePlaceOrder}
+        onCancel={handleCancelCheckout}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-screen bg-stone-100 text-stone-800 font-sans">
+      <header className="p-4 flex justify-between items-center border-b border-stone-200 bg-white">
+        <button
+          onClick={handleLogout}
+          className="text-sm text-stone-500 hover:text-stone-800 transition-colors"
+        >
+          Sign Out
+        </button>
+        <div className="text-center">
+          <h1 className="text-2xl font-serif text-amber-900 tracking-wider">
+            Rasphia
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-sm text-stone-500">
+            The Art of Thoughtful Gifting
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+        <button
+          onClick={handleShowProfile}
+          className="text-stone-500 hover:text-stone-800 transition-colors"
+          aria-label="View Profile"
+        >
+          <ProfileIcon />
+        </button>
+      </header>
+
+      <main className="flex-1 flex flex-col p-4 md:p-6 overflow-hidden">
+        <ChatWindow
+          messages={messages}
+          isLoading={isLoading}
+          onInitiateCheckout={handleInitiateCheckout}
+          wishlist={currentUser.wishlist}
+          onToggleWishlist={handleToggleWishlist}
+          products={products}
+        />
+        <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
       </main>
+
+      {reviewingOrder && (
+        <ReviewModal
+          order={reviewingOrder}
+          onClose={handleCloseReview}
+          onSubmit={handleAddReview}
+        />
+      )}
     </div>
   );
-}
+};
+
+export default App;
