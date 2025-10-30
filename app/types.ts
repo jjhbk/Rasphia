@@ -33,7 +33,7 @@ export interface CheckoutCustomer {
   address: string;
 }
 
-export type OrderStatus = "Processing" | "Shipped" | "Delivered";
+export type OrderStatus = "Processing" | "Shipped" | "Delivered" | "Paid";
 
 export interface Review {
   authorName: string;

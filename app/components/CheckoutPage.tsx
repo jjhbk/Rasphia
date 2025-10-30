@@ -30,13 +30,19 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    // Pre-fill form with user data from profile
+    // Pre-fill customer data
     setCustomer({
       name: user.name || "",
       email: user.email || "",
       phone: user.phone || "",
       address: user.address || "",
     });
+
+    // Load Razorpay checkout script dynamically
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
   }, [user]);
 
   const handleInputChange = (
@@ -64,47 +70,100 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       alert("Please fill in all required fields.");
       return;
     }
+
     setIsProcessing(true);
 
-    const options = {
-      key: "rzp_test_YourKeyHere", // IMPORTANT: Replace with your Razorpay Test Key ID
-      amount: product.price * 100, // Amount in the smallest currency unit (paise for INR)
-      currency: "INR",
-      name: "Rasphia",
-      description: `Purchase of ${product.name}`,
-      image: "https://picsum.photos/seed/logo/128/128", // A placeholder logo
-      handler: function (response: any) {
-        onPlaceOrder(customer, response.razorpay_payment_id);
-      },
-      prefill: {
-        name: customer.name,
-        email: customer.email,
-        contact: customer.phone,
-      },
-      notes: {
-        address: customer.address,
-      },
-      theme: {
-        color: "#4E443C", // A color that matches the brand
-      },
-      modal: {
-        ondismiss: function () {
-          setIsProcessing(false);
+    try {
+      // ✅ Step 1: Create order on backend with product + customer details
+      const res = await fetch("/api/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ product, customer }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to create Razorpay order");
+      }
+
+      const order = await res.json();
+
+      if (!order?.id) {
+        throw new Error("Invalid Razorpay order response");
+      }
+
+      // ✅ Step 2: Initialize Razorpay Checkout
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
+        amount: order.amount, // in paise
+        currency: order.currency,
+        name: "Rasphia",
+        description: `Purchase of ${product.name}`,
+        image: product.imageUrl || "https://picsum.photos/seed/logo/128/128",
+        order_id: order.id,
+        prefill: {
+          name: customer.name,
+          email: customer.email,
+          contact: customer.phone,
         },
-      },
-    };
+        notes: {
+          productName: product.name,
+          productBrand: product.brand,
+          address: customer.address,
+        },
+        theme: {
+          color: "#4E443C",
+        },
 
-    // Razorpay Test Key. In a real app, this should come from a secure source.
-    options.key = "rzp_test_0ePcjpsvGblJkS";
+        // ✅ Step 3: Payment handler after checkout success
+        handler: async function (response: any) {
+          try {
+            const verifyRes = await fetch("/api/verify-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...response,
+                customer,
+                product,
+              }),
+            });
 
-    const rzp = new window.Razorpay(options);
-    rzp.open();
+            const verifyData = await verifyRes.json();
+
+            if (verifyData.status === "ok") {
+              // Order successfully verified & saved
+              onPlaceOrder(customer, response.razorpay_payment_id);
+            } else {
+              alert("⚠️ Payment verification failed. Please contact support.");
+            }
+          } catch (verifyErr) {
+            console.error("Payment verification error:", verifyErr);
+            alert("Error verifying payment. Please try again.");
+          } finally {
+            setIsProcessing(false);
+          }
+        },
+
+        modal: {
+          ondismiss: function () {
+            setIsProcessing(false);
+          },
+        },
+      };
+
+      // ✅ Step 4: Open Razorpay checkout window
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      console.error("Payment initiation failed:", err);
+      alert("❌ Error initiating payment. Please try again.");
+      setIsProcessing(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4">
       <div className="w-full max-w-4xl bg-white rounded-lg shadow-xl grid grid-cols-1 md:grid-cols-2 overflow-hidden">
-        {/* Product Info Section */}
+        {/* Product Info */}
         <div className="p-8 bg-stone-50 flex flex-col">
           <h2 className="text-2xl font-serif text-amber-900 mb-6">
             Your Selection
@@ -136,7 +195,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
           </div>
         </div>
 
-        {/* Checkout Form Section */}
+        {/* Checkout Form */}
         <div className="p-8">
           <h2 className="text-2xl font-serif text-amber-900 mb-6">
             Shipping & Payment

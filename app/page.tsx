@@ -20,7 +20,6 @@ import type {
   Review,
 } from "./types";
 
-import { addOrder } from "./data/orders";
 import { products as initialProducts } from "./data/products";
 
 const initialMessage: Message = {
@@ -50,28 +49,55 @@ const App: React.FC = () => {
   const [reviewingOrder, setReviewingOrder] = useState<Order | null>(null);
   const [isSignInPopupOpen, setIsSignInPopupOpen] = useState(false);
 
-  // Update user info when session is available
+  // 🔹 Load user + orders from MongoDB when session is ready
   useEffect(() => {
-    if (session) {
-      setCurrentUser((prev) => ({
-        ...prev,
-        name: session.user?.name || "",
-        email: session.user?.email || "",
-      }));
-    }
+    const userEmail = session?.user?.email ?? "";
+    const userName = session?.user?.name ?? "";
+
+    if (!userEmail) return; // Exit early if no email (user not loaded yet)
+
+    const loadUserData = async () => {
+      try {
+        const [profileRes, ordersRes] = await Promise.all([
+          fetch(`/api/user/get-profile?email=${encodeURIComponent(userEmail)}`),
+          fetch(`/api/orders?email=${encodeURIComponent(userEmail)}`),
+        ]);
+
+        if (!profileRes.ok || !ordersRes.ok) {
+          throw new Error("Failed to fetch user data or orders");
+        }
+
+        const profile = await profileRes.json();
+        const userOrders = await ordersRes.json();
+
+        // ✅ Always have fallbacks for missing data
+        setCurrentUser({
+          name: profile?.name || userName,
+          email: profile?.email || userEmail,
+          phone: profile?.phone || "",
+          address: profile?.address || "",
+          wishlist: profile?.wishlist || [],
+        });
+
+        setOrders(userOrders || []);
+      } catch (error) {
+        console.error("❌ Error loading user data:", error);
+      }
+    };
+
+    loadUserData();
   }, [session]);
 
-  // AI chat logic
+  // 💬 AI chat handler
   const handleSendMessage = useCallback(
     async (text: string) => {
       if (!text.trim()) return;
-
       const userMessage: Message = { author: "user", text };
       setMessages((prev) => [...prev, userMessage]);
       setIsLoading(true);
 
       try {
-        const response = await fetch("/api/curate", {
+        const res = await fetch("/api/curate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -79,20 +105,18 @@ const App: React.FC = () => {
             products,
           }),
         });
-
-        if (!response.ok) {
-          throw new Error(`API error: ${response.statusText}`);
-        }
-
-        const aiResponse: Message = await response.json();
+        if (!res.ok) throw new Error(res.statusText);
+        const aiResponse: Message = await res.json();
         setMessages((prev) => [...prev, aiResponse]);
       } catch (error) {
-        console.error("Error fetching AI response:", error);
-        const errorMessage: Message = {
-          author: "ai",
-          text: "I’m sorry — I’m having a bit of trouble connecting right now. Could you please try again in a moment?",
-        };
-        setMessages((prev) => [...prev, errorMessage]);
+        console.error("AI error:", error);
+        setMessages((prev) => [
+          ...prev,
+          {
+            author: "ai",
+            text: "I'm having trouble connecting. Try again soon.",
+          },
+        ]);
       } finally {
         setIsLoading(false);
       }
@@ -100,16 +124,12 @@ const App: React.FC = () => {
     [messages, products]
   );
 
-  // Google login + popup
-  const handleLogin = async () => {
-    setIsSignInPopupOpen(true);
-  };
-
+  // 🟢 Auth handlers
+  const handleLogin = () => setIsSignInPopupOpen(true);
   const handleGoogleSignIn = async () => {
     setIsSignInPopupOpen(false);
     await signIn("google");
   };
-
   const handleLogout = async () => {
     await signOut({ callbackUrl: "/" });
     setMessages([initialMessage]);
@@ -117,98 +137,100 @@ const App: React.FC = () => {
     setOrders([]);
     setCurrentUser(initialUser);
     setIsProfileVisible(false);
-    setProducts(initialProducts);
   };
 
-  // Checkout and profile handlers
+  // 💳 Checkout
   const handleInitiateCheckout = (product: Product) =>
     setCheckoutProduct(product);
   const handleCancelCheckout = () => setCheckoutProduct(null);
 
-  const handlePlaceOrder = (customer: CheckoutCustomer, paymentId: string) => {
+  const handlePlaceOrder = async (
+    customer: CheckoutCustomer,
+    paymentId: string
+  ) => {
     if (!checkoutProduct) return;
-    const newOrder: Order = {
-      id: `ORD-${Date.now()}`,
-      customer,
-      product: checkoutProduct,
-      paymentId,
-      date: new Date().toISOString(),
-      status: "Processing",
-      isReviewed: false,
-    };
+    try {
+      // Update MongoDB order record to “Processing”
+      await fetch("/api/orders/update-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paymentId,
+          email: customer.email,
+          status: "Processing",
+        }),
+      });
 
-    addOrder(newOrder);
-    setOrders((prev) => [...prev, newOrder]);
-
-    // Simulate shipment and delivery
-    setTimeout(() => {
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === newOrder.id
-            ? {
-                ...o,
-                status: "Shipped",
-                trackingNumber: `RS${Math.floor(
-                  100000000 + Math.random() * 900000000
-                )}`,
-              }
-            : o
-        )
+      // Re-fetch orders from DB
+      const res = await fetch(
+        `/api/orders?email=${encodeURIComponent(customer.email)}`
       );
-    }, 5000);
+      const updatedOrders = await res.json();
+      setOrders(updatedOrders);
 
-    setTimeout(() => {
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === newOrder.id ? { ...o, status: "Delivered" } : o
-        )
-      );
-    }, 12000);
+      setCurrentUser({
+        ...currentUser,
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        address: customer.address,
+      });
 
-    setCurrentUser((prev) => ({
-      ...prev,
-      name: customer.name,
-      email: customer.email,
-      phone: customer.phone,
-      address: customer.address,
-    }));
-
-    setCheckoutProduct(null);
-
-    const confirmationMessage: Message = {
-      author: "ai",
-      text: `Thank you for your purchase of ${checkoutProduct.name}! Your order ID is ${newOrder.id}. We'll notify you once it ships. You can track its status in your profile.`,
-    };
-    setMessages((prev) => [...prev, confirmationMessage]);
+      setCheckoutProduct(null);
+      setMessages((prev) => [
+        ...prev,
+        {
+          author: "ai",
+          text: `✅ Thank you for your purchase of ${checkoutProduct.name}! We'll keep you updated on shipping.`,
+        },
+      ]);
+    } catch (err) {
+      console.error("Error updating order:", err);
+    }
   };
 
-  const handleToggleWishlist = (product: Product) => {
+  // 💗 Wishlist persistence
+  const handleToggleWishlist = async (product: Product) => {
     setCurrentUser((prevUser) => {
       const isInWishlist = prevUser.wishlist.some(
         (item) => item.name === product.name
       );
-      if (isInWishlist) {
-        return {
-          ...prevUser,
-          wishlist: prevUser.wishlist.filter((i) => i.name !== product.name),
-        };
-      } else {
-        return { ...prevUser, wishlist: [...prevUser.wishlist, product] };
-      }
+      const updatedWishlist = isInWishlist
+        ? prevUser.wishlist.filter((i) => i.name !== product.name)
+        : [...prevUser.wishlist, product];
+
+      // Persist to DB
+      fetch("/api/user/update-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...prevUser, wishlist: updatedWishlist }),
+      }).catch(console.error);
+
+      return { ...prevUser, wishlist: updatedWishlist };
     });
   };
 
+  // 👤 Profile
   const handleShowProfile = () => setIsProfileVisible(true);
   const handleHideProfile = () => setIsProfileVisible(false);
-  const handleSaveProfile = (updatedProfile: UserProfile) => {
-    setCurrentUser(updatedProfile);
-    handleHideProfile();
+  const handleSaveProfile = async (updatedProfile: UserProfile) => {
+    try {
+      await fetch("/api/user/update-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedProfile),
+      });
+      setCurrentUser(updatedProfile);
+      handleHideProfile();
+    } catch (err) {
+      console.error("Profile save failed:", err);
+    }
   };
 
+  // ⭐ Reviews
   const handleStartReview = (order: Order) => setReviewingOrder(order);
   const handleCloseReview = () => setReviewingOrder(null);
-
-  const handleAddReview = (
+  const handleAddReview = async (
     orderId: string,
     rating: number,
     comment: string
@@ -216,38 +238,38 @@ const App: React.FC = () => {
     const orderToReview = orders.find((o) => o.id === orderId);
     if (!orderToReview) return;
 
-    const newReview: Review = {
-      authorName: currentUser.name || "Anonymous",
-      rating,
-      comment,
-      date: new Date().toISOString(),
-    };
+    try {
+      await fetch("/api/reviews/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          productName: orderToReview.product.name,
+          rating,
+          comment,
+          authorEmail: currentUser.email,
+          authorName: currentUser.name,
+        }),
+      });
 
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.name === orderToReview.product.name
-          ? { ...p, reviews: [...p.reviews, newReview] }
-          : p
-      )
-    );
-
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, isReviewed: true } : o))
-    );
-
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, isReviewed: true } : o))
+      );
+    } catch (err) {
+      console.error("Review error:", err);
+    }
     handleCloseReview();
   };
 
-  // Render login page if not signed in
-  if (status === "loading") {
+  // ⏳ Auth state guards
+  if (status === "loading")
     return (
       <div className="flex h-screen items-center justify-center text-stone-500">
         Loading...
       </div>
     );
-  }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated)
     return (
       <>
         <LandingPage onLogin={handleLogin} />
@@ -258,23 +280,19 @@ const App: React.FC = () => {
         />
       </>
     );
-  }
 
-  if (isProfileVisible) {
+  if (isProfileVisible)
     return (
       <ProfilePage
         user={currentUser}
-        orders={orders}
-        onSave={handleSaveProfile}
         onBack={handleHideProfile}
         onInitiateCheckout={handleInitiateCheckout}
         onToggleWishlist={handleToggleWishlist}
         onStartReview={handleStartReview}
       />
     );
-  }
 
-  if (checkoutProduct) {
+  if (checkoutProduct)
     return (
       <CheckoutPage
         product={checkoutProduct}
@@ -283,8 +301,8 @@ const App: React.FC = () => {
         onCancel={handleCancelCheckout}
       />
     );
-  }
 
+  // 🪶 Default Chat UI
   return (
     <div className="flex flex-col h-screen bg-stone-100 text-stone-800 font-sans">
       <header className="p-4 flex justify-between items-center border-b border-stone-200 bg-white">

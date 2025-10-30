@@ -4,7 +4,9 @@ import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import clientPromise from "@/app/lib/mongodb";
 
 const handler = NextAuth({
-  adapter: MongoDBAdapter(clientPromise),
+  adapter: MongoDBAdapter(clientPromise, {
+    databaseName: "rasphia",
+  }),
 
   providers: [
     GoogleProvider({
@@ -19,14 +21,40 @@ const handler = NextAuth({
 
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-      }
+      if (user) token.id = user.id;
       return token;
     },
     async session({ session, token }) {
-      // session.user.id = token.id;
+      // if (token?.id && session.user) session.user= token.id as string;
       return session;
+    },
+  },
+
+  events: {
+    // 🔹 Fires when a new user is created
+    async createUser({ user }) {
+      try {
+        const client = await clientPromise;
+        const db = client.db("rasphia"); // your app's DB
+        const existingProfile = await db
+          .collection("user_profiles")
+          .findOne({ email: user.email });
+
+        if (!existingProfile) {
+          await db.collection("user_profiles").insertOne({
+            name: user.name || "",
+            email: user.email,
+            phone: "",
+            address: "",
+            wishlist: [],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+          console.log(`✅ Created user profile for ${user.email}`);
+        }
+      } catch (err) {
+        console.error("❌ Error creating user profile:", err);
+      }
     },
   },
 });
