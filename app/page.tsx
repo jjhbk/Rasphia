@@ -89,9 +89,11 @@ const App: React.FC = () => {
   }, [session]);
 
   // 💬 AI chat handler
-  const handleSendMessage = useCallback(
+  // 💬 AI chat handler (streaming enabled)
+  const handleSendAgentMessage = useCallback(
     async (text: string) => {
       if (!text.trim()) return;
+
       const userMessage: Message = { author: "user", text };
       setMessages((prev) => [...prev, userMessage]);
       setIsLoading(true);
@@ -102,26 +104,95 @@ const App: React.FC = () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             chatHistory: [...messages, userMessage],
-            products,
           }),
         });
-        if (!res.ok) throw new Error(res.statusText);
-        const aiResponse: Message = await res.json();
-        setMessages((prev) => [...prev, aiResponse]);
+
+        if (!res.ok || !res.body) throw new Error("Stream failed");
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulatedText = "";
+        let aiMessage: Message = { author: "ai", text: "" };
+
+        // Add placeholder message for the AI
+        setMessages((prev) => [...prev, aiMessage]);
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          accumulatedText += chunk;
+
+          // Update last AI message incrementally
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIndex = updated.length - 1;
+            if (updated[lastIndex]?.author === "ai") {
+              updated[lastIndex] = {
+                ...updated[lastIndex],
+                text: accumulatedText,
+              };
+            }
+            return updated;
+          });
+        }
       } catch (error) {
-        console.error("AI error:", error);
+        console.error("❌ AI streaming error:", error);
         setMessages((prev) => [
           ...prev,
           {
             author: "ai",
-            text: "I'm having trouble connecting. Try again soon.",
+            text: "I'm having trouble connecting right now. Please try again later.",
           },
         ]);
       } finally {
         setIsLoading(false);
       }
     },
-    [messages, products]
+    [messages]
+  );
+  const handleSendMessage = useCallback(
+    async (text: string) => {
+      if (!text.trim()) return;
+
+      // Add user message to chat
+      const userMessage: Message = { author: "user", text };
+      setMessages((prev) => [...prev, userMessage]);
+      setIsLoading(true);
+
+      try {
+        // Send message to Rasphia’s backend (RAG route)
+        const res = await fetch("/api/curate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chatHistory: [...messages, userMessage],
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`Rasphia response failed: ${res.statusText}`);
+        }
+
+        const aiResponse: Message = await res.json();
+
+        // Add AI response to the chat
+        setMessages((prev) => [...prev, aiResponse]);
+      } catch (error) {
+        console.error("❌ Rasphia AI error:", error);
+        setMessages((prev) => [
+          ...prev,
+          {
+            author: "ai",
+            text: "Hmm, I’m having a bit of trouble thinking right now. Could you please try again?",
+          },
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [messages]
   );
 
   // 🟢 Auth handlers

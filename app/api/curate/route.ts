@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
+import clientPromise from "@/app/lib/mongodb";
+import { embedQuery } from "@/app/lib/queryEmbeddings";
 
-export const dynamic = "force-dynamic"; // Ensures fresh responses (optional)
+export const dynamic = "force-dynamic";
 
-// Type definitions
 export interface Message {
   author: "user" | "ai";
   text: string;
@@ -15,76 +16,20 @@ export interface Message {
 }
 
 export interface Product {
+  _id?: string;
   name: string;
   description: string;
-  price?: string;
-  image?: string;
+  brand?: string;
+  category?: string;
+  price?: number;
+  imageUrl?: string;
   [key: string]: any;
 }
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY as string,
-});
-
-const systemInstruction = `
-You are Rasphia, an AI shopping curator whose name comes from 'Rasa' (taste) and 'Sophia' (thought). 
-Your persona is that of a warm, tasteful, and empathetic personal shopper. You are a friendly expert, part stylist, part confidant. 
-Your goal is not just to sell, but to guide users to discover truly meaningful gifts and perfumes by blending taste with thought.
-
-**Your Core Directive: Lead a Human-like, Story-Driven Conversation.**
-
-1. **Be Proactively Inquisitive:** Understand the person and emotion before recommending. 
-   Never recommend immediately. Always ask clarifying questions.
-2. **Weave a Narrative:** Be a storyteller. Explain *why* a product fits emotionally.
-3. **Maintain Natural Flow:** End with an open-ended question, vary your language, sound natural.
-4. **JSON Output Rules (Strict):**
-   - Respond with JSON.
-   - Fields: response (string), products (array of product names), comparisonTable (optional).
-`;
-
-const schema = {
-  type: Type.OBJECT,
-  properties: {
-    response: {
-      type: Type.STRING,
-      description:
-        "Your warm, conversational reply to the user, including your reasoning for the recommendations.",
-    },
-    products: {
-      type: Type.ARRAY,
-      description:
-        "An array of product names you are recommending, taken EXACTLY from the provided product catalog. Can be empty, but should not exceed 3 items.",
-      items: { type: Type.STRING },
-    },
-    comparisonTable: {
-      type: Type.OBJECT,
-      description:
-        "An optional table for comparing products side-by-side. Use this when the user asks for a comparison.",
-      properties: {
-        headers: { type: Type.ARRAY, items: { type: Type.STRING } },
-        rows: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-          },
-        },
-      },
-      required: ["headers", "rows"],
-    },
-  },
-  required: ["response", "products"],
-};
-
-// Main API handler
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-
-    const { chatHistory, products } = body as {
-      chatHistory: Message[];
-      products: Product[];
-    };
+    const { chatHistory } = body;
 
     if (!chatHistory || !Array.isArray(chatHistory)) {
       return NextResponse.json(
@@ -93,53 +38,166 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!products || !Array.isArray(products)) {
+    const userMsg =
+      [...chatHistory].reverse().find((m) => m.author === "user")?.text ?? "";
+    if (!userMsg.trim()) {
       return NextResponse.json(
-        { error: "Invalid or missing product catalog." },
+        { error: "User message is empty." },
         { status: 400 }
       );
     }
 
-    if (!process.env.GEMINI_API_KEY) {
+    // 🧠 Initialize Gemini
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey)
       return NextResponse.json(
-        { error: "Missing Gemini API key." },
+        { error: "Missing GEMINI_API_KEY." },
         { status: 500 }
       );
+
+    const ai = new GoogleGenAI({ apiKey });
+
+    // 🧭 Step 1: Vector search relevant products
+    const queryEmbedding = await embedQuery(userMsg);
+    const client = await clientPromise;
+    const db = client.db("rasphia");
+
+    const results = await db
+      .collection("products")
+      .aggregate([
+        {
+          $vectorSearch: {
+            index: "products_index", // must match Atlas index name
+            path: "embedding",
+            queryVector: queryEmbedding,
+            numCandidates: 100,
+            limit: 8,
+            similarity: "cosine",
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            name: 1,
+            brand: 1,
+            category: 1,
+            price: 1,
+            description: 1,
+            imageUrl: 1,
+            score: { $meta: "vectorSearchScore" },
+          },
+        },
+      ])
+      .toArray();
+
+    console.log("🧠 Vector search found", results.length, "matches");
+
+    if (!results.length) {
+      return NextResponse.json({
+        author: "ai",
+        text: "Hmm, I couldn’t find any products for that right now. Could you tell me a bit more about what you’re looking for?",
+      });
     }
 
-    const productCatalogString = JSON.stringify(products);
+    // 🧾 Step 2: Prepare catalog context for Gemini
+    const productContext = results
+      .map(
+        (p, i) =>
+          `${i + 1}. ${p.name} — ${p.description} (Category: ${
+            p.category || "General"
+          }, ₹${p.price || "N/A"})`
+      )
+      .join("\n");
+
+    // 🪶 Step 3: System instructions
+    const systemInstruction = `
+You are **Rasphia**, an elegant AI shopping curator.
+You combine taste ("Rasa") with thought ("Sophia") to help users find meaningful gifts and perfumes.
+
+- Speak warmly, naturally, and with empathy.
+- Always weave sensory and emotional storytelling into your suggestions.
+- Suggest from the provided product list only.
+- Respond strictly in JSON format using the schema.
+`;
+
+    // 🧩 Step 4: JSON schema for structured Gemini response
+    const schema = {
+      type: Type.OBJECT,
+      properties: {
+        response: {
+          type: Type.STRING,
+          description:
+            "A warm, story-driven conversational reply ending with a question.",
+        },
+        products: {
+          type: Type.ARRAY,
+          description:
+            "Array of up to 3 product names you’re recommending, taken exactly from the product list.",
+          items: { type: Type.STRING },
+        },
+        comparisonTable: {
+          type: Type.OBJECT,
+          properties: {
+            headers: { type: Type.ARRAY, items: { type: Type.STRING } },
+            rows: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+            },
+          },
+        },
+      },
+      required: ["response", "products"],
+    };
+
+    // 🧠 Step 5: Build final prompt
     const conversationHistory = chatHistory
       .map((m) => `${m.author === "user" ? "User" : "Rasphia"}: ${m.text}`)
       .join("\n");
 
-    const prompt = `${systemInstruction}
-    
-Here is the full product catalog:
-${productCatalogString}
+    const prompt = `
+${systemInstruction}
 
-Here is the conversation so far:
+Here are relevant products found from the catalog:
+${productContext}
+
+Conversation so far:
 ${conversationHistory}
 
-Respond strictly in JSON format following the schema.
+Respond strictly as valid JSON per schema.
 `;
 
-    // Call Gemini API
+    // ✨ Step 6: Call Gemini model
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash", // or "gemini-2.5-flash" if available
       contents: prompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: schema,
-        temperature: 0.75,
+        temperature: 0.7,
       },
     });
 
-    // Parse response
-    const jsonResponse = JSON.parse(response.text as string);
-    const recommendedProductNames: string[] = jsonResponse.products || [];
+    // 🧩 Step 7: Parse Gemini response safely
+    let jsonResponse;
+    try {
+      jsonResponse = JSON.parse(response.text as string);
+    } catch (err) {
+      console.error("❌ Failed to parse Gemini response:", response.text);
+      return NextResponse.json(
+        {
+          author: "ai",
+          text: "I couldn’t quite form a clear response. Could you describe what kind of vibe or person this gift is for?",
+        },
+        { status: 200 }
+      );
+    }
 
+    const recommendedProductNames: string[] = jsonResponse.products || [];
     const recommendedProducts: Product[] = recommendedProductNames
-      .map((name) => products.find((p) => p.name === name))
+      .map((name) => results.find((p) => p.name === name))
       .filter((p): p is Product => p !== undefined);
 
     const message: Message = {
@@ -152,9 +210,9 @@ Respond strictly in JSON format following the schema.
 
     return NextResponse.json(message, { status: 200 });
   } catch (error: any) {
-    console.error("Error calling Gemini API:", error);
+    console.error("❌ Curate route error:", error);
     return NextResponse.json(
-      { error: "Failed to get a response from the AI curator." },
+      { error: error?.message || "Failed to generate AI response." },
       { status: 500 }
     );
   }
