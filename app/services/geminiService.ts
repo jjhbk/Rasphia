@@ -125,7 +125,7 @@ Respond strictly in JSON format following the schema.
 
     // Call Gemini API
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
