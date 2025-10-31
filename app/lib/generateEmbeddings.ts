@@ -1,53 +1,47 @@
-import OpenAI from "openai";
 import clientPromise from "@/app/lib/mongodb";
 import { ObjectId } from "mongodb";
+import OpenAI from "openai";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
-/**
- * Lazy embedding generator for a single product
- * - Only runs if `embedding` is null or marked for re-embedding
- */
 export async function generateProductEmbedding(productId: string) {
   const client = await clientPromise;
   const db = client.db("rasphia");
-  const products = db.collection("products");
 
-  const product = await products.findOne({ _id: new ObjectId(productId) });
-  if (!product) throw new Error("Product not found");
+  const product = await db
+    .collection("products")
+    .findOne({ _id: new ObjectId(productId) });
 
-  // 💤 Skip if embedding already exists and not forced
-  if (product.embedding && !product.forceReembed) {
-    console.log(`⚙️ Skipping embedding for ${product.name} (already exists)`);
-    return;
-  }
+  if (!product) throw new Error("Product not found for embedding generation");
 
-  const text = `
-    ${product.name}.
-    Brand: ${product.brand || ""}.
-    Category: ${product.category || ""}.
-    Description: ${product.description}.
+  // 🧠 Combine product details for a rich embedding
+  const textToEmbed = `
+  Name: ${product.name}
+  Description: ${product.description}
+  Brand: ${product.brand || ""}
+  Category: ${product.category || ""}
+  Story: ${product.story || ""}
+  Tags: ${(product.tags || []).join(", ")}
+  Occasion: ${(product.occasion || []).join(", ")}
+  Recipient: ${product.recipient || ""}
   `;
 
-  const embeddingResponse = await openai.embeddings.create({
-    model: "text-embedding-3-small", // 1536 dims
-    input: text,
+  const response = await openai.embeddings.create({
+    model: "text-embedding-3-small", // ✅ best for semantic vector search
+    input: textToEmbed,
   });
 
-  const embedding = embeddingResponse.data[0].embedding;
+  const embedding = response.data[0].embedding;
 
-  await products.updateOne(
-    { _id: product._id },
-    {
-      $set: {
-        embedding,
-        forceReembed: false,
-        embeddingUpdatedAt: new Date(),
-      },
-    }
-  );
+  // 🗂️ Save embedding to MongoDB
+  await db
+    .collection("products")
+    .updateOne(
+      { _id: new ObjectId(productId) },
+      { $set: { embedding, updatedAt: new Date() } }
+    );
 
-  console.log(`✅ Stored embedding for ${product.name}`);
+  console.log(`🧠 Embedding stored for ${product.name}`);
 }

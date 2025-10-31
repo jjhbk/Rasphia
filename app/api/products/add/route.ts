@@ -2,18 +2,33 @@ import { NextResponse } from "next/server";
 import clientPromise from "@/app/lib/mongodb";
 import { requireAdmin } from "@/app/lib/auth";
 import { generateProductEmbedding } from "@/app/lib/generateEmbeddings";
-import { ObjectId } from "mongodb"; // ✅ FIX: Explicit import
+import { ObjectId } from "mongodb";
 
 export async function POST(req: Request) {
   try {
-    await requireAdmin(); // 🔒 Admin check
+    // 🔒 Ensure only admins can access
+    await requireAdmin();
 
     const body = await req.json();
-    const { name, brand, description, price, imageUrl, category } = body;
+    const {
+      name,
+      brand,
+      description,
+      price,
+      imageUrl,
+      category,
+      tags,
+      occasion,
+      recipient,
+      story,
+      affiliateLink,
+      reviews,
+    } = body;
 
-    if (!name || !description || !price) {
+    // ✅ Validate required fields
+    if (!name || !story || !price) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Missing required fields: name, description, or price." },
         { status: 400 }
       );
     }
@@ -21,6 +36,7 @@ export async function POST(req: Request) {
     const client = await clientPromise;
     const db = client.db("rasphia");
 
+    // ✅ Create new product document
     const newProduct = {
       name,
       brand: brand || "Unknown",
@@ -28,19 +44,32 @@ export async function POST(req: Request) {
       price: Number(price),
       imageUrl: imageUrl || "",
       category: category || "Uncategorized",
-      embedding: null, // 💤 Lazy: no embedding yet
+      tags: tags || [],
+      occasion: occasion || [],
+      recipient: recipient || "Anyone",
+      story: story || "",
+      affiliateLink: affiliateLink || "",
+      reviews: reviews || [],
+      embedding: null, // 💤 lazy embedding
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
+    // ✅ Insert into MongoDB
     const result = await db.collection("products").insertOne(newProduct);
+    const productId = result.insertedId.toString();
 
-    // ✅ Trigger background embedding generation (non-blocking)
-    generateProductEmbedding(result.insertedId.toString())
+    console.log(`🆕 Product added: ${name} (${productId})`);
+
+    // ✅ Trigger async background embedding generation
+    generateProductEmbedding(productId)
       .then(() => console.log(`✅ Embedding generated for ${name}`))
-      .catch((err: any) => console.error("❌ Embedding error:", err));
+      .catch((err: any) =>
+        console.error("❌ Embedding generation error:", err)
+      );
 
-    return NextResponse.json({ _id: result.insertedId, ...newProduct });
+    // ✅ Return the saved product
+    return NextResponse.json({ _id: productId, ...newProduct });
   } catch (err: any) {
     console.error("❌ Error adding product:", err);
 

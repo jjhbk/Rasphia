@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import AdminProductForm from "../components/AdminProductForm";
@@ -7,10 +8,16 @@ interface Product {
   _id?: string;
   name: string;
   description: string;
-  price: number;
   category: string;
-  imageUrl: string;
   brand?: string;
+  tags?: string[];
+  occasion?: string[];
+  recipient?: string;
+  price: number;
+  story?: string;
+  imageUrl: string;
+  affiliateLink?: string;
+  reviews?: any[];
 }
 
 export default function AdminDashboard() {
@@ -30,7 +37,7 @@ export default function AdminDashboard() {
     try {
       setIsLoading(true);
       const res = await fetch("/api/products/get");
-      if (!res.ok) throw new Error("Failed to fetch products");
+      if (!res.ok) throw new Error(`Failed to fetch products ${res.body}`);
       const data = await res.json();
       setProducts(data);
     } catch (err) {
@@ -44,24 +51,37 @@ export default function AdminDashboard() {
   // ✅ Add / Update product
   const handleSave = async (product: Product) => {
     try {
-      const method = product._id ? "PUT" : "POST";
-      const url = product._id ? "/api/products/update" : "/api/products/add";
+      const isEdit = Boolean(product._id);
+      const method = isEdit ? "PUT" : "POST";
+      const url = isEdit ? "/api/products/update" : "/api/products/add";
+
+      // Normalize _id to a string "id" field for the API
+      const payload = {
+        ...product,
+        ...(isEdit ? { id: String(product._id) } : {}), // 👈 critical line
+      };
 
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(product),
+        body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error("Failed to save product");
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("❌ API Error Response:", text);
+        throw new Error(`Failed to save product (${res.status})`);
+      }
 
+      // Reset UI state and reload
       setEditingProduct(null);
       setIsAdding(false);
       await loadProducts();
-      alert(`✅ Product ${product._id ? "updated" : "added"} successfully`);
+
+      alert(`✅ Product ${isEdit ? "updated" : "added"} successfully`);
     } catch (err) {
-      console.error(err);
-      alert("❌ Error saving product");
+      console.error("❌ handleSave error:", err);
+      alert("❌ Error saving product. Check console for details.");
     }
   };
 
@@ -86,7 +106,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // 🔒 Enforce admin-only access client-side (double layer with backend)
+  // 🔒 Only admin access (client-side)
   const isAdmin = session?.user?.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL;
 
   if (status === "loading") return <p className="p-6">Loading...</p>;
@@ -99,7 +119,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-stone-100 p-6">
-      <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-lg p-6">
+      <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-lg p-6">
         <h1 className="text-3xl font-serif text-amber-900 mb-6 text-center">
           Admin Dashboard
         </h1>
@@ -150,9 +170,15 @@ export default function AdminDashboard() {
                   <h3 className="text-lg font-medium text-stone-800">
                     {p.name}
                   </h3>
-                  <p className="text-stone-500 text-sm">{p.category}</p>
+                  <p className="text-sm text-stone-500">{p.brand}</p>
+                  <p className="text-sm text-stone-500 italic">
+                    {p.category} • {p.recipient || "Any"}
+                  </p>
                   <p className="text-amber-900 font-semibold">
                     ₹{p.price.toFixed(2)}
+                  </p>
+                  <p className="text-xs text-stone-400 line-clamp-2">
+                    {p.story}
                   </p>
                 </div>
                 <div className="flex justify-between mt-3">
