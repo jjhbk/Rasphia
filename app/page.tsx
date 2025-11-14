@@ -375,50 +375,84 @@ const App: React.FC = () => {
 
   // 🪶 Default Chat UI
   return (
-    <div className="flex flex-col h-screen bg-stone-100 text-stone-800 font-sans">
-      <header className="p-4 flex justify-between items-center border-b border-stone-200 bg-white">
-        <button
-          onClick={handleLogout}
-          className="text-sm text-stone-500 hover:text-stone-800 transition-colors"
-        >
-          Sign Out
-        </button>
-        <div className="text-center">
-          <h1 className="text-2xl font-serif text-amber-900 tracking-wider">
-            Rasphia
-          </h1>
-          <p className="text-sm text-stone-500">
-            The Art of Thoughtful Gifting
-          </p>
-        </div>
-        <button
-          onClick={handleShowProfile}
-          className="text-stone-500 hover:text-stone-800 transition-colors"
-          aria-label="View Profile"
-        >
-          <ProfileIcon />
-        </button>
-      </header>
+    <div className="relative min-h-screen bg-[#F8F4EF] text-stone-900">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-16 left-10 h-72 w-72 rounded-[45%] bg-gradient-to-br from-[#FBE8D1] via-[#F7CFB8] to-[#F2B9A6] opacity-60 blur-3xl" />
+        <div className="absolute bottom-0 right-0 h-96 w-80 rounded-[60%] bg-gradient-to-br from-[#301B16] via-[#563223] to-[#A16443] opacity-50 blur-[160px]" />
+      </div>
+      <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 md:px-6">
+        <header className="flex flex-wrap items-center justify-between gap-4 rounded-full border border-white/50 bg-white/70 px-5 py-3 shadow-[0_10px_40px_rgba(0,0,0,0.04)] backdrop-blur">
+          <button
+            onClick={handleLogout}
+            className="inline-flex items-center gap-2 rounded-full border border-stone-200 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-white"
+            style={{ borderRadius: "999px" }}
+          >
+            Sign Out
+          </button>
+          <div className="text-center">
+            <p className="text-xs uppercase tracking-[0.5em] text-stone-400">
+              Rasphia
+            </p>
+            <p className="font-serif text-xl text-stone-900">
+              Concierge Session
+            </p>
+          </div>
+          <button
+            onClick={handleShowProfile}
+            className="inline-flex items-center justify-center rounded-full border border-stone-200 bg-white/70 p-2 text-stone-500 transition hover:bg-white"
+            aria-label="View Profile"
+            style={{ borderRadius: "999px" }}
+          >
+            <ProfileIcon />
+          </button>
+        </header>
 
-      <main className="flex-1 flex flex-col p-4 md:p-6 overflow-hidden">
-        <ChatWindow
-          messages={messages}
-          isLoading={isLoading}
-          onInitiateCheckout={handleInitiateCheckout}
-          wishlist={currentUser.wishlist}
-          onToggleWishlist={handleToggleWishlist}
-          products={products}
-        />
-        <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
-      </main>
+        <main className="mt-6 flex-1 min-h-0 overflow-hidden">
+          <div className="relative flex h-full flex-col rounded-[36px] border border-white/50 bg-white/90 p-4 shadow-[0_25px_100px_rgba(0,0,0,0.08)]">
+            <div className="pointer-events-none absolute -top-6 right-4 h-40 w-40 rounded-full bg-gradient-to-br from-amber-200 via-rose-100 to-white blur-[70px] opacity-80" />
+            <div className="pointer-events-none absolute bottom-[-20px] left-[-10px] h-44 w-44 rounded-full bg-gradient-to-br from-[#2C1A13] via-[#4F2B1E] to-[#8E5637] blur-[90px] opacity-60" />
+            <div className="relative flex h-full min-h-0 flex-col rounded-[28px] bg-white/85 p-4 shadow-inner">
+              <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-semibold uppercase tracking-[0.4em] text-stone-400">
+                <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-1 text-amber-800">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" /> Live
+                  concierge
+                </span>
+                <span className="text-stone-500">
+                  Signed in as {currentUser.name || session?.user?.name}
+                </span>
+              </div>
+              <div className="mt-4 flex flex-1 min-h-0 flex-col overflow-hidden rounded-[24px] border border-white/60 bg-white/75 p-4 shadow-lg shadow-white/60">
+                <div className="relative flex flex-1 min-h-0 flex-col overflow-hidden">
+                  <ChatWindow
+                    messages={messages}
+                    isLoading={isLoading}
+                    onInitiateCheckout={handleInitiateCheckout}
+                    wishlist={currentUser.wishlist}
+                    onToggleWishlist={handleToggleWishlist}
+                    products={products}
+                  />
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-2 pb-2">
+                    <div className="pointer-events-auto w-full max-w-3xl">
+                      <ChatInput
+                        onSendMessage={handleSendMessage}
+                        isLoading={isLoading}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
 
-      {reviewingOrder && (
-        <ReviewModal
-          order={reviewingOrder}
-          onClose={handleCloseReview}
-          onSubmit={handleAddReview}
-        />
-      )}
+        {reviewingOrder && (
+          <ReviewModal
+            order={reviewingOrder}
+            onClose={handleCloseReview}
+            onSubmit={handleAddReview}
+          />
+        )}
+      </div>
     </div>
   );
 };

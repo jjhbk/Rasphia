@@ -1,6 +1,6 @@
 "use client";
 import { motion, AnimatePresence } from "framer-motion";
-import { X } from "lucide-react";
+import { X, Sparkles, Shield, ArrowRight, LogIn } from "lucide-react";
 import React from "react";
 
 interface SignInPopupProps {
@@ -14,61 +14,97 @@ const SignInPopup: React.FC<SignInPopupProps> = ({
   onClose,
   onGoogleSignIn,
 }) => {
+  const highlights = [
+    {
+      icon: Sparkles,
+      title: "Continue the brief",
+      copy: "We remember scents, wishlists, and carted rituals across devices.",
+    },
+    {
+      icon: Shield,
+      title: "Private & secure",
+      copy: "Protected by NextAuth + Google. No passwords to juggle.",
+    },
+  ];
+
   return (
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,236,220,0.9),_rgba(32,24,18,0.9))] opacity-90" />
           <motion.div
-            className="bg-white rounded-2xl shadow-lg p-8 w-[90%] max-w-md text-center relative"
-            initial={{ scale: 0.8, opacity: 0, y: 40 }}
+            className="relative w-[90%] max-w-lg"
+            initial={{ scale: 0.9, opacity: 0, y: 40 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.8, opacity: 0, y: 40 }}
+            exit={{ scale: 0.9, opacity: 0, y: 40 }}
             transition={{ type: "spring", stiffness: 120 }}
           >
-            <button
-              onClick={onClose}
-              className="absolute top-4 right-4 text-stone-400 hover:text-stone-700 transition-colors"
-            >
-              <X size={20} />
-            </button>
+            <div className="pointer-events-none absolute -top-10 right-2 h-36 w-36 rounded-full bg-gradient-to-br from-amber-200 via-rose-100 to-white blur-2xl opacity-80" />
+            <div className="pointer-events-none absolute bottom-[-40px] left-[-20px] h-40 w-40 rounded-full bg-gradient-to-br from-[#2F1A19] via-[#613629] to-[#AD6F52] blur-[90px] opacity-70" />
+            <div className="relative overflow-hidden rounded-[32px] border border-white/30 bg-white/95 p-8 shadow-2xl backdrop-blur">
+              <button
+                onClick={onClose}
+                className="absolute right-5 top-5 rounded-full border border-stone-200 bg-white/70 p-2 text-stone-500 transition hover:bg-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
 
-            <h2 className="text-2xl font-serif text-amber-900 mb-2">
-              Welcome to Rasphia
-            </h2>
-            <p className="text-stone-500 mb-6 text-sm">
-              Sign in to continue your personalized shopping journey
-            </p>
+              <div className="flex flex-col gap-2 text-left">
+                <p className="inline-flex w-fit items-center gap-2 rounded-full bg-amber-50 px-4 py-1 text-xs font-semibold uppercase tracking-[0.4em] text-amber-800">
+                  Sign in
+                </p>
+                <h2 className="text-3xl font-serif text-stone-900">
+                  Pick up where your concierge left off.
+                </h2>
+                <p className="text-sm text-stone-500">
+                  Save conversations, wishlists, and checkout progress with a single tap.
+                </p>
+              </div>
 
-            <button
-              onClick={onGoogleSignIn}
-              className="flex items-center justify-center w-full py-3 bg-white border border-stone-300 rounded-full hover:shadow-md transition-all active:scale-95"
-            >
-              <img
-                src="https://www.svgrepo.com/show/475656/google-color.svg"
-                alt="Google logo"
-                className="w-5 h-5 mr-3"
-              />
-              <span className="text-stone-700 font-medium">
+              <div className="mt-6 grid gap-4">
+                {highlights.map((highlight) => (
+                  <div
+                    key={highlight.title}
+                    className="flex items-start gap-3 rounded-2xl border border-stone-100 bg-stone-50/70 px-4 py-3"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-800">
+                      <highlight.icon className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-stone-900">{highlight.title}</p>
+                      <p className="text-xs text-stone-500">{highlight.copy}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={onGoogleSignIn}
+                className="mt-6 inline-flex w-full items-center justify-center gap-3 rounded-full bg-stone-900 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-stone-400/40 transition hover:-translate-y-0.5 hover:bg-stone-800"
+                style={{ borderRadius: "999px" }}
+              >
+                <LogIn className="h-4 w-4" />
                 Continue with Google
-              </span>
-            </button>
+                <ArrowRight className="h-4 w-4" />
+              </button>
 
-            <p className="text-xs text-stone-400 mt-6">
-              By signing in, you agree to Rasphia’s{" "}
-              <a href="#" className="underline hover:text-stone-600">
-                Terms
-              </a>{" "}
-              &{" "}
-              <a href="#" className="underline hover:text-stone-600">
-                Privacy Policy
-              </a>
-              .
-            </p>
+              <p className="mt-4 text-center text-xs text-stone-400">
+                By continuing you agree to our{" "}
+                <a href="#" className="underline decoration-amber-300 underline-offset-4 hover:text-stone-600">
+                  Terms
+                </a>{" "}
+                &{" "}
+                <a href="#" className="underline decoration-amber-300 underline-offset-4 hover:text-stone-600">
+                  Privacy Policy
+                </a>
+                .
+              </p>
+            </div>
           </motion.div>
         </motion.div>
       )}

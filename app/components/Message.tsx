@@ -27,31 +27,31 @@ const Message: React.FC<MessageProps> = ({ message, isLoading = false, onInitiat
   const isUser = message.author === 'user';
 
   return (
-    <div className={`flex items-start gap-3 ${isUser ? 'justify-end' : ''}`}>
+    <div className={`flex items-start gap-4 ${isUser ? 'justify-end' : ''}`}>
       {!isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800">
           <BotIcon />
         </div>
       )}
       <div className={`max-w-md md:max-w-lg lg:max-w-2xl flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
         <div
-          className={`px-4 py-3 rounded-2xl ${
+          className={`px-5 py-4 rounded-[24px] text-sm leading-relaxed ${
             isUser
-              ? 'bg-amber-800 text-white rounded-br-none'
-              : 'bg-white text-stone-800 rounded-bl-none border border-stone-200'
+              ? 'bg-gradient-to-br from-[#2C1A13] via-[#3F2B22] to-[#6C4C3C] text-white shadow-lg shadow-black/20'
+              : 'bg-white/90 text-stone-800 border border-white/70 shadow-[0_10px_30px_rgba(15,15,15,0.08)]'
           }`}
         >
           {isLoading ? <TypingIndicator /> : <p className="whitespace-pre-wrap">{message.text}</p>}
         </div>
 
         {message.comparisonTable && (
-          <div className="mt-4 w-full">
+          <div className="mt-4 w-full rounded-2xl border border-white/60 bg-white/80 p-4 shadow-inner">
             <ComparisonTable tableData={message.comparisonTable} />
           </div>
         )}
 
         {message.products && message.products.length > 0 && (
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
+          <div className="mt-4 grid w-full grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {message.products.map((recommendedProduct) => {
               // Find the full product object from the state to get the latest review data
               const fullProduct = products.find(p => p.name === recommendedProduct.name);
@@ -71,7 +71,7 @@ const Message: React.FC<MessageProps> = ({ message, isLoading = false, onInitiat
         )}
       </div>
       {isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-stone-300 text-stone-600 flex items-center justify-center">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-stone-900/80 text-white">
           <UserIcon />
         </div>
       )}
