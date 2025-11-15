@@ -33,22 +33,22 @@ const ProductCard: React.FC<ProductCardProps> = ({
       : 0;
 
   return (
-    <div className="bg-white border border-stone-200 rounded-lg overflow-hidden shadow-sm transition-shadow hover:shadow-md flex flex-col group">
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/90 shadow-lg shadow-stone-200/70 transition hover:-translate-y-1">
       <div className="relative">
         <img
           src={product.imageUrl}
           alt={product.name}
-          className="w-full h-48 object-cover"
+          className="h-48 w-full object-cover"
         />
         <button
           onClick={() => onToggleWishlist(product)}
-          className="absolute top-2 right-2 bg-white/70 backdrop-blur-sm p-2 rounded-full text-stone-600 hover:text-red-500 transition-colors"
+          className="absolute top-3 right-3 rounded-full bg-white/80 p-2 text-stone-600 backdrop-blur-sm transition hover:text-red-500"
           aria-label={isInWishlist ? "Remove from wishlist" : "Add to wishlist"}
         >
           <HeartIcon filled={isInWishlist} />
         </button>
       </div>
-      <div className="p-4 flex flex-col flex-grow">
+      <div className="flex flex-grow flex-col p-4">
         <h3 className="font-semibold text-stone-800">{product.name}</h3>
         <p className="text-sm text-stone-500 mb-2">{product.brand}</p>
 
@@ -62,13 +62,14 @@ const ProductCard: React.FC<ProductCardProps> = ({
         )}
 
         <p className="text-sm text-stone-600 flex-grow mb-4">{product.story}</p>
-        <div className="flex justify-between items-center mt-auto">
+        <div className="mt-auto flex items-center justify-between">
           <span className="font-bold text-amber-900">
             {formatPrice(product.price)}
           </span>
           <button
             onClick={() => onInitiateCheckout(product)}
-            className="px-4 py-2 bg-stone-800 text-white text-sm font-medium rounded-md hover:bg-stone-900 transition-colors"
+            className="rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow hover:bg-stone-800"
+            style={{ borderRadius: "999px" }}
           >
             Buy Now
           </button>
