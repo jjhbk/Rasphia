@@ -1,0 +1,18 @@
+curl -i -X POST 'https://graph.facebook.com/v22.0/880219895169236/messages' -H 'Authorization: Bearer EAFivJuuXGgwBPZBZAjZAwrtFn5c8ZBBRRaYnH60cJYqVMZANpUNZAHVcZCPEiVeZAOgiC7dB7aSDWCFsFKHHmCIZCSPAcIMtHjjJNL6YQoLXOekzq2ORHMEV6ZAH4Dq4ZABojB2kPVkGXJohs91Dpq5H4S7yiOjOaix79PH1yOzQHt0diZBIjDOaNxYQAIFdsUlMfJwlN4b5Jpz1GZBQyL9xfK5F32j35A7tZBlk4ini4b1RGvrZCwucvVvroMY4WCDmVRxvuxozXYc8DMcTk4Y7yVvK9iR'  -H 'Content-Type: application/json'  -d '{ \"messaging_product\": \"whatsapp\", \"to\": \"919897773662\", \"type\": \"template\", \"template\": { \"name\": \"hello_world\", \"language\": { \"code\": \"en_US\" } } }'
+
+
+curl -X POST \
+  https://graph.facebook.com/v22.0/880219895169236/messages \
+  -H "Authorization: Bearer EAFivJuuXGgwBPZBZAjZAwrtFn5c8ZBBRRaYnH60cJYqVMZANpUNZAHVcZCPEiVeZAOgiC7dB7aSDWCFsFKHHmCIZCSPAcIMtHjjJNL6YQoLXOekzq2ORHMEV6ZAH4Dq4ZABojB2kPVkGXJohs91Dpq5H4S7yiOjOaix79PH1yOzQHt0diZBIjDOaNxYQAIFdsUlMfJwlN4b5Jpz1GZBQyL9xfK5F32j35A7tZBlk4ini4b1RGvrZCwucvVvroMY4WCDmVRxvuxozXYc8DMcTk4Y7yVvK9iR" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messaging_product": "whatsapp",
+    "to": "919897773662",
+    "type": "template",
+    "template": {
+      "name": "hello_world",
+      "language": {
+        "code": "en_US"
+      }
+    }
+  }'

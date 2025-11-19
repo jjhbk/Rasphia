@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WhatsApp OTP Demo</title>
+  <style>
+    :root {
+      --bg: #f3f4f6;
+      --card: #fff;
+      --accent: #0ea5a4;
+      --muted: #6b7280;
+      --danger: #ef4444;
+    }
+    body {
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg, var(--bg), #e6eef0);
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 2rem;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 8px 30px rgba(11, 22, 33, 0.08);
+      padding: 22px;
+      width: 420px;
+      max-width: calc(100% - 32px);
+    }
+    h1 { margin: 0 0 8px 0; font-size: 20px; }
+    p.lead { margin: 0 0 18px 0; color: var(--muted); font-size: 13px; }
+    label { display:block; font-size: 13px; margin-bottom: 6px; color: #374151; }
+    input[type="text"], input[type="tel"], input[type="number"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #e6e9ee;
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+    .row { display:flex; gap:10px; align-items:center; }
+    .btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn.secondary { background: transparent; color: var(--accent); border: 1px solid #cfeae9; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .status { margin-top: 12px; font-size: 14px; }
+    .status.success { color: #16a34a; }
+    .status.error { color: var(--danger); }
+    small.note { display:block; margin-top: 12px; color: #9ca3af; font-size: 12px; }
+    .otp-input { width: 100%; letter-spacing: 6px; text-align:center; font-size: 18px; padding: 12px; }
+    .center { text-align:center; }
+    .divider { height:1px; background:#f1f5f9; margin:14px 0; border-radius:2px; }
+  </style>
+</head>
+<body>
+  <main class="card" role="main" aria-labelledby="title">
+    <h1 id="title">WhatsApp OTP Login</h1>
+    <p class="lead">Enter your phone number. We'll send a 6-digit OTP via WhatsApp (template must be approved).</p>
+
+    <label for="phone">Phone number (E.164 format, e.g. 9198XXXXXXXX or +9198XXXXXXXX)</label>
+    <input id="phone" type="tel" inputmode="tel" placeholder="9198XXXXXXXX" value="" />
+
+    <div class="row" style="margin-bottom: 8px;">
+      <button id="sendBtn" class="btn">Send OTP</button>
+      <button id="resendBtn" class="btn secondary" disabled>Resend</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <label for="otp">Enter OTP</label>
+    <input id="otp" class="otp-input" inputmode="numeric" maxlength="6" placeholder="------" />
+
+    <div class="row" style="margin-top:10px;">
+      <button id="verifyBtn" class="btn">Verify OTP</button>
+      <div style="flex:1"></div>
+    </div>
+
+    <div id="status" class="status muted"></div>
+    <small class="note">Note: Backend must be running and CORS-enabled. Set <code>BASE_URL</code> in the script if your backend is not on the same host.</small>
+  </main>
+
+  <script>
+    // === CONFIG ===
+    // Change this to your backend base URL if not running on the same host
+    const BASE_URL = "http://localhost:3000";
+
+    // DOM
+    const phoneInput = document.getElementById('phone');
+    const otpInput = document.getElementById('otp');
+    const sendBtn = document.getElementById('sendBtn');
+    const resendBtn = document.getElementById('resendBtn');
+    const verifyBtn = document.getElementById('verifyBtn');
+    const statusEl = document.getElementById('status');
+
+    // state
+    let lastPhone = null;
+    let resendTimeoutId = null;
+    let resendSecondsLeft = 0;
+
+    // helper
+    function setStatus(text, type = 'muted') {
+      statusEl.textContent = text;
+      statusEl.className = 'status ' + (type === 'muted' ? '' : type);
+      if (type === 'muted') statusEl.classList.remove('success','error');
+      if (type === 'success') {
+        statusEl.classList.add('success');
+        statusEl.classList.remove('error');
+      }
+      if (type === 'error') {
+        statusEl.classList.add('error');
+        statusEl.classList.remove('success');
+      }
+    }
+
+    function validatePhone(phone) {
+      if (!phone) return false;
+      // Very basic: digits and optional leading +
+      const cleaned = phone.replace(/\s+/g, '');
+      const m = cleaned.match(/^\+?[0-9]{8,15}$/);
+      return !!m;
+    }
+
+    function startResendCountdown(seconds = 30) {
+      resendSecondsLeft = seconds;
+      resendBtn.disabled = true;
+      resendBtn.textContent = `Resend (${resendSecondsLeft}s)`;
+      resendTimeoutId = setInterval(() => {
+        resendSecondsLeft--;
+        if (resendSecondsLeft <= 0) {
+          clearInterval(resendTimeoutId);
+          resendBtn.disabled = false;
+          resendBtn.textContent = 'Resend';
+        } else {
+          resendBtn.textContent = `Resend (${resendSecondsLeft}s)`;
+        }
+      }, 1000);
+    }
+
+    async function callApi(path, body) {
+      try {
+        const res = await fetch(BASE_URL + path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw { status: res.status, data };
+        return data;
+      } catch (err) {
+        throw err;
+      }
+    }
+
+    // event handlers
+    sendBtn.addEventListener('click', async () => {
+      const phone = phoneInput.value.trim();
+      if (!validatePhone(phone)) {
+        setStatus('Enter a valid phone number in E.164 format (digits, optional +).', 'error');
+        return;
+      }
+
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'Sending...';
+      setStatus('Sending OTP…', 'muted');
+
+      try {
+        const payload = { phone };
+        const resp = await callApi('/send-otp', payload);
+        setStatus(resp.message || 'OTP sent. Check WhatsApp.', 'success');
+        lastPhone = phone;
+        otpInput.focus();
+        startResendCountdown(30);
+      } catch (err) {
+        console.error(err);
+        const msg = err?.data?.error || (err?.data?.message) || 'Failed to send OTP';
+        setStatus(typeof msg === 'string' ? msg : JSON.stringify(msg), 'error');
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send OTP';
+      }
+    });
+
+    resendBtn.addEventListener('click', async () => {
+      if (!lastPhone) {
+        setStatus('No previous phone to resend to. Enter phone and press Send OTP.', 'error');
+        return;
+      }
+      phoneInput.value = lastPhone;
+      sendBtn.click();
+    });
+
+    verifyBtn.addEventListener('click', async () => {
+      const phone = phoneInput.value.trim() || lastPhone;
+      const otp = otpInput.value.trim();
+
+      if (!phone || !validatePhone(phone)) {
+        setStatus('Enter the phone number used to receive the OTP.', 'error');
+        return;
+      }
+      if (!otp || otp.length < 4) {
+        setStatus('Enter the 6-digit OTP.', 'error');
+        return;
+      }
+
+      verifyBtn.disabled = true;
+      verifyBtn.textContent = 'Verifying...';
+      setStatus('Verifying OTP…', 'muted');
+
+      try {
+        const resp = await callApi('/verify-otp', { phone, otp });
+        setStatus(resp.message || 'OTP verified. Logged in.', 'success');
+        // Example: you could set a JWT cookie here or redirect
+      } catch (err) {
+        console.error(err);
+        const msg = err?.data?.error || (err?.data?.message) || 'OTP verification failed';
+        setStatus(typeof msg === 'string' ? msg : JSON.stringify(msg), 'error');
+      } finally {
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = 'Verify OTP';
+      }
+    });
+
+    // small UX: press Enter on OTP to verify
+    otpInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') verifyBtn.click();
+    });
+
+    // Tips: Autofill phone for quick testing (uncomment during dev)
+    // phoneInput.value = "9198XXXXXXXX";
+  </script>
+</body>
+</html>
