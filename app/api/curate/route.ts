@@ -207,7 +207,7 @@ Respond strictly as valid JSON per schema.
         recommendedProducts.length > 0 ? recommendedProducts : undefined,
       comparisonTable: jsonResponse.comparisonTable,
     };
-
+    console.log("final message", message);
     return NextResponse.json(message, { status: 200 });
   } catch (error: any) {
     console.error("❌ Curate route error:", error);

@@ -66,7 +66,8 @@ const curatedProducts = [
 
 const testimonials = [
   {
-    quote: "The brief felt like texting a friend who knows every boutique perfumer.",
+    quote:
+      "The brief felt like texting a friend who knows every boutique perfumer.",
     author: "Medha A.",
   },
   {
@@ -160,7 +161,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                 Gift like you know them deeply.
               </h1>
               <p className="mt-5 text-lg text-stone-600">
-                Rasphia is a chat-led curator for perfumes and keepsakes. Speak naturally; receive a tight shortlist that feels human.
+                Rasphia is a chat-led curator for perfumes and keepsakes. Speak
+                naturally; receive a tight shortlist that feels human.
               </p>
               <div className="mt-8 flex flex-col gap-4 sm:flex-row">
                 <button
@@ -207,7 +209,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                       <UserRound className="h-4 w-4" />
                     </div>
                     <div className="rounded-2xl rounded-bl-sm bg-gradient-to-br from-[#2C1A13] via-[#3F2B22] to-[#6C4C3C] px-4 py-3 text-white shadow-lg shadow-stone-900/30">
-                      Looking for something that smells like first rain in Goa for a writer friend.
+                      Looking for something that smells like first rain in Goa
+                      for a writer friend.
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
@@ -215,7 +218,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                       <Sparkles className="h-4 w-4" />
                     </div>
                     <div className="rounded-2xl rounded-tl-sm bg-gradient-to-r from-white via-stone-50 to-amber-50 px-4 py-3 text-stone-800 shadow-md">
-                      Got it. Pairing petrichor-forward perfumes with warm brass objects. Here’s a clean shortlist.
+                      Got it. Pairing petrichor-forward perfumes with warm brass
+                      objects. Here’s a clean shortlist.
                     </div>
                   </div>
                 </div>
@@ -236,10 +240,16 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                       className="flex items-center justify-between rounded-2xl border border-stone-100/60 bg-white/85 px-4 py-3 shadow-sm shadow-stone-200/50"
                     >
                       <div>
-                        <p className="text-sm font-semibold text-stone-900">{suggestion.name}</p>
-                        <p className="text-xs text-stone-500">{suggestion.notes}</p>
+                        <p className="text-sm font-semibold text-stone-900">
+                          {suggestion.name}
+                        </p>
+                        <p className="text-xs text-stone-500">
+                          {suggestion.notes}
+                        </p>
                       </div>
-                      <p className="text-sm font-medium text-stone-700">{suggestion.price}</p>
+                      <p className="text-sm font-medium text-stone-700">
+                        {suggestion.price}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -272,7 +282,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
               <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-700">
                 Flow
               </p>
-              <h2 className="mt-2 font-serif text-4xl text-stone-900">Three simple beats.</h2>
+              <h2 className="mt-2 font-serif text-4xl text-stone-900">
+                Three simple beats.
+              </h2>
             </div>
             <button
               onClick={onLogin}
@@ -290,8 +302,12 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                 className="rounded-2xl border border-stone-100 p-6 hover:-translate-y-1 hover:shadow-lg transition-all"
               >
                 <step.icon className="mb-4 h-6 w-6 text-amber-600" />
-                <h3 className="text-xl font-semibold text-stone-900">{step.title}</h3>
-                <p className="mt-2 text-sm text-stone-600">{step.description}</p>
+                <h3 className="text-xl font-semibold text-stone-900">
+                  {step.title}
+                </h3>
+                <p className="mt-2 text-sm text-stone-600">
+                  {step.description}
+                </p>
               </div>
             ))}
           </div>
@@ -331,7 +347,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                 </div>
                 <div className="p-6">
                   <div className="flex items-center justify-between text-sm">
-                    <p className="font-semibold text-stone-900">{product.price}</p>
+                    <p className="font-semibold text-stone-900">
+                      {product.price}
+                    </p>
                     <button
                       className="rounded-full px-5 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-50"
                       style={{ borderRadius: "999px" }}
@@ -345,11 +363,18 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
           </div>
         </section>
 
-        <section id="stories" className="mt-20 rounded-[32px] bg-[#1C140E] px-8 py-12 text-white">
+        <section
+          id="stories"
+          className="mt-20 rounded-[32px] bg-[#1C140E] px-8 py-12 text-white"
+        >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.4em] text-white/60">Stories</p>
-              <h2 className="mt-2 font-serif text-4xl leading-tight">People come back for the intimacy.</h2>
+              <p className="text-xs uppercase tracking-[0.4em] text-white/60">
+                Stories
+              </p>
+              <h2 className="mt-2 font-serif text-4xl leading-tight">
+                People come back for the intimacy.
+              </h2>
             </div>
             <a
               href="#"
@@ -366,7 +391,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                 className="rounded-3xl border border-white/10 bg-white/5 p-6 text-white"
               >
                 <p className="text-white/80">“{testimonial.quote}”</p>
-                <p className="mt-4 text-sm font-semibold">{testimonial.author}</p>
+                <p className="mt-4 text-sm font-semibold">
+                  {testimonial.author}
+                </p>
               </article>
             ))}
           </div>
@@ -375,7 +402,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
         <section className="mt-20 rounded-[32px] bg-gradient-to-br from-[#2E1F1B] to-[#4B332A] px-8 py-12 text-white">
           <div className="grid gap-6 lg:grid-cols-2 lg:items-center">
             <div>
-              <p className="text-sm uppercase tracking-[0.4em] text-white/60">Ready?</p>
+              <p className="text-sm uppercase tracking-[0.4em] text-white/60">
+                Ready?
+              </p>
               <h2 className="mt-2 font-serif text-4xl leading-snug">
                 Start with a single sentence about who you're gifting.
               </h2>
@@ -390,7 +419,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                 <ArrowRight className="h-5 w-5" />
               </button>
               <p className="text-sm text-white/70">
-                Prefer a walkthrough? <a href="#" className="underline decoration-amber-200">Book a live demo</a>.
+                Prefer a walkthrough?{" "}
+                <a href="#" className="underline decoration-amber-200">
+                  Book a live demo
+                </a>
+                .
               </p>
             </div>
           </div>
@@ -404,12 +437,31 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
             <p className="mt-1">Gifting rituals from South Asian ateliers.</p>
           </div>
           <div className="flex flex-wrap gap-6">
-            <a href="#how-it-works" className="hover:text-stone-900">Product</a>
-            <a href="#collections" className="rounded-full px-3 py-1 hover:bg-stone-100 hover:text-stone-900">Curation</a>
-            <a href="#stories" className="rounded-full px-3 py-1 hover:bg-stone-100 hover:text-stone-900">Journal</a>
-            <a href="#" className="rounded-full px-3 py-1 hover:bg-stone-100 hover:text-stone-900">Contact</a>
+            <a href="#how-it-works" className="hover:text-stone-900">
+              Product
+            </a>
+            <a
+              href="#collections"
+              className="rounded-full px-3 py-1 hover:bg-stone-100 hover:text-stone-900"
+            >
+              Curation
+            </a>
+            <a
+              href="#stories"
+              className="rounded-full px-3 py-1 hover:bg-stone-100 hover:text-stone-900"
+            >
+              Journal
+            </a>
+            <a
+              href="/contact"
+              className="rounded-full px-3 py-1 hover:bg-stone-100 hover:text-stone-900"
+            >
+              Contact
+            </a>
           </div>
-          <p className="text-xs text-stone-400">© {new Date().getFullYear()} Rasphia. All rights reserved.</p>
+          <p className="text-xs text-stone-400">
+            © {new Date().getFullYear()} Rasphia. All rights reserved.
+          </p>
         </div>
       </footer>
     </div>
