@@ -25,6 +25,7 @@ import { products as initialProducts } from "./data/products";
 import AnalysisUploadModal from "./components/analysis/AnalysisUploadModal";
 import AnalysisDetailModal from "./components/analysis/AnalysisDetailsModal";
 import AnalysisListModal from "./components/analysis/AnalysisListModal";
+import CartModal from "./components/CartModal";
 
 const initialMessage: Message = {
   author: "ai",
@@ -65,6 +66,8 @@ const App: React.FC = () => {
   const [analyses, setAnalyses] = useState<any[]>([]); // recent analyses
   const [analysisDetail, setAnalysisDetail] = useState(null);
   const [showAnalysisList, setShowAnalysisList] = useState(false);
+  const [cart, setCart] = useState<Product[]>([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
 
   const handleOpenAnalysisDetails = (id: string) => {
     const found = recentAnalyses.find((a) => a.analysisId === id);
@@ -407,6 +410,23 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
     setCurrentUser(initialUser);
     setIsProfileVisible(false);
   };
+  const handleAddToCart = (product: Product) => {
+    setCart((prev) => [...prev, product]);
+
+    setMessages((prev) => [
+      ...prev,
+      { author: "ai", text: `🛒 Added **${product.name}** to your cart.` },
+    ]);
+  };
+
+  const handleRemoveFromCart = (product: Product) => {
+    setCart((prev) => prev.filter((p) => p.name !== product.name));
+  };
+
+  const handleCheckoutFromCart = (product: Product) => {
+    setCheckoutProduct(product);
+    setIsCartOpen(false);
+  };
 
   // 💳 Checkout
   const handleInitiateCheckout = (product: Product) =>
@@ -453,6 +473,7 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
           text: `✅ Thank you for your purchase of ${checkoutProduct.name}! We'll keep you updated on shipping.`,
         },
       ]);
+      setCart([]);
     } catch (err) {
       console.error("Error updating order:", err);
     }
@@ -656,10 +677,12 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
                     <ChatWindow
                       messages={messages}
                       isLoading={isLoading}
-                      onInitiateCheckout={handleInitiateCheckout}
+                      onAddToCart={handleAddToCart}
                       wishlist={currentUser.wishlist}
                       onToggleWishlist={handleToggleWishlist}
                       products={products}
+                      cart={cart}
+                      setIsCartOpen={setIsCartOpen}
                     />
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-2 pb-2">
                       <div className="pointer-events-auto w-full max-w-3xl">
@@ -715,6 +738,13 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
           onOpenAnalysisDetails={handleOpenAnalysisDetails}
         />
       )}
+      <CartModal
+        isOpen={isCartOpen}
+        cart={cart}
+        onClose={() => setIsCartOpen(false)}
+        onRemoveFromCart={handleRemoveFromCart}
+        onCheckout={handleCheckoutFromCart}
+      />
     </div>
   );
 };

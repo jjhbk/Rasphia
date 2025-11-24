@@ -5,14 +5,14 @@ import StarRatingDisplay from "./StarRatingDisplay";
 
 interface ProductCardProps {
   product: Product;
-  onInitiateCheckout: (product: Product) => void;
+  onAddToCart: (product: Product) => void;
   wishlist: Product[];
   onToggleWishlist: (product: Product) => void;
 }
 
 const ProductCard: React.FC<ProductCardProps> = ({
   product,
-  onInitiateCheckout,
+  onAddToCart,
   wishlist,
   onToggleWishlist,
 }) => {
@@ -67,11 +67,11 @@ const ProductCard: React.FC<ProductCardProps> = ({
             {formatPrice(product.price)}
           </span>
           <button
-            onClick={() => onInitiateCheckout(product)}
+            onClick={() => onAddToCart(product)}
             className="rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow hover:bg-stone-800"
             style={{ borderRadius: "999px" }}
           >
-            Buy Now
+            Add To Cart
           </button>
         </div>
       </div>

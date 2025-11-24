@@ -16,3 +16,48 @@ curl -X POST \
       }
     }
   }'
+
+  {
+  "_id": {
+    "$oid": "6904a8f2389518a7f1e907db"
+  },
+  "name": "Amber Haze Perfume",
+  "category": "Perfume",
+  "brand": "Bombay Perfumery",
+  "tags": [
+    "Elegant",
+    "Romantic",
+    "Warm",
+    "Feminine",
+    "Spicy"
+  ],
+  "occasion": [
+    "Date Night",
+    "Birthday",
+    "Anniversary"
+  ],
+  "recipient": "Her",
+  "price": 4800,
+  "story": "A handcrafted blend of amber, jasmine, and spice — inspired by the warm glow of an Indian dusk.",
+  "imageUrl": "https://picsum.photos/seed/amberhaze/400/400",
+  "affiliateLink": "#",
+  "reviews": [],
+  "embedding": [
+  ]
+}
+
+
+{
+  "name": "The Derma Co 20% Vitamin C Face Serum",
+  "category": "Skincare",
+  "brand": "The Derma Co",
+  "tags": ["Brightening", "Vitamin C", "Pigmentation", "Radiance"],
+  "occasion": ["Daily Routine", "Morning", "Gifting"],
+  "recipient": "Unisex",
+  "price": 899,
+  "story": "A dermatologist-approved high-potency Vitamin C serum for Indian skin: powered by 20% 3-O-Ethyl Ascorbic Acid + Hyaluronic Acid + Ferulic Acid to brighten pigmentation, even tone and boost radiance.",
+  "imageUrl": "https://…/the-derma-co-20-vitamin-c-face-serum-20ml.jpg",
+  "affiliateLink": "#",
+  "reviews": [],
+  "embedding": []
+}

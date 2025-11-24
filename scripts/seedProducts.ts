@@ -28,9 +28,6 @@ async function run() {
       enriched.push({ ...p, embedding });
     }
 
-    console.log("🧹 Clearing old records...");
-    await coll.deleteMany({});
-
     console.log("💾 Inserting new records...");
     await coll.insertMany(enriched);
 

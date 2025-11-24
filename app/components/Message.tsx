@@ -8,7 +8,7 @@ import ComparisonTable from "./ComparisonTable";
 interface MessageProps {
   message: MessageType;
   isLoading?: boolean;
-  onInitiateCheckout: (product: Product) => void;
+  onAddToCart: (product: Product) => void;
   wishlist: Product[];
   onToggleWishlist: (product: Product) => void;
   products: Product[];
@@ -25,7 +25,7 @@ const TypingIndicator: React.FC = () => (
 const Message: React.FC<MessageProps> = ({
   message,
   isLoading = false,
-  onInitiateCheckout,
+  onAddToCart,
   wishlist,
   onToggleWishlist,
 }) => {
@@ -122,7 +122,7 @@ const Message: React.FC<MessageProps> = ({
               <ProductCard
                 key={index}
                 product={product}
-                onInitiateCheckout={onInitiateCheckout}
+                onAddToCart={onAddToCart}
                 wishlist={wishlist}
                 onToggleWishlist={onToggleWishlist}
               />

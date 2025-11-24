@@ -5,19 +5,24 @@ import Message from "./Message";
 interface ChatWindowProps {
   messages: MessageType[];
   isLoading: boolean;
-  onInitiateCheckout: (product: Product) => void;
+  onAddToCart: (product: Product) => void;
   wishlist: Product[];
   onToggleWishlist: (product: Product) => void;
   products: Product[]; // Add products prop
+  cart: Product[];
+  setIsCartOpen: (open: boolean) => void; // ← ADD THIS
 }
 
 const ChatWindow: React.FC<ChatWindowProps> = ({
   messages,
   isLoading,
-  onInitiateCheckout,
+  onAddToCart,
   wishlist,
   onToggleWishlist,
   products,
+
+  cart,
+  setIsCartOpen,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showScrollButtons, setShowScrollButtons] = useState(true);
@@ -62,16 +67,43 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   }, []);
 
   return (
-    <div className="flex-1 min-h-0">
+    <div className="flex-1 min-h-0 relative">
       <div
         ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto space-y-6 pr-2 pb-32"
+        className="relative flex-1 min-h-0 overflow-y-auto space-y-6 pr-2 pb-32"
       >
+        {/* ⭐ FLOATING CART BUTTON ⭐ */}
+        <button
+          onClick={() => setIsCartOpen(true)}
+          className="
+        fixed z-50
+        right-130 bottom-80
+        h-20 w-20
+        flex items-center justify-center
+        rounded-full bg-white text-4xl
+        border border-stone-300 shadow-2xl
+        backdrop-blur-xl hover:bg-stone-100 transition
+      "
+        >
+          🛒
+          {cart.length > 0 && (
+            <span
+              className="
+            absolute -top-1 -right-1
+            bg-red-600 text-white text-sm
+            w-7 h-7 flex items-center justify-center
+            rounded-full shadow-md
+          "
+            >
+              {cart.length}
+            </span>
+          )}
+        </button>{" "}
         {messages.map((msg, index) => (
           <Message
             key={index}
             message={msg}
-            onInitiateCheckout={onInitiateCheckout}
+            onAddToCart={onAddToCart}
             wishlist={wishlist}
             onToggleWishlist={onToggleWishlist}
             products={products} // Pass products down
@@ -81,14 +113,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           <Message
             message={{ author: "ai", text: "..." }}
             isLoading={true}
-            onInitiateCheckout={() => {}}
+            onAddToCart={() => {}}
             wishlist={[]}
             onToggleWishlist={() => {}}
             products={[]}
           />
         )}
       </div>
-      {showScrollButtons && (
+      {true && (
         <div className="pointer-events-auto fixed right-6 bottom-28 flex flex-col gap-3">
           {/* Scroll to top */}
           <button

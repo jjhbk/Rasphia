@@ -440,7 +440,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
               </button>
               <p className="text-sm text-white/70">
                 Prefer guidance?{" "}
-                <a href="#" className="underline decoration-amber-200">
+                <a href="/contact" className="underline decoration-amber-200">
                   Book a live walkthrough
                 </a>
                 .
@@ -460,14 +460,14 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
             </p>
           </div>
           <div className="flex flex-wrap gap-6">
-            <a href="#how-it-works" className="hover:text-stone-900">
-              Product
+            <a href="/privacy" className="hover:text-stone-900">
+              Privacy Policy
             </a>
             <a
-              href="#collections"
+              href="/about"
               className="rounded-full px-3 py-1 hover:bg-stone-100 hover:text-stone-900"
             >
-              Curation
+              About Us
             </a>
             <a
               href="#stories"
