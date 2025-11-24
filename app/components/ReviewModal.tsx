@@ -26,6 +26,9 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
     onSubmit(order.id, rating, comment);
   };
 
+  // 🟢 Convert product list → "A, B, C"
+  const productNames = (order.products || []).map((p) => p.name).join(", ");
+
   return (
     <div
       className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50"
@@ -40,7 +43,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
             <h2 className="text-2xl font-serif text-amber-900">
               Leave a Review
             </h2>
-            <p className="text-stone-600">for {order.product.name}</p>
+            <p className="text-stone-600">for {productNames}</p>
           </div>
           <button
             onClick={onClose}
@@ -51,6 +54,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit}>
+          {/* ⭐ Rating */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-stone-600 mb-2">
               Your Rating
@@ -74,6 +78,8 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
               ))}
             </div>
           </div>
+
+          {/* 📝 Comment */}
           <div className="mb-6">
             <label
               htmlFor="comment"
@@ -86,15 +92,17 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               rows={4}
-              placeholder="What did you like or dislike? How did you use this product?"
+              placeholder="What did you like or dislike? How did you use these products?"
               className="w-full p-3 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
             />
           </div>
+
+          {/* Submit */}
           <div className="flex justify-end">
             <button
               type="submit"
-              className="w-full sm:w-auto px-6 py-3 bg-stone-800 text-white font-medium rounded-md hover:bg-stone-900 transition-colors disabled:bg-stone-400"
               disabled={rating === 0}
+              className="w-full sm:w-auto px-6 py-3 bg-stone-800 text-white font-medium rounded-md hover:bg-stone-900 transition-colors disabled:bg-stone-400"
             >
               Submit Review
             </button>

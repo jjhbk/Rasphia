@@ -5,58 +5,60 @@ import clientPromise from "@/app/lib/mongodb";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { product, customer } = body;
+    const { products, customer, totalAmount } = body;
 
-    if (!product || !customer) {
+    if (!products || products.length === 0 || !customer) {
       return NextResponse.json(
-        { error: "Missing product or customer information" },
+        { error: "Missing products or customer information" },
         { status: 400 }
       );
     }
 
-    // Initialize Razorpay
+    // Razorpay initialization
     const razorpay = new Razorpay({
       key_id: process.env.RAZORPAY_KEY_ID!,
       key_secret: process.env.RAZORPAY_KEY_SECRET!,
     });
 
-    // Convert price to paisa (Razorpay expects integer)
-    const amount = product.price * 100;
+    // Amount = total of cart (converted to paisa)
+    const amount = totalAmount * 100;
     const currency = "INR";
     const receipt = `receipt_${Date.now()}`;
 
-    // Create order on Razorpay
+    // Create Razorpay order
     const order = await razorpay.orders.create({
       amount,
       currency,
       receipt,
       notes: {
-        productName: product.name,
         customerEmail: customer.email,
+        items: products.map((p: any) => p.name).join(", "),
       },
     });
 
-    // Connect to MongoDB
+    // Connect to DB
     const client = await clientPromise;
-    const db = client.db("rasphia"); // use your unified DB name
+    const db = client.db("rasphia");
 
-    // ✅ 1. Upsert the product in the "products" collection
-    await db.collection("products").updateOne(
-      { name: product.name },
-      {
-        $setOnInsert: { createdAt: new Date() },
-        $set: {
-          name: product.name,
-          brand: product.brand || "Unknown",
-          price: product.price,
-          imageUrl: product.imageUrl || "",
-          updatedAt: new Date(),
+    // 1️⃣ Upsert ALL products
+    for (const p of products) {
+      await db.collection("products").updateOne(
+        { name: p.name },
+        {
+          $setOnInsert: { createdAt: new Date() },
+          $set: {
+            name: p.name,
+            brand: p.brand || "Unknown",
+            price: p.price,
+            imageUrl: p.imageUrl || "",
+            updatedAt: new Date(),
+          },
         },
-      },
-      { upsert: true }
-    );
+        { upsert: true }
+      );
+    }
 
-    // ✅ 2. Upsert the user profile in the "users" collection
+    // 2️⃣ Upsert user
     await db.collection("users").updateOne(
       { email: customer.email },
       {
@@ -71,20 +73,20 @@ export async function POST(req: Request) {
       { upsert: true }
     );
 
-    // ✅ 3. Create the order in the "orders" collection
+    // 3️⃣ Create order entry
     const orderDoc = {
       order_id: order.id,
       payment_id: null,
-      amount: product.price,
+      amount: totalAmount,
       currency,
       receipt,
       status: "created",
-      product: {
-        name: product.name,
-        brand: product.brand || "Unknown",
-        price: product.price,
-        imageUrl: product.imageUrl || "",
-      },
+      products: products.map((p: any) => ({
+        name: p.name,
+        brand: p.brand,
+        price: p.price,
+        imageUrl: p.imageUrl,
+      })),
       customer: {
         name: customer.name,
         email: customer.email,
@@ -98,7 +100,7 @@ export async function POST(req: Request) {
 
     await db.collection("orders").insertOne(orderDoc);
 
-    // ✅ 4. Return the Razorpay order object
+    // Return Razorpay order
     return NextResponse.json(order);
   } catch (error) {
     console.error("❌ Error creating Razorpay order:", error);

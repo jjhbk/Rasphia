@@ -9,46 +9,53 @@ interface Review {
   date: Date;
 }
 
-interface Product {
-  name: string;
-  brand?: string;
-  price: number;
-  imageUrl?: string;
-  reviews?: Review[];
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
 export async function POST(req: Request) {
   try {
-    const { orderId, productName, rating, comment, authorEmail, authorName } =
-      await req.json();
+    const {
+      orderId,
+      productNames, // <-- now an array
+      rating,
+      comment,
+      authorEmail,
+      authorName,
+    } = await req.json();
+
+    if (!Array.isArray(productNames) || productNames.length === 0) {
+      return NextResponse.json(
+        { error: "productNames must be a non-empty array" },
+        { status: 400 }
+      );
+    }
 
     const client = await clientPromise;
     const db = client.db("rasphia");
 
-    const products = db.collection<Product>("products");
+    const productsCol = db.collection("products");
+    const ordersCol = db.collection("orders");
 
-    // ✅ Add new review
-    await products.updateOne(
-      { name: productName },
-      {
-        $push: {
-          reviews: {
-            authorEmail,
-            authorName,
-            rating,
-            comment,
-            date: new Date(),
-          },
-        },
-      }
+    const newReview: Review = {
+      authorEmail,
+      authorName,
+      rating,
+      comment,
+      date: new Date(),
+    };
+
+    // -----------------------------------
+    // ✅ Add review to ALL products in the order
+    // -----------------------------------
+    await productsCol.updateMany(
+      { name: { $in: productNames } },
+      { $push: { reviews: newReview } as any }
     );
 
-    // ✅ Mark order as reviewed
-    await db
-      .collection("orders")
-      .updateOne({ order_id: orderId }, { $set: { isReviewed: true } });
+    // -----------------------------------
+    // ✅ Mark the order as reviewed
+    // -----------------------------------
+    await ordersCol.updateOne(
+      { id: orderId }, // <-- Fix this if your field is different
+      { $set: { isReviewed: true } }
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

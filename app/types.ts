@@ -67,7 +67,7 @@ export interface Review {
 export interface Order {
   id: string;
   customer: CheckoutCustomer;
-  product: Product;
+  products: Product[];
   paymentId: string;
   date: string;
   status: OrderStatus;

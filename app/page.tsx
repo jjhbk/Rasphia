@@ -52,7 +52,10 @@ const App: React.FC = () => {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [checkoutProduct, setCheckoutProduct] = useState<Product | null>(null);
+  const [checkoutProducts, setCheckoutProducts] = useState<Product[] | null>(
+    null
+  );
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [isProfileVisible, setIsProfileVisible] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile>(initialUser);
@@ -405,13 +408,17 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
   const handleLogout = async () => {
     await signOut({ callbackUrl: "/" });
     setMessages([initialMessage]);
-    setCheckoutProduct(null);
+    setCheckoutProducts(null);
     setOrders([]);
     setCurrentUser(initialUser);
     setIsProfileVisible(false);
   };
   const handleAddToCart = (product: Product) => {
-    setCart((prev) => [...prev, product]);
+    setCart((prev) => {
+      const exists = prev.find((p) => p.name === product.name);
+      if (exists) return prev;
+      return [...prev, product];
+    });
 
     setMessages((prev) => [
       ...prev,
@@ -423,21 +430,21 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
     setCart((prev) => prev.filter((p) => p.name !== product.name));
   };
 
-  const handleCheckoutFromCart = (product: Product) => {
-    setCheckoutProduct(product);
+  const handleCheckoutFromCart = () => {
+    setCheckoutProducts(cart);
     setIsCartOpen(false);
   };
 
   // 💳 Checkout
   const handleInitiateCheckout = (product: Product) =>
-    setCheckoutProduct(product);
-  const handleCancelCheckout = () => setCheckoutProduct(null);
+    setCheckoutProducts(cart);
+  const handleCancelCheckout = () => setCheckoutProducts(null);
 
   const handlePlaceOrder = async (
     customer: CheckoutCustomer,
     paymentId: string
   ) => {
-    if (!checkoutProduct) return;
+    if (!checkoutProducts) return;
     try {
       // Update MongoDB order record to “Processing”
       await fetch("/api/orders/update-status", {
@@ -465,12 +472,14 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
         address: customer.address,
       });
 
-      setCheckoutProduct(null);
+      setCheckoutProducts(null);
       setMessages((prev) => [
         ...prev,
         {
           author: "ai",
-          text: `✅ Thank you for your purchase of ${checkoutProduct.name}! We'll keep you updated on shipping.`,
+          text: `✅ Thank you for your purchase of ${checkoutProducts
+            .map((p) => p.name)
+            .join(", ")}! We'll keep you updated on shipping.`,
         },
       ]);
       setCart([]);
@@ -534,7 +543,7 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orderId,
-          productName: orderToReview.product.name,
+          productNames: orderToReview.products.map((p) => p.name),
           rating,
           comment,
           authorEmail: currentUser.email,
@@ -548,6 +557,7 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
     } catch (err) {
       console.error("Review error:", err);
     }
+
     handleCloseReview();
   };
 
@@ -570,25 +580,27 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
         />
       </>
     );
+  if (checkoutProducts)
+    return (
+      <CheckoutPage
+        products={checkoutProducts} // send array
+        user={currentUser}
+        onPlaceOrder={handlePlaceOrder}
+        onCancel={handleCancelCheckout}
+      />
+    );
 
   if (isProfileVisible)
     return (
       <ProfilePage
         user={currentUser}
         onBack={handleHideProfile}
-        onInitiateCheckout={handleInitiateCheckout}
+        onAddToCart={handleAddToCart}
+        cart={cart}
         onToggleWishlist={handleToggleWishlist}
+        onCheckout={handleCheckoutFromCart}
         onStartReview={handleStartReview}
-      />
-    );
-
-  if (checkoutProduct)
-    return (
-      <CheckoutPage
-        product={checkoutProduct}
-        user={currentUser}
-        onPlaceOrder={handlePlaceOrder}
-        onCancel={handleCancelCheckout}
+        onRemoveFromCart={handleRemoveFromCart}
       />
     );
 
