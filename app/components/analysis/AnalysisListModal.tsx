@@ -7,12 +7,16 @@ export default function AnalysisListModal({
   onOpenAnalysisDetails,
 }: any) {
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[999] flex items-center justify-center">
-      <div className="w-full max-w-3xl bg-white rounded-3xl shadow-xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="font-serif text-xl">All Analyses</h2>
-          <button onClick={onClose}>
-            <X className="h-5 w-5 text-stone-600" />
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-md">
+      <div className="relative w-full max-w-3xl rounded-3xl border border-white/60 bg-white/90 backdrop-blur-xl shadow-[0_25px_80px_rgba(0,0,0,0.18)] overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/60 bg-white/70">
+          <h2 className="font-serif text-xl text-stone-900">All Analyses</h2>
+          <button
+            onClick={onClose}
+            className="h-10 w-10 flex items-center justify-center rounded-full bg-white border border-stone-200 text-stone-600 hover:scale-105 transition"
+            aria-label="Close analyses list"
+          >
+            <X className="h-6 w-6" />
           </button>
         </div>
 
@@ -21,7 +25,7 @@ export default function AnalysisListModal({
             <div
               key={a.analysisId}
               onClick={() => onOpenAnalysisDetails(a.analysisId)}
-              className="flex items-center gap-4 p-4 rounded-xl border bg-white/60 hover:bg-white cursor-pointer transition"
+              className="flex items-center gap-4 p-4 rounded-2xl border border-white/70 bg-white/80 hover:bg-white cursor-pointer transition shadow-sm shadow-amber-100/40"
             >
               <img
                 src={a.fileUrl}

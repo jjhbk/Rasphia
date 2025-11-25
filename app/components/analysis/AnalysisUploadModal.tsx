@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { X, UploadCloud, Camera, Loader2, EyeOff } from "lucide-react";
 import CameraCapture from "./CameraInput";
 import { compressImage } from "@/utils/compressImage";
@@ -45,11 +45,15 @@ export default function AnalysisUploadModal({
   // Load Models Once
   useEffect(() => {
     (async () => {
-      await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri("/models"),
-        faceapi.nets.faceLandmark68TinyNet.loadFromUri("/models"),
-      ]);
-      setModelsReady(true);
+      try {
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri("/models"),
+          faceapi.nets.faceLandmark68TinyNet.loadFromUri("/models"),
+        ]);
+        setModelsReady(true);
+      } catch (e) {
+        console.error("Failed to load face-api models", e);
+      }
     })();
   }, []);
 
@@ -58,6 +62,42 @@ export default function AnalysisUploadModal({
     setFile(f);
     setPreview(url);
   };
+
+  // Map type to image and label (From Origin/Main)
+  const { imageSrc, label, description } = useMemo(() => {
+    switch (type) {
+      case "skin":
+        return { 
+          imageSrc: "/Skin.png", 
+          label: "Skin Analysis", 
+          description: "Upload a clear close-up for personalized skincare advice." 
+        };
+      case "hair":
+        return { 
+          imageSrc: "/Hair.png", 
+          label: "Hair Care", 
+          description: "Share a photo of your hair texture to find the best products." 
+        };
+      case "body":
+        return { 
+          imageSrc: "/Body.png", 
+          label: "Body Fit", 
+          description: "Get size and style recommendations based on your profile." 
+        };
+      case "similar":
+        return { 
+          imageSrc: "/Match.png", 
+          label: "Visual Match", 
+          description: "Find similar items from our catalog instantly." 
+        };
+      default:
+        return { 
+          imageSrc: "/Match.png", 
+          label: "Analysis Tool", 
+          description: "Upload an image to start the analysis." 
+        };
+    }
+  }, [type]);
 
   const handleSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -175,9 +215,11 @@ export default function AnalysisUploadModal({
 
     const img = new Image();
     imgRef.current = img;
+    img.crossOrigin = "anonymous"; // Safe for local blobs
 
     img.onload = async () => {
       const canvas = canvasRef.current!;
+      // Adjust canvas size to image, but consider max display width
       canvas.width = img.width;
       canvas.height = img.height;
 
@@ -185,22 +227,26 @@ export default function AnalysisUploadModal({
       ctx.drawImage(img, 0, 0);
 
       if (modelsReady) {
-        const det = await faceapi
-          .detectSingleFace(
-            canvas,
-            new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.4 })
-          )
-          .withFaceLandmarks(true);
+        try {
+          const det = await faceapi
+            .detectSingleFace(
+              canvas,
+              new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.4 })
+            )
+            .withFaceLandmarks(true);
 
-        if (det?.landmarks) {
-          const lm = det.landmarks;
-          const polys = [
-            expandPolygon(lm.getLeftEye(), 1.6),
-            expandPolygon(lm.getRightEye(), 1.6),
-            expandPolygon(lm.getNose(), 1.45),
-            expandPolygon(lm.getMouth(), 1.45),
-          ];
-          setPolygons(polys);
+          if (det?.landmarks) {
+            const lm = det.landmarks;
+            const polys = [
+              expandPolygon(lm.getLeftEye(), 1.6),
+              expandPolygon(lm.getRightEye(), 1.6),
+              expandPolygon(lm.getNose(), 1.45),
+              expandPolygon(lm.getMouth(), 1.45),
+            ];
+            setPolygons(polys);
+          }
+        } catch (e) {
+          console.error("Face detection failed:", e);
         }
       }
 
@@ -233,23 +279,31 @@ export default function AnalysisUploadModal({
     setIsProcessing(true);
 
     try {
-      const processed = await makeProcessedFile();
+      // Use processed canvas if we are blurring, otherwise original
+      const processed = blurFace ? await makeProcessedFile() : file;
       const compressed = await compressImage(processed);
 
       const form = new FormData();
       form.append("file", compressed);
-      form.append("tool", type!);
-      form.append("blurSensitive", "true");
+      form.append("tool", type || "general");
+      form.append("blurSensitive", blurFace ? "true" : "false");
 
       const res = await fetch("/api/tools/create-analysis", {
         method: "POST",
-        headers: { "x-user-email": userEmail! },
+        headers: { "x-user-email": userEmail || "" },
         body: form,
       });
 
       const data = await res.json();
-      onAnalysisComplete(data.analysis);
-      onClose();
+      if (data.analysis) {
+        onAnalysisComplete(data.analysis);
+        onClose();
+      } else {
+        alert("Analysis failed. Please try again.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error processing image.");
     } finally {
       setIsProcessing(false);
     }
@@ -266,47 +320,83 @@ export default function AnalysisUploadModal({
         />
       )}
 
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4 z-[999]">
-        <div className="w-full max-w-2xl bg-white rounded-3xl shadow-xl flex flex-col max-h-[90vh] overflow-hidden">
-          {/* HEADER */}
-          <div className="flex items-center justify-between px-5 py-4 bg-stone-50 border-b">
-            <h2 className="font-serif text-xl text-stone-900">Upload Image</h2>
-            <button onClick={onClose}>
-              <X className="h-5 w-5 text-stone-700" />
-            </button>
+      <div className="fixed inset-0 bg-stone-900/20 backdrop-blur-sm flex items-center justify-center z-[999] px-4 animate-in fade-in duration-200">
+        <div className="w-full max-w-md bg-white/90 backdrop-blur-xl rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-white/60 overflow-hidden flex flex-col max-h-[90vh] scale-100 animate-in zoom-in-95 duration-200">
+          
+          {/* Header Section */}
+          <div className="relative p-5 pb-2">
+             <button 
+                onClick={onClose}
+                className="absolute top-3 right-3 p-1.5 rounded-full hover:bg-stone-100/50 text-stone-500 hover:text-stone-800 transition-colors z-10"
+              >
+                <X className="h-4 w-4" />
+              </button>
+             
+             <div className="flex items-end gap-4">
+                 <div className="w-[60%] flex-shrink-0">
+                     <img 
+                        src={imageSrc} 
+                        alt={label} 
+                        className="w-full h-auto max-h-40 rounded-2xl shadow-md border border-white/80 object-cover"
+                     />
+                 </div>
+                 <div className="flex-1 min-w-0 text-left">
+                    <h2 className="font-serif text-lg text-stone-900 font-semibold leading-tight">
+                          {label}
+                       </h2>
+                       <p className="text-xs text-stone-500 mt-2 leading-relaxed">
+                          {description}
+                       </p>
+                 </div>
+             </div>
           </div>
 
-          {/* BODY */}
-          <div className="p-5 space-y-4 overflow-y-auto">
+          {/* Body */}
+          <div className="px-5 py-3 overflow-y-auto custom-scrollbar">
             {!preview ? (
-              <div
-                className="border-2 border-dashed border-stone-300 rounded-2xl p-10 text-center cursor-pointer hover:border-stone-400 transition"
-                onClick={() => filePickerRef.current?.click()}
-                onDrop={handleDrop}
-                onDragOver={(e) => e.preventDefault()}
-              >
-                <UploadCloud className="h-8 w-8 mx-auto text-stone-500 mb-3" />
-                <p className="text-stone-600 text-sm">Click to upload</p>
+              <div className="flex gap-3">
+                {/* Upload Option */}
+                <div
+                  className="flex-1 group relative border border-dashed border-amber-200 bg-amber-50/50 rounded-2xl h-28 flex flex-col items-center justify-center gap-2 text-center cursor-pointer hover:border-amber-300 hover:bg-amber-50 transition-all active:scale-[0.98]"
+                  onClick={() => filePickerRef.current?.click()}
+                  onDrop={handleDrop}
+                  onDragOver={(e) => e.preventDefault()}
+                >
+                  <div className="h-9 w-9 bg-amber-100 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                     <UploadCloud className="h-4 w-4 text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-stone-800 font-medium text-xs">Upload Image</p>
+                    <p className="text-stone-400 text-[10px]">Drag & Drop</p>
+                  </div>
+                </div>
 
+                {/* Camera Option */}
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setOpenCamera(true);
                   }}
-                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-stone-900 text-white text-sm"
+                  className="flex-1 group border border-dashed border-stone-200 bg-stone-50/50 rounded-2xl h-28 flex flex-col items-center justify-center gap-2 text-center cursor-pointer hover:border-amber-300 hover:bg-stone-50 transition-all active:scale-[0.98]"
                 >
-                  <Camera className="h-4 w-4" /> Use Camera
+                  <div className="h-9 w-9 bg-white border border-stone-100 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform group-hover:border-amber-100">
+                    <Camera className="h-4 w-4 text-stone-500 group-hover:text-amber-600 transition-colors" />
+                  </div>
+                  <div>
+                     <p className="text-stone-800 font-medium text-xs">Use Camera</p>
+                     <p className="text-stone-400 text-[10px]">Take Photo</p>
+                  </div>
                 </button>
 
-                <div className="text-xs mt-3 text-stone-500">
+                <div className="text-xs mt-3 text-stone-500 hidden">
                   {modelsReady ? "Face model loaded" : "Loading models…"}
                 </div>
               </div>
             ) : (
-              <div className="rounded-xl overflow-hidden border bg-stone-100 shadow-inner">
-                <div className="w-full flex justify-center bg-black">
-                  <canvas
+              <div className="rounded-2xl overflow-hidden bg-stone-50 border border-stone-100 shadow-sm">
+                <div className="relative w-full bg-stone-100 flex justify-center">
+                   <canvas
                     ref={canvasRef}
                     style={{
                       maxWidth: "100%",
@@ -316,17 +406,15 @@ export default function AnalysisUploadModal({
                   />
                 </div>
 
-                <div className="flex items-center justify-between px-3 py-2 bg-stone-200">
+                <div className="flex items-center justify-between px-3 py-2 bg-white border-t border-stone-100">
                   <div
-                    className="flex gap-2 items-center cursor-pointer"
+                    className="flex gap-2 items-center cursor-pointer select-none"
                     onClick={() => setBlurFace(!blurFace)}
                   >
-                    <EyeOff
-                      className={`h-4 w-4 ${
-                        blurFace ? "text-amber-700" : "text-stone-500"
-                      }`}
-                    />
-                    <span className="text-xs">Blur sensitive details</span>
+                    <div className={`p-1 rounded-full ${blurFace ? 'bg-amber-100 text-amber-700' : 'bg-stone-100 text-stone-400'}`}>
+                       <EyeOff className="h-3 w-3" />
+                    </div>
+                    <span className={`text-[10px] font-medium ${blurFace ? 'text-amber-800' : 'text-stone-500'}`}>Blur sensitive</span>
                   </div>
 
                   <button
@@ -334,11 +422,41 @@ export default function AnalysisUploadModal({
                       setFile(null);
                       setPreview(null);
                     }}
-                    className="text-red-600 text-xs"
+                    className="text-[10px] font-medium text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-full transition-colors"
                   >
-                    Remove
+                    Change
                   </button>
                 </div>
+                
+                {/* Advanced Controls (Visible only if blur is active) */}
+                {blurFace && (
+                   <div className="px-3 py-2 bg-stone-50 border-t border-stone-100 flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                         <label className="text-[10px] text-stone-500 font-medium">Effect</label>
+                         <div className="flex bg-white rounded-md border border-stone-200 p-0.5">
+                            <button 
+                               onClick={() => setModePixelate(false)}
+                               className={`px-2 py-0.5 text-[9px] rounded ${!modePixelate ? 'bg-stone-800 text-white' : 'text-stone-500'}`}
+                            >Blur</button>
+                            <button 
+                               onClick={() => setModePixelate(true)}
+                               className={`px-2 py-0.5 text-[9px] rounded ${modePixelate ? 'bg-stone-800 text-white' : 'text-stone-500'}`}
+                            >Pixelate</button>
+                         </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <label className="text-[10px] text-stone-500 font-medium w-8">Level</label>
+                         <input
+                            type="range"
+                            min={2}
+                            max={modePixelate ? 30 : 40}
+                            value={modePixelate ? pixelSize : blurStrength}
+                            onChange={(e) => modePixelate ? setPixelSize(Number(e.target.value)) : setBlurStrength(Number(e.target.value))}
+                            className="flex-1 h-1 bg-stone-200 rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-stone-400"
+                         />
+                      </div>
+                   </div>
+                )}
               </div>
             )}
 
@@ -351,67 +469,25 @@ export default function AnalysisUploadModal({
             />
           </div>
 
-          {/* CONTROLS */}
-          {preview && (
-            <div className="p-5 border-t bg-white space-y-4">
-              <div className="flex gap-3 items-center">
-                <label className="text-xs w-20 text-stone-600">Mode</label>
-                <button
-                  onClick={() => setModePixelate(false)}
-                  className={`px-3 py-1 rounded ${
-                    !modePixelate ? "bg-stone-900 text-white" : "bg-stone-200"
-                  }`}
-                >
-                  Blur
-                </button>
-                <button
-                  onClick={() => setModePixelate(true)}
-                  className={`px-3 py-1 rounded ${
-                    modePixelate ? "bg-stone-900 text-white" : "bg-stone-200"
-                  }`}
-                >
-                  Pixelate
-                </button>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <label className="text-xs w-20 text-stone-600">Intensity</label>
-                {!modePixelate ? (
-                  <input
-                    type="range"
-                    min={2}
-                    max={40}
-                    value={blurStrength}
-                    onChange={(e) => setBlurStrength(Number(e.target.value))}
-                    className="w-full"
-                  />
-                ) : (
-                  <input
-                    type="range"
-                    min={2}
-                    max={30}
-                    value={pixelSize}
-                    onChange={(e) => setPixelSize(Number(e.target.value))}
-                    className="w-full"
-                  />
-                )}
-              </div>
-
-              <button
-                disabled={!file || isProcessing}
-                onClick={handleProcess}
-                className="w-full py-3 rounded-full bg-gradient-to-br from-[#2C1A13] to-[#6C4C3C] text-white shadow disabled:bg-stone-400 flex items-center justify-center gap-2"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Processing…
-                  </>
-                ) : (
-                  "Run Analysis"
-                )}
-              </button>
-            </div>
-          )}
+          {/* Footer */}
+          <div className="p-5 pt-2 pb-6 bg-gradient-to-t from-white via-white to-transparent">
+            <button
+              disabled={!file || isProcessing}
+              onClick={handleProcess}
+              className="w-full py-3.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-sm font-medium shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-amber-100" /> Analyzing...
+                </>
+              ) : (
+                "Run Analysis"
+              )}
+            </button>
+            <p className="text-center text-[10px] text-stone-400 mt-2.5">
+               Images are processed securely and deleted after analysis.
+            </p>
+          </div>
         </div>
       </div>
     </>

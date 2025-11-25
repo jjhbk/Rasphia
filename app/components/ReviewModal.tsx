@@ -35,7 +35,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-2xl w-full max-w-md p-6 sm:p-8"
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-start mb-4">
@@ -47,7 +47,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="text-stone-400 hover:text-stone-600 transition-colors"
+            className="text-stone-400 hover:text-stone-600 transition-colors rounded-full p-2"
           >
             &times;
           </button>
@@ -93,7 +93,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
               onChange={(e) => setComment(e.target.value)}
               rows={4}
               placeholder="What did you like or dislike? How did you use these products?"
-              className="w-full p-3 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+              className="w-full p-3 bg-white border border-stone-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500"
             />
           </div>
 
@@ -101,8 +101,8 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
           <div className="flex justify-end">
             <button
               type="submit"
+              className="w-full sm:w-auto px-6 py-3 bg-stone-800 text-white font-medium rounded-full hover:bg-stone-900 transition-colors disabled:bg-stone-400"
               disabled={rating === 0}
-              className="w-full sm:w-auto px-6 py-3 bg-stone-800 text-white font-medium rounded-md hover:bg-stone-900 transition-colors disabled:bg-stone-400"
             >
               Submit Review
             </button>
