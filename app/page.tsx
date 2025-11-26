@@ -301,9 +301,9 @@ const App: React.FC = () => {
       ...prev,
       {
         author: "ai",
-        text: `Attachment ready.\n\n**${
-          saved.title || saved.type
-        }**\n\nType: ${saved.type}\nUse "Insert into chat" to inject the optimized prompt.`,
+        text: `Attachment ready.\n\n**${saved.title || saved.type}**\n\nType: ${
+          saved.type
+        }\nUse "Insert into chat" to inject the optimized prompt.`,
       },
     ]);
   };
@@ -325,7 +325,7 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
   find some products for this`.trim();
 
     setDraft(text);
-    await handleSendMessage(text);
+    //await handleSendMessage(text);
     if (isMobile) setIsRightSidebarOpen(false);
   };
 
@@ -602,7 +602,7 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
                 onClick={handleShowProfile}
                 className="h-10 w-10 flex items-center justify-center rounded-full bg-white border border-stone-200 text-stone-700 shadow-sm hover:scale-105 transition-all"
               >
-                <ProfileIcon className="h-5 w-5" />
+                <ProfileIcon />
               </button>
               <button
                 onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
