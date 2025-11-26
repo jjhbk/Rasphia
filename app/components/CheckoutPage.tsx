@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import type { Product, CheckoutCustomer, UserProfile } from "../types";
+import { X } from "lucide-react";
 
 declare global {
   interface Window {
@@ -9,7 +10,7 @@ declare global {
 }
 
 interface CheckoutPageProps {
-  products: Product[];
+  products: Product[]; // Changed back to array to support Cart
   user: UserProfile;
   onPlaceOrder: (customer: CheckoutCustomer, paymentId: string) => void;
   onCancel: () => void;
@@ -33,6 +34,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const subtotal = products.reduce((sum, p) => sum + p.price, 0);
   const totalAmount = subtotal + SHIPPING_COST;
 
+  // Initialize User Data & Load Razorpay
   useEffect(() => {
     setCustomer({
       name: user.name || "",
@@ -45,6 +47,10 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.async = true;
     document.body.appendChild(script);
+    
+    return () => {
+      document.body.removeChild(script);
+    };
   }, [user]);
 
   const handleInputChange = (
@@ -148,57 +154,69 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl bg-white rounded-lg shadow-xl grid grid-cols-1 md:grid-cols-2 overflow-hidden">
-        {/* Product Summary */}
-        <div className="p-8 bg-stone-50 flex flex-col">
-          <h2 className="text-2xl font-serif text-amber-900 mb-6">
-            Your Items
-          </h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
+        onClick={onCancel}
+      />
+      
+      {/* Modal Container */}
+      <div className="relative w-full max-w-4xl bg-white/95 backdrop-blur-xl rounded-[32px] shadow-2xl grid grid-cols-1 md:grid-cols-2 overflow-hidden border border-white/50 animate-in fade-in zoom-in-95 duration-200">
+        
+        {/* Close Button */}
+        <button
+          onClick={onCancel}
+          className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/50 hover:bg-white text-stone-500 hover:text-stone-800 transition-all shadow-sm"
+        >
+          <X className="w-5 h-5" />
+        </button>
 
-          <div className="space-y-4 mb-6 pb-6 border-b border-stone-200">
-            {products.map((p) => (
-              <div key={p.name} className="flex items-center space-x-4">
-                <img
-                  src={p.imageUrl}
-                  className="w-20 h-20 rounded-lg object-cover"
-                />
-                <div>
-                  <h3 className="font-semibold">{p.name}</h3>
-                  <p className="text-sm text-stone-500">{p.brand}</p>
-                  <p className="font-medium">{formatPrice(p.price)}</p>
-                </div>
-              </div>
+        {/* Product Info (Left) */}
+        <div className="p-8 bg-stone-50/50 flex flex-col relative h-full max-h-[90vh] overflow-y-auto custom-scrollbar">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-200 via-amber-400 to-amber-600" />
+          <h2 className="text-2xl font-serif text-amber-900 mb-2">
+            Order Summary
+          </h2>
+          <p className="text-stone-500 mb-6 text-sm">Review your items before purchase</p>
+          
+          <div className="space-y-4 mb-6">
+            {products.map((product) => (
+               <div key={product.name + Math.random()} className="flex items-center gap-4 p-4 bg-white rounded-2xl shadow-sm border border-stone-100">
+                  <div className="relative h-16 w-16 flex-shrink-0">
+                     <img
+                       src={product.imageUrl}
+                       alt={product.name}
+                       className="w-full h-full object-cover rounded-lg shadow-sm"
+                     />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                     <h3 className="font-bold text-sm text-stone-800 mb-0.5 truncate">{product.name}</h3>
+                     <p className="text-xs text-stone-500">{product.brand}</p>
+                     <p className="text-sm font-semibold text-amber-900 mt-1">{formatPrice(product.price)}</p>
+                  </div>
+               </div>
             ))}
           </div>
 
-          <div className="flex justify-between text-lg">
-            <span className="text-stone-600">Subtotal</span>
-            <span>{formatPrice(subtotal)}</span>
+          <div className="mt-auto pt-4 border-t border-stone-200">
+            <div className="flex justify-between items-center mb-2">
+               <span className="text-stone-600">Subtotal</span>
+               <span className="text-stone-800 font-medium">{formatPrice(subtotal)}</span>
+            </div>
+            <div className="flex justify-between items-center py-2">
+              <span className="text-stone-600 font-medium">Total Amount</span>
+              <span className="text-2xl font-serif font-bold text-amber-900">
+                {formatPrice(totalAmount)}
+              </span>
+            </div>
           </div>
-
-          <div className="flex justify-between text-lg mt-2">
-            <span className="text-stone-600">Shipping</span>
-            <span>{formatPrice(SHIPPING_COST)}</span>
-          </div>
-
-          <div className="flex justify-between text-xl font-bold mt-4">
-            <span>Total</span>
-            <span className="text-amber-900">{formatPrice(totalAmount)}</span>
-          </div>
-
-          <button
-            onClick={onCancel}
-            className="mt-auto text-sm text-stone-500 hover:text-amber-800"
-          >
-            ← Back to chat
-          </button>
         </div>
 
-        {/* Checkout Form */}
-        <div className="p-8">
+        {/* Checkout Form (Right) */}
+        <div className="p-8 bg-white/40 h-full overflow-y-auto">
           <h2 className="text-2xl font-serif text-amber-900 mb-6">
-            Shipping & Payment
+            Shipping Details
           </h2>
 
           <form
@@ -206,10 +224,13 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
               e.preventDefault();
               handlePayment();
             }}
-            className="space-y-4"
+            className="space-y-5"
           >
             <div>
-              <label className="block text-sm text-stone-600 mb-1">
+              <label
+                htmlFor="name"
+                className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-1.5"
+              >
                 Full Name
               </label>
               <input
@@ -218,55 +239,79 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 value={customer.name}
                 onChange={handleInputChange}
                 required
-                className="w-full px-4 py-2 border border-stone-300 rounded-md"
+                className="w-full px-4 py-2.5 bg-stone-50/50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:bg-white transition-all text-stone-800 placeholder-stone-400"
+                placeholder="Your Name"
               />
             </div>
 
             <div>
-              <label className="block text-sm text-stone-600 mb-1">Email</label>
+              <label
+                htmlFor="email"
+                className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-1.5"
+              >
+                Email Address
+              </label>
               <input
                 type="email"
                 name="email"
                 value={customer.email}
                 onChange={handleInputChange}
                 required
-                className="w-full px-4 py-2 border border-stone-300 rounded-md"
+                className="w-full px-4 py-2.5 bg-stone-50/50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:bg-white transition-all text-stone-800 placeholder-stone-400"
+                placeholder="you@example.com"
               />
             </div>
 
             <div>
-              <label className="block text-sm text-stone-600 mb-1">Phone</label>
+              <label
+                htmlFor="phone"
+                className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-1.5"
+              >
+                Phone Number
+              </label>
               <input
                 type="tel"
                 name="phone"
                 value={customer.phone}
                 onChange={handleInputChange}
                 required
-                className="w-full px-4 py-2 border border-stone-300 rounded-md"
+                className="w-full px-4 py-2.5 bg-stone-50/50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:bg-white transition-all text-stone-800 placeholder-stone-400"
+                placeholder="10-digit mobile number"
               />
             </div>
 
             <div>
-              <label className="block text-sm text-stone-600 mb-1">
-                Address
+              <label
+                htmlFor="address"
+                className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-1.5"
+              >
+                Shipping Address
               </label>
               <textarea
                 name="address"
-                rows={3}
                 value={customer.address}
                 onChange={handleInputChange}
                 required
-                className="w-full px-4 py-2 border border-stone-300 rounded-md"
+                rows={3}
+                className="w-full px-4 py-2.5 bg-stone-50/50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:bg-white transition-all text-stone-800 placeholder-stone-400 resize-none"
+                placeholder="Full delivery address"
               />
             </div>
-
-            <button
-              type="submit"
-              disabled={isProcessing}
-              className="w-full py-3 bg-stone-800 text-white text-lg rounded-md mt-4"
-            >
-              {isProcessing ? "Processing…" : `Pay ${formatPrice(totalAmount)}`}
-            </button>
+            
+            <div className="pt-4">
+              <button
+                type="submit"
+                disabled={isProcessing}
+                className="w-full py-3.5 bg-stone-900 text-white text-lg font-medium rounded-full shadow-lg hover:bg-black hover:shadow-xl hover:scale-[1.01] transition-all disabled:bg-stone-400 disabled:cursor-not-allowed disabled:transform-none"
+              >
+                {isProcessing
+                  ? "Processing..."
+                  : `Pay ${formatPrice(totalAmount)}`}
+              </button>
+              <p className="text-center text-xs text-stone-400 mt-3">
+                Secure payment powered by Razorpay
+              </p>
+            </div>
           </form>
         </div>
       </div>

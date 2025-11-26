@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     if (order?.value?.customer?.phone) {
       await sendText(
         order.value.customer.phone,
-        `Payment received successfully! 🎉\nYour order for *${order.value.product.name}* is confirmed.\nWe'll notify you when it's shipped.`
+        `Payment received successfully!\nYour order for *${order.value.product.name}* is confirmed.\nWe'll notify you when it's shipped.`
       );
     }
   }

@@ -93,7 +93,7 @@ const Message: React.FC<MessageProps> = ({
         <div
           className={`px-5 py-4 rounded-[24px] text-sm leading-relaxed ${
             isUser
-              ? "bg-gradient-to-br from-[#2C1A13] via-[#3F2B22] to-[#6C4C3C] text-white shadow-lg shadow-black/20"
+              ? "bg-gradient-to-br from-amber-100 to-orange-50 text-stone-900 shadow-sm border border-amber-100"
               : "bg-white/90 text-stone-800 border border-white/70 shadow-[0_10px_30px_rgba(15,15,15,0.08)]"
           }`}
         >
@@ -133,7 +133,7 @@ const Message: React.FC<MessageProps> = ({
 
       {/* User Avatar */}
       {isUser && (
-        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-stone-900/80 text-white">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-amber-200/80 text-amber-900">
           <UserIcon />
         </div>
       )}

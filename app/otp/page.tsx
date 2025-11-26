@@ -38,7 +38,7 @@ export default function OTPPage() {
     const data = await res.json();
     if (!res.ok) return setStatus(data.error);
 
-    setStatus("OTP verified! 🎉");
+    setStatus("OTP verified!");
   }
 
   return (

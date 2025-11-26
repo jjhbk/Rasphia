@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     const newMessage: Message = {
       author: "ai",
       text:
-        `📎 *Attached analysis: ${analysis.title ?? analysis.tool}*\n\n` +
+        `Attached analysis: ${analysis.title ?? analysis.tool}\n\n` +
         `${analysis.aiResult?.text ?? analysis.prompt}`,
       products: undefined,
       comparisonTable: undefined,

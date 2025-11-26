@@ -46,7 +46,7 @@ const SignInPopup: React.FC<SignInPopupProps> = ({
           >
             <div className="pointer-events-none absolute -top-10 right-2 h-36 w-36 rounded-full bg-gradient-to-br from-amber-200 via-rose-100 to-white blur-2xl opacity-80" />
             <div className="pointer-events-none absolute bottom-[-40px] left-[-20px] h-40 w-40 rounded-full bg-gradient-to-br from-[#2F1A19] via-[#613629] to-[#AD6F52] blur-[90px] opacity-70" />
-            <div className="relative overflow-hidden rounded-[32px] border border-white/30 bg-white/95 p-8 shadow-2xl backdrop-blur">
+            <div className="relative overflow-hidden rounded-3xl border border-white/30 bg-white/95 p-8 shadow-2xl backdrop-blur">
               <button
                 onClick={onClose}
                 className="absolute right-5 top-5 rounded-full border border-stone-200 bg-white/70 p-2 text-stone-500 transition hover:bg-white"

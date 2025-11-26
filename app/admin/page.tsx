@@ -78,7 +78,7 @@ export default function AdminDashboard() {
       setIsAdding(false);
       await loadProducts();
 
-      alert(`✅ Product ${isEdit ? "updated" : "added"} successfully`);
+      alert(`Product ${isEdit ? "updated" : "added"} successfully`);
     } catch (err) {
       console.error("❌ handleSave error:", err);
       alert("❌ Error saving product. Check console for details.");
@@ -99,7 +99,7 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error("Failed to delete product");
 
       setProducts((prev) => prev.filter((p) => p._id !== id));
-      alert("🗑️ Product deleted successfully");
+      alert("Product deleted successfully");
     } catch (err) {
       console.error(err);
       alert("❌ Error deleting product");

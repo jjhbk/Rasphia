@@ -1,6 +1,13 @@
 "use client";
 import React, { useState, useCallback, useEffect } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
+import {
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  ShoppingCart,
+} from "lucide-react";
 import ChatWindow from "./components/ChatWindow";
 import ChatInput from "./components/ChatInput";
 import LandingPage from "./components/LandingPage";
@@ -11,6 +18,10 @@ import SignInPopup from "./components/SignInPopup";
 import ProfileIcon from "./components/icons/ProfileIcon";
 import ChatSidebar from "@/app/components/ChatSidebar";
 import AnalysisSidebar from "./components/analysis/AnalysisSidebar";
+import AnalysisUploadModal from "./components/analysis/AnalysisUploadModal";
+import AnalysisDetailModal from "./components/analysis/AnalysisDetailsModal";
+import AnalysisListModal from "./components/analysis/AnalysisListModal";
+import CartModal from "./components/CartModal";
 
 import type {
   Message,
@@ -18,14 +29,8 @@ import type {
   Order,
   CheckoutCustomer,
   UserProfile,
-  Review,
-  ChatSession,
 } from "./types";
 import { products as initialProducts } from "./data/products";
-import AnalysisUploadModal from "./components/analysis/AnalysisUploadModal";
-import AnalysisDetailModal from "./components/analysis/AnalysisDetailsModal";
-import AnalysisListModal from "./components/analysis/AnalysisListModal";
-import CartModal from "./components/CartModal";
 
 const initialMessage: Message = {
   author: "ai",
@@ -51,26 +56,50 @@ const App: React.FC = () => {
   const [chatSessions, setChatSessions] = useState<any[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [products] = useState<Product[]>(initialProducts);
   const [checkoutProducts, setCheckoutProducts] = useState<Product[] | null>(
     null
   );
-
   const [orders, setOrders] = useState<Order[]>([]);
   const [isProfileVisible, setIsProfileVisible] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile>(initialUser);
   const [reviewingOrder, setReviewingOrder] = useState<Order | null>(null);
   const [isSignInPopupOpen, setIsSignInPopupOpen] = useState(false);
   const [recentAnalyses, setRecentAnalyses] = useState<any[]>([]);
-  // controlled draft for ChatInput (so AnalysisSidebar can insert text)
   const [draft, setDraft] = useState<string>("");
   const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
   const [analysisType, setAnalysisType] = useState<string | null>(null);
-  const [analyses, setAnalyses] = useState<any[]>([]); // recent analyses
   const [analysisDetail, setAnalysisDetail] = useState(null);
   const [showAnalysisList, setShowAnalysisList] = useState(false);
+
+  // Sidebar toggle state
+  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+
   const [cart, setCart] = useState<Product[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+
+  // Handle responsive sidebar behavior
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      if (mobile) {
+        setIsLeftSidebarOpen(false);
+        setIsRightSidebarOpen(false);
+      }
+    };
+
+    if (window.innerWidth < 1024) {
+      setIsMobile(true);
+      setIsLeftSidebarOpen(false);
+      setIsRightSidebarOpen(false);
+    }
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const handleOpenAnalysisDetails = (id: string) => {
     const found = recentAnalyses.find((a) => a.analysisId === id);
@@ -82,6 +111,7 @@ const App: React.FC = () => {
   const handleOpenAnalysisList = () => {
     setShowAnalysisList(true);
   };
+
   // load user + chats
   useEffect(() => {
     const userEmail = session?.user?.email ?? "";
@@ -101,7 +131,6 @@ const App: React.FC = () => {
               `/api/tools/list-analyses?email=${encodeURIComponent(userEmail)}`
             ),
           ]);
-        // analyses endpoint might not be present in early dev; guard it
         let analyses: any[] = [];
         try {
           if (analysesRes?.ok) analyses = await analysesRes.json();
@@ -132,7 +161,6 @@ const App: React.FC = () => {
           setActiveChatId(chats[0]._id);
           setMessages(chats[0].messages || [initialMessage]);
         } else {
-          // create initial chat if none
           const res = await fetch("/api/chats/create", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -143,7 +171,6 @@ const App: React.FC = () => {
           setActiveChatId(newChat._id);
           setMessages(newChat.messages || [initialMessage]);
         }
-        // set a demo analysis if none found to help dev flow:
         if (!analyses || analyses.length === 0) {
           setRecentAnalyses([
             {
@@ -176,6 +203,10 @@ const App: React.FC = () => {
     if (!res.ok) return;
     const chat = await res.json();
     setMessages(chat.messages || [initialMessage]);
+
+    if (isMobile) {
+      setIsLeftSidebarOpen(false);
+    }
   };
 
   // new chat
@@ -189,6 +220,7 @@ const App: React.FC = () => {
     setChatSessions((s) => [chat, ...s]);
     setActiveChatId(chat._id);
     setMessages(chat.messages || [initialMessage]);
+    if (isMobile) setIsLeftSidebarOpen(false);
   };
 
   // delete chat
@@ -209,7 +241,7 @@ const App: React.FC = () => {
     }
   };
 
-  // send message: uses your existing /api/curate and also saves message into the chat
+  // send message
   const handleSendMessage = useCallback(
     async (text: string) => {
       if (!text.trim()) return;
@@ -222,7 +254,6 @@ const App: React.FC = () => {
       setIsLoading(true);
 
       try {
-        // Post to curate with chat context + chatId + userEmail
         const res = await fetch("/api/curate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -236,9 +267,7 @@ const App: React.FC = () => {
         if (!res.ok) throw new Error("Rasphia response failed");
 
         const aiMessage = await res.json();
-        // response contains aiMessage and chatId
         setMessages((prev) => [...prev, aiMessage]);
-        // update sessions list (brief)
         const chatsRes = await fetch(
           `/api/chats/list?email=${encodeURIComponent(currentUser.email)}`
         );
@@ -261,120 +290,24 @@ const App: React.FC = () => {
     [messages, activeChatId, currentUser.email]
   );
 
-  // 💬 AI chat handler
-  // 💬 AI chat handler (streaming enabled)
-  const handleSendAgentMessage = useCallback(
-    async (text: string) => {
-      if (!text.trim()) return;
-
-      const userMessage: Message = { author: "user", text };
-      setMessages((prev) => [...prev, userMessage]);
-      setIsLoading(true);
-
-      try {
-        const res = await fetch("/api/curate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chatHistory: [...messages, userMessage],
-          }),
-        });
-
-        if (!res.ok || !res.body) throw new Error("Stream failed");
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let accumulatedText = "";
-        let aiMessage: Message = { author: "ai", text: "" };
-
-        // Add placeholder message for the AI
-        setMessages((prev) => [...prev, aiMessage]);
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value, { stream: true });
-          accumulatedText += chunk;
-
-          // Update last AI message incrementally
-          setMessages((prev) => {
-            const updated = [...prev];
-            const lastIndex = updated.length - 1;
-            if (updated[lastIndex]?.author === "ai") {
-              updated[lastIndex] = {
-                ...updated[lastIndex],
-                text: accumulatedText,
-              };
-            }
-            return updated;
-          });
-        }
-      } catch (error) {
-        console.error("❌ AI streaming error:", error);
-        setMessages((prev) => [
-          ...prev,
-          {
-            author: "ai",
-            text: "I'm having trouble connecting right now. Please try again later.",
-          },
-        ]);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [messages]
-  );
-
   // Integration hooks for AnalysisSidebar
-  // Insert a generated prompt into the chat input (controlled)
-  const handleInsertPrompt = (prompt: string) => {
-    setDraft(prompt);
-    // optionally focus the chat input — ChatInput should implement focus via ref if you want it.
-  };
-
-  // Open an analysis or open upload modal — here we will open a viewer (simple behavior)
-  /*const handleOpenAnalysis = async (idOrTool: string) => {
-    // if id is an analysisId, open the analysis viewer (profile)
-    if (idOrTool && idOrTool.startsWith("demo-analysis-")) {
-      // demo click: open profile view for now
-      setIsProfileVisible(true);
-      // you can also route to /profile#analysisId
-      return;
-    }
-
-    // if it's a tool name (skin, hair, similar), open a simple upload modal flow.
-    // For now, open the profile to show demo flow. Later we will add a modal.
-    setIsProfileVisible(true);
-  };*/
   const handleOpenAnalysis = (type: string) => {
     setAnalysisType(type);
     setIsAnalysisOpen(true);
   };
   const handleAnalysisComplete = (saved: any) => {
-    // Add to recent list (UI).
     setRecentAnalyses((prev) => [saved, ...prev]);
-
-    // Optionally auto-insert into chat:
     setMessages((prev) => [
       ...prev,
       {
         author: "ai",
-        text: `📎 Attached analysis ready.\n\n**${
+        text: `Attachment ready.\n\n**${
           saved.title || saved.type
-        }**\n\nType: ${
-          saved.type
-        }\nUse "Insert into chat" to inject the optimized prompt.`,
+        }**\n\nType: ${saved.type}\nUse "Insert into chat" to inject the optimized prompt.`,
       },
     ]);
   };
 
-  const handleTriggerAnalysis = (type: string) => {
-    setAnalysisType(type);
-    setIsAnalysisOpen(true);
-  };
-
-  // Attach-to-chat helper when clicking "Attach" in the sidebar viewer (optional)
   const handleAttachToChat = async (analysisId: string) => {
     const analysis = recentAnalyses.find((a) => a.analysisId === analysisId);
     if (!analysis) {
@@ -382,7 +315,6 @@ const App: React.FC = () => {
       return;
     }
 
-    // Create a user-friendly + vector-search-friendly prompt
     const text = `
 Here's my saved analysis: **${analysis.title || analysis.type}**
 Summary:
@@ -392,14 +324,12 @@ Optimized prompt for Rasphia:
 ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
   find some products for this`.trim();
 
-    // Insert as a user message
-    setMessages((prev) => [...prev, { author: "user", text }]);
-
-    // Auto-send to AI
+    setDraft(text);
     await handleSendMessage(text);
+    if (isMobile) setIsRightSidebarOpen(false);
   };
 
-  // 🟢 Auth handlers
+  // Auth handlers
   const handleLogin = () => setIsSignInPopupOpen(true);
   const handleGoogleSignIn = async () => {
     setIsSignInPopupOpen(false);
@@ -413,6 +343,7 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
     setCurrentUser(initialUser);
     setIsProfileVisible(false);
   };
+
   const handleAddToCart = (product: Product) => {
     setCart((prev) => {
       const exists = prev.find((p) => p.name === product.name);
@@ -422,7 +353,7 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
 
     setMessages((prev) => [
       ...prev,
-      { author: "ai", text: `🛒 Added **${product.name}** to your cart.` },
+      { author: "ai", text: `Added **${product.name}** to your cart.` },
     ]);
   };
 
@@ -435,9 +366,7 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
     setIsCartOpen(false);
   };
 
-  // 💳 Checkout
-  const handleInitiateCheckout = (product: Product) =>
-    setCheckoutProducts(cart);
+  // Checkout
   const handleCancelCheckout = () => setCheckoutProducts(null);
 
   const handlePlaceOrder = async (
@@ -446,7 +375,6 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
   ) => {
     if (!checkoutProducts) return;
     try {
-      // Update MongoDB order record to “Processing”
       await fetch("/api/orders/update-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -457,7 +385,6 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
         }),
       });
 
-      // Re-fetch orders from DB
       const res = await fetch(
         `/api/orders?email=${encodeURIComponent(customer.email)}`
       );
@@ -477,7 +404,7 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
         ...prev,
         {
           author: "ai",
-          text: `✅ Thank you for your purchase of ${checkoutProducts
+          text: `Thank you for your purchase of ${checkoutProducts
             .map((p) => p.name)
             .join(", ")}! We'll keep you updated on shipping.`,
         },
@@ -488,7 +415,7 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
     }
   };
 
-  // 💗 Wishlist persistence
+  // Wishlist persistence
   const handleToggleWishlist = async (product: Product) => {
     setCurrentUser((prevUser) => {
       const isInWishlist = prevUser.wishlist.some(
@@ -498,7 +425,6 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
         ? prevUser.wishlist.filter((i) => i.name !== product.name)
         : [...prevUser.wishlist, product];
 
-      // Persist to DB
       fetch("/api/user/update-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -509,24 +435,10 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
     });
   };
 
-  // 👤 Profile
+  // Profile
   const handleShowProfile = () => setIsProfileVisible(true);
   const handleHideProfile = () => setIsProfileVisible(false);
-  const handleSaveProfile = async (updatedProfile: UserProfile) => {
-    try {
-      await fetch("/api/user/update-profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedProfile),
-      });
-      setCurrentUser(updatedProfile);
-      handleHideProfile();
-    } catch (err) {
-      console.error("Profile save failed:", err);
-    }
-  };
-
-  // ⭐ Reviews
+  // Reviews
   const handleStartReview = (order: Order) => setReviewingOrder(order);
   const handleCloseReview = () => setReviewingOrder(null);
   const handleAddReview = async (
@@ -561,7 +473,6 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
     handleCloseReview();
   };
 
-  // ⏳ Auth state guards
   if (status === "loading")
     return (
       <div className="flex h-screen items-center justify-center text-stone-500">
@@ -580,10 +491,11 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
         />
       </>
     );
+
   if (checkoutProducts)
     return (
       <CheckoutPage
-        products={checkoutProducts} // send array
+        products={checkoutProducts}
         user={currentUser}
         onPlaceOrder={handlePlaceOrder}
         onCancel={handleCancelCheckout}
@@ -594,146 +506,181 @@ ${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
     return (
       <ProfilePage
         user={currentUser}
+        cart={cart}
         onBack={handleHideProfile}
         onAddToCart={handleAddToCart}
-        cart={cart}
-        onToggleWishlist={handleToggleWishlist}
         onCheckout={handleCheckoutFromCart}
+        onToggleWishlist={handleToggleWishlist}
         onStartReview={handleStartReview}
         onRemoveFromCart={handleRemoveFromCart}
       />
     );
 
-  // 🪶 Default Chat UI
   return (
-    <div className="flex h-screen bg-[#F8F4EF] text-stone-900 overflow-hidden">
-      {/* LEFT SIDEBAR */}
-      <ChatSidebar
-        userEmail={currentUser.email}
-        onSelect={handleSelectChat}
-        activeId={activeChatId}
-        onNew={handleNewChat}
-        onDelete={handleDeleteChat}
-      />
+    <div className="relative h-screen w-full bg-[#F8F4EF] text-stone-900 font-sans overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-[#FFF4E1] via-[#F8F1EA] to-[#F1E3D3] -z-20" />
+      <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-20 -left-20 h-96 w-96 rounded-full bg-[#F8DCC0] opacity-40 blur-3xl" />
+        <div className="absolute top-1/2 right-0 h-[500px] w-[500px] rounded-full bg-[#F0B9A3] opacity-30 blur-[100px]" />
+        <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-[#E5D0C5] opacity-40 blur-3xl" />
+      </div>
 
-      {/* RIGHT MAIN CHAT PANEL */}
-      <div className="flex-1 h-full overflow-y-auto relative">
-        <div className="pointer-events-none absolute inset-0">
+      <div className="flex h-full w-full p-2 lg:p-4 gap-2 lg:gap-4 relative">
+        {isLeftSidebarOpen && isMobile && (
           <div
-            className="absolute -top-16 left-10 h-72 w-72 rounded-[45%] 
-        bg-gradient-to-br from-[#FBE8D1] via-[#F7CFB8] to-[#F2B9A6] 
-        opacity-60 blur-3xl"
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
+            onClick={() => setIsLeftSidebarOpen(false)}
           />
+        )}
 
-          <div
-            className="absolute bottom-0 right-0 h-96 w-80 rounded-[60%] 
-        bg-gradient-to-br from-[#301B16] via-[#563223] to-[#A16443] 
-        opacity-50 blur-[160px]"
+        <div
+          className={`${
+            isLeftSidebarOpen ? "flex" : "hidden"
+          } fixed inset-y-2 left-2 z-50 w-[280px] h-[calc(100%-16px)] flex-col
+          lg:static lg:h-full lg:w-[280px]
+          rounded-[32px] bg-white/60 backdrop-blur-xl border border-white/50 shadow-2xl lg:shadow-[0_8px_32px_rgba(0,0,0,0.04)] overflow-hidden transition-all duration-300`}
+        >
+          <ChatSidebar
+            userEmail={currentUser.email}
+            onSelect={handleSelectChat}
+            activeId={activeChatId}
+            onNew={handleNewChat}
+            onDelete={handleDeleteChat}
           />
         </div>
 
-        <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 md:px-6">
-          {/* HEADER */}
-          <header
-            className="
-    sticky top-0 z-40
-    flex flex-wrap items-center justify-between gap-4 
-    rounded-full border border-white/40 bg-white/70 
-    px-5 py-3 shadow-[0_10px_40px_rgba(0,0,0,0.04)] backdrop-blur-lg
-  "
-          >
-            <button
-              onClick={handleLogout}
-              className="inline-flex items-center gap-2 rounded-full 
-            border border-stone-200 px-4 py-2 text-sm 
-            font-medium text-stone-700 hover:bg-white transition"
-            >
-              Sign Out
-            </button>
-
-            <div className="text-center">
-              <p className="text-xs uppercase tracking-[0.5em] text-stone-400">
-                Rasphia
-              </p>
-              <p className="font-serif text-xl text-stone-900">
-                Concierge Session
-              </p>
+        {/* CENTER PANEL */}
+        <main className="flex-1 flex flex-col min-w-0 relative rounded-[32px] bg-white/80 backdrop-blur-xl border border-white/60 shadow-[0_20px_40px_rgba(0,0,0,0.06)] overflow-hidden">
+          <header className="flex-shrink-0 h-16 px-4 lg:px-6 flex items-center justify-between border-b border-stone-100/50 bg-white/50 backdrop-blur-md z-10">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <button
+                onClick={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
+                className="p-2 rounded-full hover:bg-stone-200/50 text-stone-500 hover:text-stone-800 transition-colors"
+                title={isLeftSidebarOpen ? "Close sidebar" : "Open sidebar"}
+              >
+                {isLeftSidebarOpen ? (
+                  <PanelLeftClose className="h-5 w-5" />
+                ) : (
+                  <PanelLeftOpen className="h-5 w-5" />
+                )}
+              </button>
+              <div className="hidden sm:flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-amber-600 to-amber-700 text-white text-sm font-serif font-bold shadow-md shadow-amber-200">
+                R
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold text-stone-900 tracking-tight">
+                  Rasphia <span className="hidden sm:inline">Concierge</span>
+                </span>
+                <span className="text-[10px] uppercase tracking-wider text-stone-500 font-medium hidden sm:block">
+                  {currentUser.name
+                    ? `Session for ${currentUser.name}`
+                    : "Guest Session"}
+                </span>
+              </div>
             </div>
 
-            <button
-              onClick={handleShowProfile}
-              className="inline-flex items-center justify-center rounded-full 
-            border border-stone-200 bg-white/70 p-2 
-            text-stone-500 hover:bg-white transition"
-              aria-label="View Profile"
-            >
-              <ProfileIcon />
-            </button>
+            <div className="flex items-center gap-1 sm:gap-2">
+              <button
+                onClick={() => setIsCartOpen(true)}
+                className="h-10 w-10 relative flex items-center justify-center rounded-full bg-white border border-stone-200 text-stone-700 shadow-sm hover:scale-105 transition-all"
+                aria-label="View cart"
+              >
+                <ShoppingCart className="h-5 w-5" />
+                {cart.length > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-5 px-1 rounded-full bg-amber-600 text-white text-[10px] font-semibold flex items-center justify-center">
+                    {cart.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={handleLogout}
+                className="hidden sm:block px-4 py-1.5 rounded-full text-xs font-medium text-stone-500 hover:bg-stone-100 hover:text-stone-900 transition-colors"
+              >
+                Sign out
+              </button>
+              <button
+                onClick={handleShowProfile}
+                className="h-10 w-10 flex items-center justify-center rounded-full bg-white border border-stone-200 text-stone-700 shadow-sm hover:scale-105 transition-all"
+              >
+                <ProfileIcon className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
+                className="p-2 ml-0 sm:ml-1 rounded-full hover:bg-stone-200/50 text-stone-500 hover:text-stone-800 transition-colors"
+                title={isRightSidebarOpen ? "Close tools" : "Open tools"}
+              >
+                {isRightSidebarOpen ? (
+                  <PanelRightClose className="h-5 w-5" />
+                ) : (
+                  <PanelRightOpen className="h-5 w-5" />
+                )}
+              </button>
+            </div>
           </header>
-          <main className="mt-6 flex-1 min-h-0 overflow-hidden">
-            <div className="relative flex h-full flex-col rounded-[36px] border border-white/50 bg-white/90 p-4 shadow-[0_25px_100px_rgba(0,0,0,0.08)]">
-              <div className="pointer-events-none absolute -top-6 right-4 h-40 w-40 rounded-full bg-gradient-to-br from-amber-200 via-rose-100 to-white blur-[70px] opacity-80" />
-              <div className="pointer-events-none absolute bottom-[-20px] left-[-10px] h-44 w-44 rounded-full bg-gradient-to-br from-[#2C1A13] via-[#4F2B1E] to-[#8E5637] blur-[90px] opacity-60" />
-              <div className="relative flex h-full min-h-0 flex-col rounded-[28px] bg-white/85 p-4 shadow-inner">
-                <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-semibold uppercase tracking-[0.4em] text-stone-400">
-                  <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-1 text-amber-800">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" />{" "}
-                    Live concierge
-                  </span>
-                  <span className="text-stone-500">
-                    Signed in as {currentUser.name || session?.user?.name}
-                  </span>
-                </div>
-                <div className="mt-4 flex flex-1 min-h-0 flex-col overflow-hidden rounded-[24px] border border-white/60 bg-white/75 p-4 shadow-lg shadow-white/60">
-                  <div className="relative flex flex-1 min-h-0 flex-col overflow-hidden">
-                    <ChatWindow
-                      messages={messages}
-                      isLoading={isLoading}
-                      onAddToCart={handleAddToCart}
-                      wishlist={currentUser.wishlist}
-                      onToggleWishlist={handleToggleWishlist}
-                      products={products}
-                      cart={cart}
-                      setIsCartOpen={setIsCartOpen}
-                    />
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-2 pb-2">
-                      <div className="pointer-events-auto w-full max-w-3xl">
-                        <ChatInput
-                          onSendMessage={handleSendMessage}
-                          isLoading={isLoading}
-                        />
-                      </div>
-                    </div>
-                  </div>
+
+          <div className="flex-1 flex flex-col relative overflow-hidden">
+            <ChatWindow
+              messages={messages}
+              isLoading={isLoading}
+              onAddToCart={handleAddToCart}
+              wishlist={currentUser.wishlist}
+              onToggleWishlist={handleToggleWishlist}
+              products={products}
+            />
+
+            <div className="flex-shrink-0 px-6 pb-6 pt-4 bg-gradient-to-t from-white via-white/80 to-transparent">
+              <div className="max-w-3xl mx-auto">
+                <ChatInput
+                  onSendMessage={handleSendMessage}
+                  isLoading={isLoading}
+                  value={draft}
+                  onChange={setDraft}
+                />
+                <div className="mt-3 text-center">
+                  <p className="text-[10px] text-stone-400 font-medium">
+                    Rasphia AI can make mistakes. Please verify product details.
+                  </p>
                 </div>
               </div>
             </div>
-          </main>
+          </div>
+        </main>
 
-          {reviewingOrder && (
-            <ReviewModal
-              order={reviewingOrder}
-              onClose={handleCloseReview}
-              onSubmit={handleAddReview}
-            />
-          )}
+        {isRightSidebarOpen && isMobile && (
+          <div
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
+            onClick={() => setIsRightSidebarOpen(false)}
+          />
+        )}
+
+        <div
+          className={`${
+            isRightSidebarOpen ? "flex" : "hidden"
+          } fixed inset-y-2 right-2 z-50 w-[320px] h-[calc(100%-16px)] flex-col
+          xl:static xl:h-full xl:w-[320px]
+          rounded-[32px] bg-white/60 backdrop-blur-xl border border-white/50 shadow-2xl xl:shadow-[0_8px_32px_rgba(0,0,0,0.04)] overflow-hidden transition-all duration-300`}
+        >
+          <AnalysisSidebar
+            onOpenAnalysis={handleOpenAnalysis}
+            onAttachToChat={handleAttachToChat}
+            recentAnalyses={recentAnalyses}
+            onOpenAnalysisDetails={handleOpenAnalysisDetails}
+            onOpenAnalysisList={handleOpenAnalysisList}
+          />
         </div>
       </div>
-      {/* RIGHT: Analysis Sidebar */}
-      <AnalysisSidebar
-        onOpenAnalysis={handleOpenAnalysis}
-        onAttachToChat={handleAttachToChat}
-        recentAnalyses={recentAnalyses}
-        onOpenAnalysisDetails={handleOpenAnalysisDetails}
-        onOpenAnalysisList={handleOpenAnalysisList}
-      />
 
+      {reviewingOrder && (
+        <ReviewModal
+          order={reviewingOrder}
+          onClose={handleCloseReview}
+          onSubmit={handleAddReview}
+        />
+      )}
       <AnalysisUploadModal
         isOpen={isAnalysisOpen}
         onClose={() => setIsAnalysisOpen(false)}
-        onAnalysisComplete={(analysis) => {
-          setRecentAnalyses((prev) => [analysis, ...prev]); // store new analysis
-        }}
+        onAnalysisComplete={handleAnalysisComplete}
         userEmail={currentUser.email}
         type={analysisType}
       />

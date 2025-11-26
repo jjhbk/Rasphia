@@ -1,7 +1,14 @@
 // src/components/ChatSidebar.tsx
 "use client";
 import React, { useState, useEffect } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import {
+  Pencil,
+  Trash2,
+  Plus,
+  MessageSquare,
+  Search,
+  MoreHorizontal,
+} from "lucide-react";
 
 type ChatItem = {
   _id: string;
@@ -50,107 +57,118 @@ export default function ChatSidebar({
     await load(query);
   };
 
-  // ➤ Start editing a title
   const startEditing = (chat: ChatItem) => {
     setEditingId(chat._id);
     setEditValue(chat.title || "Untitled");
   };
 
-  // ➤ Save title to DB
   const saveTitle = async (chatId: string) => {
     if (!editValue.trim()) return;
     setEditingId(null);
-
     await fetch("/api/chats/update-title", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chatId, title: editValue }),
     });
-
-    load(); // refresh list
+    load();
   };
 
   return (
-    <aside className="w-[340px] h-full overflow-y-auto bg-white/70 border-l border-white/40">
+    <aside className="flex flex-col h-full bg-transparent">
       {/* HEADER */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-medium text-stone-800">Chats</h3>
+      <div className="p-5 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-stone-800 tracking-wide">
+          Conversations
+        </h2>
         <button
           onClick={onNew}
-          className="rounded-full bg-stone-900 text-white px-3 py-1 text-sm shadow hover:bg-stone-800 transition"
+          className="p-2 rounded-full hover:bg-white/60 text-stone-600 transition-colors"
+          title="New Chat"
         >
-          + New
+          <Plus className="h-4 w-4" />
         </button>
       </div>
 
       {/* SEARCH */}
-      <form onSubmit={handleSearch} className="mb-4">
-        <input
-          placeholder="Search chats"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="w-full rounded-xl border border-stone-300 bg-white/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-stone-400"
-        />
-      </form>
+      <div className="px-5 pb-4">
+        <form onSubmit={handleSearch} className="relative group">
+          <Search className="absolute left-3.5 top-3 h-4 w-4 text-stone-400 group-focus-within:text-amber-600 transition-colors" />
+          <input
+            placeholder="Search chats..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-full bg-white/40 border border-white/60 focus:border-amber-200 focus:bg-white text-sm text-stone-700 placeholder-stone-400 focus:outline-none focus:ring-4 focus:ring-amber-100/20 transition-all shadow-sm backdrop-blur-sm"
+          />
+        </form>
+      </div>
 
-      {/* CHAT LIST */}
-      <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+      {/* LIST */}
+      <div className="flex-1 overflow-y-auto px-4 space-y-2 custom-scrollbar">
         {chats.map((chat) => (
           <div
             key={chat._id}
             onClick={() => onSelect(chat._id)}
-            className={`group relative p-3 rounded-xl cursor-pointer transition border
+            className={`
+              group relative flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all
               ${
                 chat._id === activeId
-                  ? "bg-stone-900 text-white border-stone-700"
-                  : "bg-white/90 hover:bg-white border-stone-200"
-              }`}
+                  ? "bg-white shadow-sm border border-stone-100"
+                  : "hover:bg-white/40 border border-transparent"
+              }
+            `}
           >
-            {/* TITLE OR INPUT */}
-            {editingId === chat._id ? (
-              <input
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onBlur={() => saveTitle(chat._id)}
-                onKeyDown={(e) => e.key === "Enter" && saveTitle(chat._id)}
-                autoFocus
-                className="w-full bg-transparent border-b border-stone-300 text-sm p-1 outline-none"
-              />
-            ) : (
-              <p className="text-sm font-medium truncate">
-                {chat.title || "Conversation"}
-              </p>
-            )}
+            <MessageSquare
+              className={`h-4 w-4 flex-shrink-0 ${
+                chat._id === activeId ? "text-amber-600" : "text-stone-400"
+              }`}
+            />
+            
+            <div className="flex-1 min-w-0">
+              {editingId === chat._id ? (
+                <input
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onBlur={() => saveTitle(chat._id)}
+                  onKeyDown={(e) => e.key === "Enter" && saveTitle(chat._id)}
+                  autoFocus
+                  className="w-full bg-transparent border-b border-stone-300 text-sm p-0 focus:outline-none"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <p className={`text-sm font-medium truncate ${chat._id === activeId ? "text-stone-900" : "text-stone-600"}`}>
+                  {chat.title || "New Conversation"}
+                </p>
+              )}
+            </div>
 
-            {/* LAST MESSAGE PREVIEW */}
-            <p className="text-xs opacity-70 truncate">
-              {(chat.messages?.at(-1)?.text || "").slice(0, 50)}
-            </p>
-
-            {/* ACTION BUTTONS ON HOVER */}
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex gap-2">
+            {/* HOVER ACTIONS */}
+            <div className="hidden group-hover:flex items-center gap-1">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   startEditing(chat);
                 }}
-                className="text-stone-500 hover:text-stone-700"
+                className="p-1 text-stone-400 hover:text-stone-700 rounded-full hover:bg-stone-200/50 transition-colors"
               >
-                <Pencil className="h-4 w-4" />
+                <Pencil className="h-3 w-3" />
               </button>
-
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete(chat._id);
                 }}
-                className="text-red-500 hover:text-red-700"
+                className="p-1 text-stone-400 hover:text-red-600 rounded-full hover:bg-red-50 transition-colors"
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-3 w-3" />
               </button>
             </div>
           </div>
         ))}
+      </div>
+      
+      {/* FOOTER AREA */}
+      <div className="p-4 text-[10px] text-stone-400 text-center opacity-60">
+        v1.0.2 • Rasphia
       </div>
     </aside>
   );

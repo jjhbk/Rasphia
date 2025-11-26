@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { X } from "lucide-react";
 import type { Product } from "../types";
 
 interface CartModalProps {
@@ -21,27 +22,38 @@ const CartModal: React.FC<CartModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-xl border border-stone-200">
-        <h2 className="text-xl font-semibold text-stone-900 mb-4">Your Cart</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-md">
+      <div className="relative w-full max-w-lg rounded-3xl border border-white/60 bg-white/90 backdrop-blur-xl shadow-[0_25px_80px_rgba(0,0,0,0.18)] overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/60 bg-white/70">
+          <h2 className="text-lg font-semibold text-stone-900">Your Cart</h2>
+          <button
+            onClick={onClose}
+            className="h-10 w-10 flex items-center justify-center rounded-full bg-white border border-stone-200 text-stone-600 hover:scale-105 transition"
+            aria-label="Close cart"
+          >
+            <X className="h-6 w-6" />
+          </button>
+        </div>
 
         {cart.length === 0 ? (
-          <p className="text-stone-600 text-sm">Your cart is empty.</p>
+          <div className="p-6 text-sm text-stone-600">Your cart is empty.</div>
         ) : (
-          <div className="max-h-60 overflow-y-auto space-y-3">
+          <div className="max-h-72 overflow-y-auto space-y-3 p-6">
             {cart.map((item) => (
               <div
                 key={item.name}
-                className="flex justify-between items-center p-2 border rounded-lg"
+                className="flex items-center gap-3 p-3 rounded-2xl border border-white/70 bg-white/80 shadow-sm shadow-amber-100/40"
               >
-                <div>
-                  <p className="font-medium text-stone-800">{item.name}</p>
-                  <p className="text-sm text-stone-500">{item.brand}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-stone-900 truncate">
+                    {item.name}
+                  </p>
+                  <p className="text-xs text-stone-500">{item.brand}</p>
                 </div>
 
                 <button
                   onClick={() => onRemoveFromCart(item)}
-                  className="text-red-500 text-sm hover:underline"
+                  className="px-3 py-1.5 rounded-full text-xs font-medium text-amber-800 border border-amber-100 bg-amber-50 hover:bg-amber-100 hover:text-amber-900 transition"
                 >
                   Remove
                 </button>
@@ -50,23 +62,22 @@ const CartModal: React.FC<CartModalProps> = ({
           </div>
         )}
 
-        {/* Checkout */}
         {cart.length > 0 && (
-          <button
-            onClick={() => onCheckout(cart[0])}
-            className="mt-5 w-full bg-stone-900 text-white py-2 rounded-xl shadow hover:bg-stone-800 transition"
-          >
-            Buy Now
-          </button>
+          <div className="px-6 pb-6">
+            <button
+              onClick={() => onCheckout(cart[0])}
+              className="w-full rounded-full bg-amber-600 text-white py-3 text-sm font-semibold shadow-lg shadow-amber-200/50 hover:bg-amber-700 transition"
+            >
+              Proceed to checkout
+            </button>
+            <button
+              onClick={onClose}
+              className="mt-3 w-full rounded-full border border-stone-200 bg-white text-sm text-stone-700 hover:text-stone-900 py-2.5 transition"
+            >
+              Continue shopping
+            </button>
+          </div>
         )}
-
-        {/* Close */}
-        <button
-          onClick={onClose}
-          className="mt-3 w-full text-stone-600 text-sm hover:underline"
-        >
-          Close
-        </button>
       </div>
     </div>
   );
