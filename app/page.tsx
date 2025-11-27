@@ -318,11 +318,13 @@ const App: React.FC = () => {
     const text = `
 Here's my saved analysis: **${analysis.title || analysis.type}**
 Summary:
-${analysis.aiResult?.summary || "No summary available."}
+${
+  analysis.aiResult?.summary || "No summary available."
+} find some products for this`.trim();
 
-Optimized prompt for Rasphia:
-${analysis.aiResult?.optimizedPrompt || analysis.aiResult?.summary || ""}
-  find some products for this`.trim();
+    /*Optimized prompt for Rasphia:
+${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
+  find some products for this`.trim();*/
 
     setDraft(text);
     //await handleSendMessage(text);

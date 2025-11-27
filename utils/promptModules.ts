@@ -3,7 +3,7 @@ You MUST avoid identifying people.
 Ignore background, people, clothes, objects, animals, scenery.
 Analyze ONLY the relevant subject of the tool.
 Return ONLY JSON. No prose, no explanations.
-`;
+optimized prompt should be directed towards finding relevant products depending on the variables inferred from the picture`;
 
 export const SKIN_RULES = `
 Focus ONLY on non-identifiable surface-level skin features:

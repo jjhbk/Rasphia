@@ -1,6 +1,7 @@
 import { MongoClient } from "mongodb";
 import OpenAI from "openai";
-import { products } from "@/app/data/products"; // adjust this path if needed
+import { SkinCare } from "@/app/data/skincare"; // adjust this path if needed
+//import { HairFall } from "@/app/data/hairfall";
 
 const client = new MongoClient(process.env.MONGODB_URI!);
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
@@ -22,7 +23,7 @@ async function run() {
     console.log("🧩 Generating OpenAI embeddings for products...");
 
     const enriched = [];
-    for (const p of products) {
+    for (const p of SkinCare) {
       const text = `${p.name}. ${p.story}. ${p.category}. ${p.tags.join(" ")}`;
       const embedding = await embedText(text);
       enriched.push({ ...p, embedding });
