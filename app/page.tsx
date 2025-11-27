@@ -254,6 +254,31 @@ const App: React.FC = () => {
       setIsLoading(true);
 
       try {
+        // 1️⃣ Save user message to DB before AI reply
+        console.log(
+          "the user message is:",
+          JSON.stringify({
+            chatId: activeChatId,
+            message: {
+              author: "user",
+              text,
+              createdAt: new Date().toISOString(),
+            },
+          })
+        );
+        await fetch("/api/chats/add-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chatId: activeChatId,
+            message: {
+              author: "user",
+              text,
+              createdAt: new Date().toISOString(),
+            },
+          }),
+        });
+
         const res = await fetch("/api/curate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
