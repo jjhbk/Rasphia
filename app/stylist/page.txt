@@ -1,0 +1,405 @@
+"use client";
+
+import React, { useState } from "react";
+
+/* ======================= TYPES ======================= */
+
+type GenderPresentation = "masc" | "femme" | "androgynous" | "prefer_not_say";
+type FitPreference = "relaxed" | "fitted" | "oversized" | "mixed";
+type BudgetRange = "low" | "mid" | "high" | "flexible";
+type BodyShape =
+  | "straight"
+  | "pear"
+  | "inverted_triangle"
+  | "hourglass"
+  | "round"
+  | "unsure";
+
+type StyleArchetype =
+  | "minimal"
+  | "classic"
+  | "streetwear"
+  | "sporty"
+  | "bold"
+  | "soft"
+  | "business";
+
+interface StyleProfile {
+  genderPresentation: GenderPresentation | "";
+  ageRange: string;
+  profession: string;
+  primaryStyleGoals: string;
+  styleArchetypes: StyleArchetype[];
+  budget: BudgetRange | "";
+  heightCm: string;
+  bodyShape: BodyShape | "";
+  fitPreference: FitPreference | "";
+  proportionsNote: string;
+  colorLikes: string;
+  colorDislikes: string;
+
+  /* Vision */
+  bodyAnalysisConsent: boolean;
+  fullBodyImageUrl: string | null;
+}
+
+/* ======================= INITIAL STATE ======================= */
+
+const initialProfile: StyleProfile = {
+  genderPresentation: "",
+  ageRange: "",
+  profession: "",
+  primaryStyleGoals: "",
+  styleArchetypes: [],
+  budget: "",
+  heightCm: "",
+  bodyShape: "",
+  fitPreference: "",
+  proportionsNote: "",
+  colorLikes: "",
+  colorDislikes: "",
+
+  bodyAnalysisConsent: false,
+  fullBodyImageUrl: null,
+};
+
+/* ======================= OPTIONS ======================= */
+
+const genderOptions = [
+  { value: "masc", label: "Masculine-leaning" },
+  { value: "femme", label: "Feminine-leaning" },
+  { value: "androgynous", label: "Androgynous / Mix" },
+  { value: "prefer_not_say", label: "Prefer not to say" },
+];
+
+const archetypes = [
+  "minimal",
+  "classic",
+  "streetwear",
+  "sporty",
+  "bold",
+  "soft",
+  "business",
+] as StyleArchetype[];
+
+const bodyShapes: {
+  value: BodyShape;
+  label: string;
+  desc: string;
+}[] = [
+  {
+    value: "straight",
+    label: "Straight / Rectangle",
+    desc: "Shoulders, waist and hips feel fairly aligned.",
+  },
+  {
+    value: "pear",
+    label: "Pear / Triangle",
+    desc: "More volume through hips than shoulders.",
+  },
+  {
+    value: "inverted_triangle",
+    label: "Inverted Triangle",
+    desc: "Broader shoulders or chest than hips.",
+  },
+  {
+    value: "hourglass",
+    label: "Hourglass",
+    desc: "Defined waist with balanced shoulders and hips.",
+  },
+  {
+    value: "round",
+    label: "Round / Oval",
+    desc: "Softer midsection, less waist definition.",
+  },
+  {
+    value: "unsure",
+    label: "Not sure",
+    desc: "I’ll infer this over time.",
+  },
+];
+
+const fitOptions: FitPreference[] = ["relaxed", "fitted", "oversized", "mixed"];
+
+/* ======================= PAGE ======================= */
+
+export default function StylistOnboardingPage() {
+  const [profile, setProfile] = useState<StyleProfile>(initialProfile);
+  const [step, setStep] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const totalSteps = 4;
+
+  const update = <K extends keyof StyleProfile>(
+    key: K,
+    value: StyleProfile[K]
+  ) => setProfile((p) => ({ ...p, [key]: value }));
+
+  const toggleArchetype = (a: StyleArchetype) =>
+    update(
+      "styleArchetypes",
+      profile.styleArchetypes.includes(a)
+        ? profile.styleArchetypes.filter((x) => x !== a)
+        : [...profile.styleArchetypes, a]
+    );
+
+  async function handleSubmit() {
+    setSaving(true);
+
+    console.log("Final Profile → send to DB + LLM", profile);
+
+    // TODO: POST to backend
+    // await fetch("/api/stylist/profile", { method: "POST", body: JSON.stringify(profile) })
+
+    setTimeout(() => {
+      setSaving(false);
+      alert("Profile saved. Rasphia is styling your first outfits ✨");
+    }, 600);
+  }
+
+  return (
+    <div className="min-h-screen bg-neutral-950 text-white px-4 py-6 flex justify-center">
+      <div className="w-full max-w-2xl space-y-6">
+        {/* Header */}
+        <header>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Let’s style you properly
+          </h1>
+          <p className="text-sm text-neutral-400 mt-1">
+            I’ll ask a few things — then I’ll do the thinking for you.
+          </p>
+        </header>
+
+        {/* Progress */}
+        <div>
+          <div className="flex justify-between text-xs text-neutral-500 mb-1">
+            <span>
+              Step {step} of {totalSteps}
+            </span>
+            <span>~1 minute</span>
+          </div>
+          <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-white transition-all"
+              style={{ width: `${(step / totalSteps) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Card */}
+        <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 backdrop-blur p-5 space-y-6">
+          {/* STEP 1 */}
+          {step === 1 && (
+            <>
+              <h2 className="text-lg font-medium">
+                First — tell me who I’m dressing
+              </h2>
+
+              <div className="grid grid-cols-2 gap-2">
+                {genderOptions.map((o) => (
+                  <button
+                    key={o.value}
+                    onClick={() => update("genderPresentation", o.value as any)}
+                    className={`rounded-xl border px-3 py-2 text-sm ${
+                      profile.genderPresentation === o.value
+                        ? "bg-white text-black border-white"
+                        : "border-neutral-700"
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+
+              <input
+                placeholder="What do you do most days?"
+                value={profile.profession}
+                onChange={(e) => update("profession", e.target.value)}
+                className="w-full input"
+              />
+
+              <textarea
+                placeholder="What do you want clothes to *do* for you?"
+                value={profile.primaryStyleGoals}
+                onChange={(e) => update("primaryStyleGoals", e.target.value)}
+                className="w-full input min-h-[80px]"
+              />
+            </>
+          )}
+
+          {/* STEP 2 */}
+          {step === 2 && (
+            <>
+              <h2 className="text-lg font-medium">Your style instincts</h2>
+
+              <p className="text-xs text-neutral-400">
+                Pick what feels natural. We’ll refine later.
+              </p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {archetypes.map((a) => (
+                  <button
+                    key={a}
+                    onClick={() => toggleArchetype(a)}
+                    className={`rounded-xl border px-3 py-2 text-sm ${
+                      profile.styleArchetypes.includes(a)
+                        ? "bg-white text-black border-white"
+                        : "border-neutral-700"
+                    }`}
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+
+              <input
+                placeholder="Colors you love"
+                value={profile.colorLikes}
+                onChange={(e) => update("colorLikes", e.target.value)}
+                className="input"
+              />
+
+              <input
+                placeholder="Colors you avoid"
+                value={profile.colorDislikes}
+                onChange={(e) => update("colorDislikes", e.target.value)}
+                className="input"
+              />
+            </>
+          )}
+
+          {/* STEP 3 — BODY + IMAGE */}
+          {step === 3 && (
+            <>
+              <h2 className="text-lg font-medium">
+                Let me understand how clothes fall on you
+              </h2>
+
+              <p className="text-xs text-neutral-400">
+                No judgment. Just proportions and balance.
+              </p>
+
+              {/* Consent */}
+              <label className="flex gap-2 text-xs text-neutral-400">
+                <input
+                  type="checkbox"
+                  checked={profile.bodyAnalysisConsent}
+                  onChange={(e) =>
+                    update("bodyAnalysisConsent", e.target.checked)
+                  }
+                />
+                You can analyze a full-body photo for styling only
+              </label>
+
+              {/* Upload */}
+              {profile.bodyAnalysisConsent && (
+                <div className="border border-dashed border-neutral-700 rounded-xl p-4">
+                  {!profile.fullBodyImageUrl ? (
+                    <label className="cursor-pointer text-center block">
+                      <input
+                        type="file"
+                        hidden
+                        accept="image/*"
+                        onChange={async (e) => {
+                          if (!e.target.files?.[0]) return;
+                          const fd = new FormData();
+                          fd.append("file", e.target.files[0]);
+                          const res = await fetch("/api/upload", {
+                            method: "POST",
+                            body: fd,
+                          });
+                          const data = await res.json();
+                          update("fullBodyImageUrl", data.url);
+                        }}
+                      />
+                      <span className="text-sm underline">
+                        Upload full-body image
+                      </span>
+                      <p className="text-xs text-neutral-500 mt-1">
+                        Fully clothed · Standing straight · Good light
+                      </p>
+                    </label>
+                  ) : (
+                    <img
+                      src={profile.fullBodyImageUrl}
+                      className="w-24 rounded-lg border"
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Manual fallback */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {bodyShapes.map((b) => (
+                  <button
+                    key={b.value}
+                    onClick={() => update("bodyShape", b.value)}
+                    className={`rounded-xl border px-3 py-3 text-left text-sm ${
+                      profile.bodyShape === b.value
+                        ? "bg-white text-black border-white"
+                        : "border-neutral-700"
+                    }`}
+                  >
+                    <strong>{b.label}</strong>
+                    <div className="text-xs opacity-70">{b.desc}</div>
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                placeholder="Anything else about your proportions?"
+                value={profile.proportionsNote}
+                onChange={(e) => update("proportionsNote", e.target.value)}
+                className="input min-h-[60px]"
+              />
+            </>
+          )}
+
+          {/* STEP 4 */}
+          {step === 4 && (
+            <>
+              <h2 className="text-lg font-medium">You’re set. I’ve got you.</h2>
+
+              <p className="text-sm text-neutral-400">
+                I’ll use this to build outfits that actually make sense for
+                *you* — not trends, not averages.
+              </p>
+            </>
+          )}
+
+          {/* Nav */}
+          <div className="flex justify-between pt-2">
+            <button
+              disabled={step === 1}
+              onClick={() => setStep(step - 1)}
+              className="text-sm text-neutral-400 disabled:opacity-40"
+            >
+              Back
+            </button>
+
+            {step < totalSteps ? (
+              <button
+                onClick={() => setStep(step + 1)}
+                className="bg-white text-black px-4 py-2 rounded-xl font-medium"
+              >
+                Continue
+              </button>
+            ) : (
+              <button
+                disabled={saving}
+                onClick={handleSubmit}
+                className="bg-white text-black px-4 py-2 rounded-xl font-medium"
+              >
+                {saving ? "Styling…" : "Style me"}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ======================= UTIL ======================= */
+
+const input =
+  "w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-neutral-400";

@@ -43,3 +43,5 @@ next-env.d.ts
 /razorpay/*.env
 /whatsapp/*.env
 /whatsapp/node_modules
+/tryon
+/stylist
