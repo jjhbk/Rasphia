@@ -22,7 +22,7 @@ import AnalysisUploadModal from "./components/analysis/AnalysisUploadModal";
 import AnalysisDetailModal from "./components/analysis/AnalysisDetailsModal";
 import AnalysisListModal from "./components/analysis/AnalysisListModal";
 import CartModal from "./components/CartModal";
-
+import PersonaSidebar from "./components/persona/PersonaSidebar";
 import type {
   Message,
   Product,
@@ -31,6 +31,9 @@ import type {
   UserProfile,
 } from "./types";
 import { products as initialProducts } from "./data/products";
+
+import PersonaFlowModal from "./components/persona/PersonalFlowModal";
+import usePersona from "@/hooks/userPersona";
 
 const initialMessage: Message = {
   author: "ai",
@@ -79,7 +82,25 @@ const App: React.FC = () => {
 
   const [cart, setCart] = useState<Product[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const {
+    persona,
+    loading: personaLoading,
+    update: updatePersona,
+  } = usePersona(currentUser.email);
+  // add local state to App:
+  const [personaOpenType, setPersonaOpenType] = useState<string | null>(null);
+  const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
 
+  function handleOpenPersonaFlow(type: any) {
+    setPersonaOpenType(type);
+    setIsPersonaModalOpen(true);
+  }
+
+  // pass onSave to modal
+  async function handlePersonaSave(patch: any) {
+    await updatePersona(patch);
+    setIsPersonaModalOpen(false);
+  }
   // Handle responsive sidebar behavior
   useEffect(() => {
     const handleResize = () => {
@@ -684,16 +705,27 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
           className={`${
             isRightSidebarOpen ? "flex" : "hidden"
           } fixed inset-y-2 right-2 z-50 w-[320px] h-[calc(100%-16px)] flex-col
-          xl:static xl:h-full xl:w-[320px]
-          rounded-[32px] bg-white/60 backdrop-blur-xl border border-white/50 shadow-2xl xl:shadow-[0_8px_32px_rgba(0,0,0,0.04)] overflow-hidden transition-all duration-300`}
+  xl:static xl:h-full xl:w-[320px]
+  rounded-[32px] bg-white/60 backdrop-blur-xl border border-white/50 shadow-2xl xl:shadow-[0_8px_32px_rgba(0,0,0,0.04)] overflow-hidden transition-all duration-300`}
         >
-          <AnalysisSidebar
-            onOpenAnalysis={handleOpenAnalysis}
-            onAttachToChat={handleAttachToChat}
-            recentAnalyses={recentAnalyses}
-            onOpenAnalysisDetails={handleOpenAnalysisDetails}
-            onOpenAnalysisList={handleOpenAnalysisList}
-          />
+          {/* TOP: PERSONA */}
+          <div className="flex-none border-b border-white/40">
+            <PersonaSidebar
+              persona={persona}
+              onOpenFlow={handleOpenPersonaFlow}
+            />
+          </div>
+
+          {/* BOTTOM: EXISTING ANALYSIS UI */}
+          <div className="flex-1 overflow-y-auto">
+            <AnalysisSidebar
+              onOpenAnalysis={handleOpenAnalysis}
+              onAttachToChat={handleAttachToChat}
+              recentAnalyses={recentAnalyses}
+              onOpenAnalysisDetails={handleOpenAnalysisDetails}
+              onOpenAnalysisList={handleOpenAnalysisList}
+            />
+          </div>
         </div>
       </div>
 
@@ -730,6 +762,13 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
         onClose={() => setIsCartOpen(false)}
         onRemoveFromCart={handleRemoveFromCart}
         onCheckout={handleCheckoutFromCart}
+      />
+      <PersonaFlowModal
+        type={personaOpenType}
+        isOpen={isPersonaModalOpen}
+        onClose={() => setIsPersonaModalOpen(false)}
+        onSave={handlePersonaSave}
+        userEmail={currentUser.email}
       />
     </div>
   );
