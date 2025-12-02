@@ -13,23 +13,45 @@ export default function ContactUs() {
   });
   const [showPopup, setShowPopup] = useState(false);
 
+  const [files, setFiles] = useState<any[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
+
   const handleChange = (e: any) => {
     setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const handleFileSelect = (e: any) => {
+    const uploaded = Array.from(e.target.files || []);
+    const urls = uploaded.map((f: any) => URL.createObjectURL(f));
+
+    setFiles((prev) => [...prev, ...uploaded]);
+    setPreviews((prev) => [...prev, ...urls]);
   };
 
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     setLoading(true);
 
+    const formData = new FormData();
+    formData.append("name", form.name);
+    formData.append("email", form.email);
+    formData.append("phone", form.phone);
+    formData.append("message", form.message);
+
+    files.forEach((file) => {
+      formData.append("images", file);
+    });
+
     const res = await fetch("/api/contact", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: formData,
     });
 
     if (res.ok) {
       setShowPopup(true);
       setForm({ name: "", email: "", phone: "", message: "" });
+      setFiles([]);
+      setPreviews([]);
     }
 
     setLoading(false);
@@ -89,6 +111,32 @@ export default function ContactUs() {
               required
               className="w-full bg-white border border-stone-300 p-3 rounded-xl shadow-sm focus:ring-2 focus:ring-amber-300"
             />
+
+            {/* MULTIPLE IMAGES */}
+            <div>
+              <label className="text-sm font-medium text-stone-700">
+                Attach Images (optional)
+              </label>
+              <input
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={handleFileSelect}
+                className="w-full bg-white border border-stone-300 p-3 rounded-xl mt-2"
+              />
+
+              {previews.length > 0 && (
+                <div className="flex flex-wrap gap-3 mt-3">
+                  {previews.map((src, i) => (
+                    <img
+                      key={i}
+                      src={src}
+                      className="w-20 h-20 object-cover rounded-xl border"
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
 
             <button
               type="submit"
