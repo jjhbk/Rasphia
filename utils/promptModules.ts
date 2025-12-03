@@ -48,6 +48,19 @@ Focus ONLY on:
 - category inference
 `;
 
+export const HOME_RULES = `
+Analyze the uploaded room/home image.
+
+Identify:
+- Interior aesthetic (e.g., minimal, modern, rustic, boho, industrial, luxury, scandinavian)
+- Dominant materials (wood, metal, stone, cotton, leather, glass)
+- Color palette (white, beige, earthy, pastel, dark, bold)
+- Decor elements present (plants, minimal furniture, art, rugs, bookshelf, lighting)
+- Lighting style (warm, neutral, cool)
+- Overall organization and vibe
+Provide neutral observations only.
+`;
+
 export const OUTPUT_FORMATS = {
   skin: `
 {
@@ -92,6 +105,18 @@ export const OUTPUT_FORMATS = {
   "summary": "",
   "suggestions": "",
   "optimizedPrompt": ""
+}
+`,
+  home: `
+{
+  "summary": "",
+  "aesthetic": [],
+  "materials": [],
+  "colors": [],
+  "decorElements": [],
+  "lightingStyle": "",
+  "optimizedPrompt": "",
+  "photoUrls": []
 }
 `,
 };

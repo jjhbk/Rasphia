@@ -26,11 +26,10 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
   const isInWishlist = wishlist.some((item) => item.name === product.name);
 
-  const averageRating =
-    product.reviews.length > 0
-      ? product.reviews.reduce((acc, review) => acc + review.rating, 0) /
-        product.reviews.length
-      : 0;
+  const averageRating = product.reviews?.length
+    ? product.reviews.reduce((acc, review) => acc + (review.rating || 0), 0) /
+      product.reviews.length
+    : 0;
 
   return (
     <div className="flex flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/90 shadow-lg shadow-stone-200/70 transition hover:-translate-y-1">
@@ -52,19 +51,20 @@ const ProductCard: React.FC<ProductCardProps> = ({
         <h3 className="font-semibold text-stone-800">{product.name}</h3>
         <p className="text-sm text-stone-500 mb-2">{product.brand}</p>
 
-        {product.reviews.length > 0 && (
-          <div className="flex items-center gap-2 mb-2">
-            <StarRatingDisplay rating={averageRating} />
-            <span className="text-xs text-stone-500">
-              ({product.reviews.length})
-            </span>
-          </div>
-        )}
+        {product.reviews?.length != undefined &&
+          product.reviews?.length > 0 && (
+            <div className="flex items-center gap-2 mb-2">
+              <StarRatingDisplay rating={averageRating} />
+              <span className="text-xs text-stone-500">
+                ({product.reviews?.length})
+              </span>
+            </div>
+          )}
 
         <p className="text-sm text-stone-600 flex-grow mb-4">{product.story}</p>
         <div className="mt-auto flex items-center justify-between">
           <span className="font-bold text-amber-900">
-            {formatPrice(product.price)}
+            {formatPrice(product.price as number)}
           </span>
           <button
             onClick={() => onAddToCart(product)}

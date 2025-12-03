@@ -1,8 +1,18 @@
 "use client";
 import React from "react";
-import { Camera, Wand2, User, Heart, MapPin, Layers, Eye } from "lucide-react";
+import {
+  Camera,
+  Wand2,
+  User,
+  Heart,
+  MapPin,
+  Layers,
+  Eye,
+  Home,
+} from "lucide-react";
 
 const SECTIONS = [
+  { key: "home", label: "Home Profile", icon: Home },
   { key: "skin", label: "Skin Profile", icon: Camera },
   { key: "hair", label: "Hair Profile", icon: Wand2 },
   { key: "body", label: "Body Profile", icon: User },

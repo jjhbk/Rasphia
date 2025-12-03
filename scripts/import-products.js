@@ -4,7 +4,7 @@ import { SkinCare } from "../app/data/skincare.js";
 import { HairFall } from "../app/data/harifall.js";
 import { Body } from "../app/data/body.js";
 import { Gifts } from "../app/data/gifts.js";
-import { Products } from "";
+import { Products } from "../app/data/products.js";
 import dotenv from "dotenv";
 dotenv.config();
 

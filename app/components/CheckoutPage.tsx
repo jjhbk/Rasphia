@@ -31,7 +31,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
 
   const SHIPPING_COST = 0;
-  const subtotal = products.reduce((sum, p) => sum + p.price, 0);
+  const subtotal = products.reduce((sum, p) => sum + (p.price as number), 0);
   const totalAmount = subtotal + SHIPPING_COST;
 
   // Initialize User Data & Load Razorpay
@@ -47,7 +47,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.async = true;
     document.body.appendChild(script);
-    
+
     return () => {
       document.body.removeChild(script);
     };
@@ -156,14 +156,13 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
         onClick={onCancel}
       />
-      
+
       {/* Modal Container */}
       <div className="relative w-full max-w-4xl bg-white/95 backdrop-blur-xl rounded-[32px] shadow-2xl grid grid-cols-1 md:grid-cols-2 overflow-hidden border border-white/50 animate-in fade-in zoom-in-95 duration-200">
-        
         {/* Close Button */}
         <button
           onClick={onCancel}
@@ -178,31 +177,42 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
           <h2 className="text-2xl font-serif text-amber-900 mb-2">
             Order Summary
           </h2>
-          <p className="text-stone-500 mb-6 text-sm">Review your items before purchase</p>
-          
+          <p className="text-stone-500 mb-6 text-sm">
+            Review your items before purchase
+          </p>
+
           <div className="space-y-4 mb-6">
             {products.map((product) => (
-               <div key={product.name + Math.random()} className="flex items-center gap-4 p-4 bg-white rounded-2xl shadow-sm border border-stone-100">
-                  <div className="relative h-16 w-16 flex-shrink-0">
-                     <img
-                       src={product.imageUrl}
-                       alt={product.name}
-                       className="w-full h-full object-cover rounded-lg shadow-sm"
-                     />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                     <h3 className="font-bold text-sm text-stone-800 mb-0.5 truncate">{product.name}</h3>
-                     <p className="text-xs text-stone-500">{product.brand}</p>
-                     <p className="text-sm font-semibold text-amber-900 mt-1">{formatPrice(product.price)}</p>
-                  </div>
-               </div>
+              <div
+                key={product.name + Math.random()}
+                className="flex items-center gap-4 p-4 bg-white rounded-2xl shadow-sm border border-stone-100"
+              >
+                <div className="relative h-16 w-16 flex-shrink-0">
+                  <img
+                    src={product.imageUrl}
+                    alt={product.name}
+                    className="w-full h-full object-cover rounded-lg shadow-sm"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold text-sm text-stone-800 mb-0.5 truncate">
+                    {product.name}
+                  </h3>
+                  <p className="text-xs text-stone-500">{product.brand}</p>
+                  <p className="text-sm font-semibold text-amber-900 mt-1">
+                    {formatPrice(product.price as number)}
+                  </p>
+                </div>
+              </div>
             ))}
           </div>
 
           <div className="mt-auto pt-4 border-t border-stone-200">
             <div className="flex justify-between items-center mb-2">
-               <span className="text-stone-600">Subtotal</span>
-               <span className="text-stone-800 font-medium">{formatPrice(subtotal)}</span>
+              <span className="text-stone-600">Subtotal</span>
+              <span className="text-stone-800 font-medium">
+                {formatPrice(subtotal)}
+              </span>
             </div>
             <div className="flex justify-between items-center py-2">
               <span className="text-stone-600 font-medium">Total Amount</span>
@@ -297,7 +307,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 placeholder="Full delivery address"
               />
             </div>
-            
+
             <div className="pt-4">
               <button
                 type="submit"

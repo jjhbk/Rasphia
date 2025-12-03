@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import AdminProductForm from "../components/AdminProductForm";
+import { Product } from "../types";
 
-interface Product {
+/*interface Product {
   _id?: string;
   name: string;
   description: string;
@@ -18,7 +19,7 @@ interface Product {
   imageUrl: string;
   affiliateLink?: string;
   reviews?: any[];
-}
+}*/
 
 export default function AdminDashboard() {
   const { data: session, status } = useSession();
@@ -175,7 +176,7 @@ export default function AdminDashboard() {
                     {p.category} • {p.recipient || "Any"}
                   </p>
                   <p className="text-amber-900 font-semibold">
-                    ₹{p.price.toFixed(2)}
+                    ₹{(p.price as number).toFixed(2)}
                   </p>
                   <p className="text-xs text-stone-400 line-clamp-2">
                     {p.story}

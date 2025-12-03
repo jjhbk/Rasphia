@@ -11,10 +11,12 @@ import {
   Heart,
   MapPin,
   Layers,
+  Home,
 } from "lucide-react";
 
 // ICON MAP FOR SECTIONS
 const ICONS: Record<string, any> = {
+  home: Home,
   skin: Camera,
   hair: Wand2,
   body: User,

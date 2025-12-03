@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
+import { Product } from "../types";
 
 export const dynamic = "force-dynamic"; // Ensures fresh responses (optional)
 
@@ -14,13 +15,13 @@ export interface Message {
   };
 }
 
-export interface Product {
+/*export interface Product {
   name: string;
   description: string;
   price?: string;
   image?: string;
   [key: string]: any;
-}
+}*/
 
 const ai = new GoogleGenAI({
   apiKey: process.env.API_KEY as string,

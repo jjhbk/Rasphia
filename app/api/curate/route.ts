@@ -3,6 +3,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import clientPromise from "@/app/lib/mongodb";
 import { embedQuery } from "@/app/lib/queryEmbeddings";
 import { ObjectId } from "mongodb";
+import { Product } from "@/app/types";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export interface Message {
   };
 }
 
-export interface Product {
+/*export interface Product {
   _id?: string;
   name: string;
   description: string;
@@ -25,7 +26,7 @@ export interface Product {
   price?: number;
   imageUrl?: string;
   [key: string]: any;
-}
+}*/
 
 export async function POST(req: NextRequest) {
   try {
