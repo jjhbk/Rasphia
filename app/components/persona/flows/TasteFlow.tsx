@@ -18,9 +18,35 @@ export default function TasteFlow({
   const [budget, setBudget] = useState("medium");
   const [notes, setNotes] = useState("");
 
-  const toggle = (v: string, setter: any, prev: string[]) => {
-    setter(prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]);
+  // StrictMode-safe multi-select
+  const toggle = (value: string, setter: any) => {
+    setter((prev: string[]) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+    );
   };
+
+  // Pill style
+  const pillBase =
+    "px-3 py-1 rounded-full text-xs border cursor-pointer flex items-center gap-2 select-none";
+
+  const pill = (value: string, selected: boolean, toggleFn: () => void) => (
+    <label
+      key={value}
+      className={`${pillBase} ${
+        selected
+          ? "bg-amber-600 text-white border-amber-600"
+          : "bg-white text-stone-600 border-stone-300"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={toggleFn}
+        className="hidden"
+      />
+      {value}
+    </label>
+  );
 
   async function handleSave() {
     const payload = {
@@ -53,7 +79,7 @@ export default function TasteFlow({
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-5">
           {/* GIFTING STYLE */}
           <div>
             <label className="text-xs text-stone-600">Gifting Style</label>
@@ -65,20 +91,11 @@ export default function TasteFlow({
                 "fun",
                 "minimalist",
                 "thoughtful",
-              ].map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => toggle(g, setGiftingStyle, giftingStyle)}
-                  className={`px-3 py-1 rounded-full text-xs border ${
-                    giftingStyle.includes(g)
-                      ? "bg-amber-600 text-white border-amber-600"
-                      : "bg-white text-stone-600 border-stone-300"
-                  }`}
-                >
-                  {g}
-                </button>
-              ))}
+              ].map((v) =>
+                pill(v, giftingStyle.includes(v), () =>
+                  toggle(v, setGiftingStyle)
+                )
+              )}
             </div>
           </div>
 
@@ -93,20 +110,11 @@ export default function TasteFlow({
                 "boho",
                 "luxury",
                 "industrial",
-              ].map((h) => (
-                <button
-                  key={h}
-                  type="button"
-                  onClick={() => toggle(h, setHomeAesthetic, homeAesthetic)}
-                  className={`px-3 py-1 rounded-full text-xs border ${
-                    homeAesthetic.includes(h)
-                      ? "bg-amber-600 text-white border-amber-600"
-                      : "bg-white text-stone-600 border-stone-300"
-                  }`}
-                >
-                  {h}
-                </button>
-              ))}
+              ].map((v) =>
+                pill(v, homeAesthetic.includes(v), () =>
+                  toggle(v, setHomeAesthetic)
+                )
+              )}
             </div>
           </div>
 
@@ -115,20 +123,7 @@ export default function TasteFlow({
             <label className="text-xs text-stone-600">Preferred Scents</label>
             <div className="flex flex-wrap gap-2 mt-2">
               {["woody", "fresh", "citrus", "spicy", "aquatic", "sweet"].map(
-                (s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => toggle(s, setScents, scents)}
-                    className={`px-3 py-1 rounded-full text-xs border ${
-                      scents.includes(s)
-                        ? "bg-amber-600 text-white border-amber-600"
-                        : "bg-white text-stone-600 border-stone-300"
-                    }`}
-                  >
-                    {s}
-                  </button>
-                )
+                (v) => pill(v, scents.includes(v), () => toggle(v, setScents))
               )}
             </div>
           </div>
@@ -138,20 +133,8 @@ export default function TasteFlow({
             <label className="text-xs text-stone-600">Material Taste</label>
             <div className="flex flex-wrap gap-2 mt-2">
               {["leather", "cotton", "linen", "wood", "metal", "glass"].map(
-                (m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => toggle(m, setMaterials, materials)}
-                    className={`px-3 py-1 rounded-full text-xs border ${
-                      materials.includes(m)
-                        ? "bg-amber-600 text-white border-amber-600"
-                        : "bg-white text-stone-600 border-stone-300"
-                    }`}
-                  >
-                    {m}
-                  </button>
-                )
+                (v) =>
+                  pill(v, materials.includes(v), () => toggle(v, setMaterials))
               )}
             </div>
           </div>
@@ -180,6 +163,7 @@ export default function TasteFlow({
             />
           </div>
 
+          {/* SAVE */}
           <button
             onClick={handleSave}
             className="w-full py-3 rounded-full bg-amber-600 text-white"

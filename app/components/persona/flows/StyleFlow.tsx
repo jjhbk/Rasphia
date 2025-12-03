@@ -22,10 +22,39 @@ export default function StyleFlow({
   const [accessories, setAccessories] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
 
-  // Toggle utility
-  const toggle = (v: string, setter: any, prev: string[]) => {
-    setter(prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]);
+  // MULTI SELECT (checkbox-pill stable method)
+  const toggle = (value: string, setter: any) => {
+    setter((prev: string[]) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+    );
   };
+
+  // Generic pill renderer
+  const pillBase =
+    "px-3 py-1 rounded-full text-xs border cursor-pointer flex items-center gap-2 select-none";
+
+  const renderPill = (
+    value: string,
+    selected: boolean,
+    toggleFn: () => void
+  ) => (
+    <label
+      key={value}
+      className={`${pillBase} ${
+        selected
+          ? "bg-amber-600 text-white border-amber-600"
+          : "bg-white text-stone-600 border-stone-300"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={toggleFn}
+        className="hidden"
+      />
+      {value}
+    </label>
+  );
 
   // Final save
   async function handleSave() {
@@ -61,8 +90,9 @@ export default function StyleFlow({
           </button>
         </div>
 
-        {/* STYLE ARCHETYPES */}
-        <div className="space-y-4">
+        {/* CONTENT */}
+        <div className="space-y-5">
+          {/* STYLE ARCHETYPES */}
           <div>
             <label className="text-xs text-stone-600">Style Archetypes</label>
             <div className="flex flex-wrap gap-2 mt-2">
@@ -75,24 +105,15 @@ export default function StyleFlow({
                 "edgy",
                 "smart casual",
                 "luxury",
-              ].map((a) => (
-                <button
-                  key={a}
-                  type="button"
-                  onClick={() => toggle(a, setArchetypes, archetypes)}
-                  className={`px-3 py-1 rounded-full text-xs border ${
-                    archetypes.includes(a)
-                      ? "bg-amber-600 text-white border-amber-600"
-                      : "bg-white text-stone-600 border-stone-300"
-                  }`}
-                >
-                  {a}
-                </button>
-              ))}
+              ].map((item) =>
+                renderPill(item, archetypes.includes(item), () =>
+                  toggle(item, setArchetypes)
+                )
+              )}
             </div>
           </div>
 
-          {/* COLOR PREFERENCES */}
+          {/* PREFERRED COLORS */}
           <div>
             <label className="text-xs text-stone-600">Preferred Colors</label>
             <div className="flex flex-wrap gap-2 mt-2">
@@ -105,20 +126,11 @@ export default function StyleFlow({
                 "brown",
                 "grey",
                 "maroon",
-              ].map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => toggle(c, setColorsLike, colorsLike)}
-                  className={`px-3 py-1 rounded-full text-xs border ${
-                    colorsLike.includes(c)
-                      ? "bg-amber-600 text-white border-amber-600"
-                      : "bg-white text-stone-600 border-stone-300"
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
+              ].map((item) =>
+                renderPill(item, colorsLike.includes(item), () =>
+                  toggle(item, setColorsLike)
+                )
+              )}
             </div>
           </div>
 
@@ -126,24 +138,15 @@ export default function StyleFlow({
           <div>
             <label className="text-xs text-stone-600">Colors You Avoid</label>
             <div className="flex flex-wrap gap-2 mt-2">
-              {["neon", "bright red", "yellow", "pink", "purple"].map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => toggle(c, setColorsAvoid, colorsAvoid)}
-                  className={`px-3 py-1 rounded-full text-xs border ${
-                    colorsAvoid.includes(c)
-                      ? "bg-amber-600 text-white border-amber-600"
-                      : "bg-white text-stone-600 border-stone-300"
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
+              {["neon", "bright red", "yellow", "pink", "purple"].map((item) =>
+                renderPill(item, colorsAvoid.includes(item), () =>
+                  toggle(item, setColorsAvoid)
+                )
+              )}
             </div>
           </div>
 
-          {/* BOLDNESS */}
+          {/* BOLDNESS LEVEL */}
           <div>
             <label className="text-xs text-stone-600">Boldness Level</label>
             <select
@@ -170,20 +173,11 @@ export default function StyleFlow({
                 "gym",
                 "dinner",
                 "wedding",
-              ].map((o) => (
-                <button
-                  key={o}
-                  type="button"
-                  onClick={() => toggle(o, setOccasions, occasions)}
-                  className={`px-3 py-1 rounded-full text-xs border ${
-                    occasions.includes(o)
-                      ? "bg-amber-600 text-white border-amber-600"
-                      : "bg-white text-stone-600 border-stone-300"
-                  }`}
-                >
-                  {o}
-                </button>
-              ))}
+              ].map((item) =>
+                renderPill(item, occasions.includes(item), () =>
+                  toggle(item, setOccasions)
+                )
+              )}
             </div>
           </div>
 
@@ -194,20 +188,10 @@ export default function StyleFlow({
             </label>
             <div className="flex flex-wrap gap-2 mt-2">
               {["sneakers", "loafers", "boots", "sandals", "formal shoes"].map(
-                (f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => toggle(f, setFootwear, footwear)}
-                    className={`px-3 py-1 rounded-full text-xs border ${
-                      footwear.includes(f)
-                        ? "bg-amber-600 text-white border-amber-600"
-                        : "bg-white text-stone-600 border-stone-300"
-                    }`}
-                  >
-                    {f}
-                  </button>
-                )
+                (item) =>
+                  renderPill(item, footwear.includes(item), () =>
+                    toggle(item, setFootwear)
+                  )
               )}
             </div>
           </div>
@@ -223,20 +207,11 @@ export default function StyleFlow({
                 "chains",
                 "sunglasses",
                 "caps",
-              ].map((a) => (
-                <button
-                  key={a}
-                  type="button"
-                  onClick={() => toggle(a, setAccessories, accessories)}
-                  className={`px-3 py-1 rounded-full text-xs border ${
-                    accessories.includes(a)
-                      ? "bg-amber-600 text-white border-amber-600"
-                      : "bg-white text-stone-600 border-stone-300"
-                  }`}
-                >
-                  {a}
-                </button>
-              ))}
+              ].map((item) =>
+                renderPill(item, accessories.includes(item), () =>
+                  toggle(item, setAccessories)
+                )
+              )}
             </div>
           </div>
 
@@ -250,7 +225,7 @@ export default function StyleFlow({
             />
           </div>
 
-          {/* SAVE BUTTON */}
+          {/* SAVE */}
           <button
             onClick={handleSave}
             className="w-full py-3 rounded-full bg-amber-600 text-white mt-2"

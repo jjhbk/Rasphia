@@ -21,16 +21,13 @@ export default function LifestyleFlow({
   const [habits, setHabits] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
 
-  // MULTI-SELECT HANDLER
-  const toggle = (value: string, setter: any, prev: string[]) => {
-    if (prev.includes(value)) {
-      setter(prev.filter((v) => v !== value));
-    } else {
-      setter([...prev, value]);
-    }
+  // MULTI-SELECT using checkbox-pill method
+  const toggle = (value: string, setter: any) => {
+    setter((prev: string[]) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+    );
   };
 
-  // SAVE
   async function handleSave() {
     const payload = {
       lifestyle: {
@@ -50,6 +47,33 @@ export default function LifestyleFlow({
     await onSave(payload);
     onClose();
   }
+
+  // OPTION STYLES (makes pills stable / checkbox hybrid)
+  const pillBase =
+    "px-3 py-1 rounded-full text-xs border cursor-pointer select-none flex items-center gap-2";
+
+  const renderPill = (
+    value: string,
+    selected: boolean,
+    toggleFn: () => void
+  ) => (
+    <label
+      key={value}
+      className={`${pillBase} ${
+        selected
+          ? "bg-amber-600 text-white border-amber-600"
+          : "bg-white text-stone-600 border-stone-300"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={selected}
+        onChange={toggleFn}
+        className="hidden"
+      />
+      {value}
+    </label>
+  );
 
   return (
     <div className="max-h-[80vh] overflow-y-auto px-1">
@@ -101,20 +125,10 @@ export default function LifestyleFlow({
           <label className="text-xs text-stone-600">Fitness Habits</label>
           <div className="flex flex-wrap gap-2 mt-2">
             {["gym", "running", "cycling", "yoga", "sports", "walking"].map(
-              (item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => toggle(item, setFitness, fitness)}
-                  className={`px-3 py-1 rounded-full text-xs border ${
-                    fitness.includes(item)
-                      ? "bg-amber-600 text-white border-amber-600"
-                      : "bg-white text-stone-600 border-stone-300"
-                  }`}
-                >
-                  {item}
-                </button>
-              )
+              (item) =>
+                renderPill(item, fitness.includes(item), () =>
+                  toggle(item, setFitness)
+                )
             )}
           </div>
         </div>
@@ -189,20 +203,11 @@ export default function LifestyleFlow({
               "scrolling",
               "cooking",
               "journaling",
-            ].map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => toggle(item, setHabits, habits)}
-                className={`px-3 py-1 rounded-full text-xs border ${
-                  habits.includes(item)
-                    ? "bg-amber-600 text-white border-amber-600"
-                    : "bg-white text-stone-600 border-stone-300"
-                }`}
-              >
-                {item}
-              </button>
-            ))}
+            ].map((item) =>
+              renderPill(item, habits.includes(item), () =>
+                toggle(item, setHabits)
+              )
+            )}
           </div>
         </div>
 

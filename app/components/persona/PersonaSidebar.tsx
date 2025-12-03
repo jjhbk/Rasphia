@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { Camera, Wand2, User, Heart, MapPin, Layers } from "lucide-react";
+import { Camera, Wand2, User, Heart, MapPin, Layers, Eye } from "lucide-react";
 
 const SECTIONS = [
   { key: "skin", label: "Skin Profile", icon: Camera },
@@ -23,6 +23,7 @@ export default function PersonaSidebar({
       <h3 className="text-xs uppercase tracking-widest text-stone-500">
         Your Persona
       </h3>
+
       <div className="mt-2 space-y-2">
         {SECTIONS.map((s) => {
           const Icon = s.icon;
@@ -51,6 +52,7 @@ export default function PersonaSidebar({
                   </div>
                 </div>
               </div>
+
               <div
                 className={`h-2 w-2 rounded-full ${
                   done ? "bg-amber-600" : "bg-stone-300"
@@ -59,7 +61,17 @@ export default function PersonaSidebar({
             </button>
           );
         })}
+
+        {/* 🎉 NEW “View Persona” BUTTON */}
+        <a
+          href="/persona"
+          className="w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-amber-600 text-white text-sm mt-4 shadow-lg"
+        >
+          <Eye className="h-4 w-4" />
+          View Complete Persona
+        </a>
       </div>
+
       <div className="mt-auto text-[11px] text-stone-400">
         Your persona powers personalized picks across fashion, grooming and
         lifestyle.

@@ -14,23 +14,22 @@ export default function BodyFlow({
   onSave: (payload: any) => Promise<void>;
   userEmail: string | null;
 }) {
-  // ---------------------------
+  // ----------------------------------------------------
   // FILE STATE
-  // ---------------------------
+  // ----------------------------------------------------
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   type Status = "queued" | "processing" | "analyzing" | "done" | "error";
-
   const [statuses, setStatuses] = useState<Status[]>([]);
-
   const [results, setResults] = useState<any[]>([]);
 
   const filePicker = useRef<HTMLInputElement | null>(null);
   const [openCamera, setOpenCamera] = useState(false);
+  const [isProcessingAll, setIsProcessingAll] = useState(false);
 
-  // ---------------------------
+  // ----------------------------------------------------
   // PERSONA FIELDS
-  // ---------------------------
+  // ----------------------------------------------------
   const [bodyType, setBodyType] = useState("balanced");
   const [proportions, setProportions] = useState<string[]>([]);
   const [shoulderWidth, setShoulderWidth] = useState("average");
@@ -42,16 +41,24 @@ export default function BodyFlow({
   const [activities, setActivities] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
 
-  const [isProcessingAll, setIsProcessingAll] = useState(false);
+  // ----------------------------------------------------
+  // UTILITY: StrictMode-safe toggle
+  // ----------------------------------------------------
+  const toggle = (value: string, setter: any, prev: string[]) => {
+    setter(
+      prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]
+    );
+  };
 
-  // ---------------------------
-  // FILE HANDLERS
-  // ---------------------------
+  // ----------------------------------------------------
+  // FILE & PREVIEW HANDLERS
+  // ----------------------------------------------------
   function addFiles(newFiles: File[]) {
-    const urls = newFiles.map((f) => URL.createObjectURL(f));
-
     setFiles((prev) => [...prev, ...newFiles]);
-    setPreviews((prev) => [...prev, ...urls]);
+    setPreviews((prev) => [
+      ...prev,
+      ...newFiles.map((f) => URL.createObjectURL(f)),
+    ]);
     setStatuses((prev) => [...prev, ...newFiles.map(() => "queued" as Status)]);
     setResults((prev) => [...prev, ...newFiles.map(() => ({}))]);
   }
@@ -67,12 +74,12 @@ export default function BodyFlow({
     if (f.length) addFiles(f);
   }
 
-  function handleCapture(f: File) {
-    addFiles([f]);
+  function handleCapture(file: File) {
+    addFiles([file]);
     setOpenCamera(false);
   }
 
-  function updateStatus(i: number, status: any) {
+  function updateStatus(i: number, status: Status) {
     setStatuses((prev) => {
       const c = [...prev];
       c[i] = status;
@@ -88,18 +95,16 @@ export default function BodyFlow({
     });
   }
 
-  // ---------------------------
-  // RUN ANALYSIS ON ALL IMAGES
-  // ---------------------------
+  // ----------------------------------------------------
+  // RUN ANALYSIS
+  // ----------------------------------------------------
   async function analyzeAll() {
     if (!files.length || !userEmail) return;
-
     setIsProcessingAll(true);
 
     for (let i = 0; i < files.length; i++) {
       try {
         updateStatus(i, "processing");
-
         const compressed = await compressImage(files[i]);
 
         updateStatus(i, "analyzing");
@@ -109,19 +114,18 @@ export default function BodyFlow({
         form.append("email", userEmail);
         form.append("type", "body");
 
-        const res = await fetch("/api/persona/analyze-image", {
+        const response = await fetch("/api/persona/analyze-image", {
           method: "POST",
           body: form,
         });
 
-        const json = await res.json();
+        const json = await response.json();
         if (!json?.persona) throw new Error("Invalid analysis result");
 
         updateStatus(i, "done");
-
         updateResult(i, json.persona);
 
-        // Autofill persona on FIRST image
+        // Autofill from first
         if (i === 0) {
           if (json.persona.bodyType) setBodyType(json.persona.bodyType);
           if (json.persona.proportions)
@@ -140,9 +144,9 @@ export default function BodyFlow({
     setIsProcessingAll(false);
   }
 
-  // ---------------------------
+  // ----------------------------------------------------
   // FINAL SAVE
-  // ---------------------------
+  // ----------------------------------------------------
   async function handleSave() {
     const payload = {
       body: {
@@ -168,16 +172,9 @@ export default function BodyFlow({
     onClose();
   }
 
-  // UTILITY: toggle chip
-  const toggle = (value: string, setter: any, prev: string[]) => {
-    setter(
-      prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]
-    );
-  };
-
-  // ---------------------------------------------------------------------
-  // RENDER UI
-  // ---------------------------------------------------------------------
+  // ----------------------------------------------------
+  // UI
+  // ----------------------------------------------------
   return (
     <>
       {openCamera && (
@@ -230,7 +227,7 @@ export default function BodyFlow({
             />
           </div>
 
-          {/* PREVIEW LIST */}
+          {/* PREVIEWS */}
           {previews.map((src, i) => (
             <div key={i} className="mb-3 p-3 border rounded-xl bg-stone-50">
               <div className="flex gap-3">
@@ -255,9 +252,9 @@ export default function BodyFlow({
             </div>
           ))}
 
+          {/* ANALYZE BUTTON */}
           {files.length > 0 && (
             <button
-              type="button"
               disabled={isProcessingAll}
               onClick={analyzeAll}
               className="w-full py-3 rounded-full bg-amber-600 text-white disabled:opacity-50"
@@ -271,7 +268,7 @@ export default function BodyFlow({
           )}
 
           {/* BODY FORM */}
-          {results.some((r) => r.summary) && (
+          {files.length > 0 && (
             <div className="mt-6 space-y-4">
               <h3 className="font-semibold text-stone-700">
                 Refine Body Profile
@@ -294,7 +291,7 @@ export default function BodyFlow({
                 </select>
               </div>
 
-              {/* PROPORTIONS */}
+              {/* PROPORTIONS — FIXED CHECKBOX PILLS */}
               <div>
                 <label className="text-xs text-stone-600">Proportions</label>
                 <div className="flex flex-wrap gap-2 mt-2">
@@ -307,24 +304,34 @@ export default function BodyFlow({
                     "narrow shoulders",
                     "wide hips",
                     "narrow hips",
-                  ].map((p) => (
-                    <button
-                      type="button"
-                      key={p}
-                      onClick={() => toggle(p, setProportions, proportions)}
-                      className={`px-3 py-1 rounded-full text-xs border ${
-                        proportions.includes(p)
-                          ? "bg-amber-600 text-white border-amber-600"
-                          : "bg-white text-stone-600 border-stone-300"
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
+                  ].map((item) => {
+                    const selected = proportions.includes(item);
+
+                    return (
+                      <label
+                        key={item}
+                        className={`px-3 py-1 rounded-full text-xs border cursor-pointer select-none ${
+                          selected
+                            ? "bg-amber-600 text-white border-amber-600"
+                            : "bg-white text-stone-600 border-stone-300"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() =>
+                            toggle(item, setProportions, proportions)
+                          }
+                          className="hidden"
+                        />
+                        {item}
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* SHOULDER WIDTH */}
+              {/* SHOULDERS */}
               <div>
                 <label className="text-xs text-stone-600">Shoulder Width</label>
                 <select
@@ -352,30 +359,40 @@ export default function BodyFlow({
                 </select>
               </div>
 
-              {/* FIT PREFERENCES */}
+              {/* FIT PREFERENCES — FIXED CHECKBOX PILLS */}
               <div>
                 <label className="text-xs text-stone-600">
                   Fit Preferences
                 </label>
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {["relaxed", "oversized", "tapered", "fitted"].map((f) => (
-                    <button
-                      key={f}
-                      type="button"
-                      onClick={() => toggle(f, setFitPreference, fitPreference)}
-                      className={`px-3 py-1 rounded-full text-xs border ${
-                        fitPreference.includes(f)
-                          ? "bg-amber-600 text-white border-amber-600"
-                          : "bg-white text-stone-600 border-stone-300"
-                      }`}
-                    >
-                      {f}
-                    </button>
-                  ))}
+                  {["relaxed", "oversized", "tapered", "fitted"].map((item) => {
+                    const selected = fitPreference.includes(item);
+
+                    return (
+                      <label
+                        key={item}
+                        className={`px-3 py-1 rounded-full text-xs border cursor-pointer select-none ${
+                          selected
+                            ? "bg-amber-600 text-white border-amber-600"
+                            : "bg-white text-stone-600 border-stone-300"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() =>
+                            toggle(item, setFitPreference, fitPreference)
+                          }
+                          className="hidden"
+                        />
+                        {item}
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* ACTIVITIES */}
+              {/* ACTIVITIES — FIXED CHECKBOX PILLS */}
               <div>
                 <label className="text-xs text-stone-600">Activities</label>
                 <div className="flex flex-wrap gap-2 mt-2">
@@ -386,20 +403,30 @@ export default function BodyFlow({
                     "sports",
                     "running",
                     "yoga",
-                  ].map((a) => (
-                    <button
-                      key={a}
-                      type="button"
-                      onClick={() => toggle(a, setActivities, activities)}
-                      className={`px-3 py-1 rounded-full text-xs border ${
-                        activities.includes(a)
-                          ? "bg-amber-600 text-white border-amber-600"
-                          : "bg-white text-stone-600 border-stone-300"
-                      }`}
-                    >
-                      {a}
-                    </button>
-                  ))}
+                  ].map((item) => {
+                    const selected = activities.includes(item);
+
+                    return (
+                      <label
+                        key={item}
+                        className={`px-3 py-1 rounded-full text-xs border cursor-pointer select-none ${
+                          selected
+                            ? "bg-amber-600 text-white border-amber-600"
+                            : "bg-white text-stone-600 border-stone-300"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() =>
+                            toggle(item, setActivities, activities)
+                          }
+                          className="hidden"
+                        />
+                        {item}
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -415,9 +442,8 @@ export default function BodyFlow({
 
               {/* SAVE */}
               <button
-                type="button"
                 onClick={handleSave}
-                className="w-full py-3 rounded-full bg-amber-600 text-white mt-4"
+                className="w-full py-3 rounded-full bg-amber-600 text-white"
               >
                 Save Body Profile
               </button>

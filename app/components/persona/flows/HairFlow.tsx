@@ -14,43 +14,38 @@ export default function HairFlow({
   onSave: (payload: any) => Promise<void>;
   userEmail: string | null;
 }) {
-  // ---------------------------
+  // -------------------------------------------
   // FILE + PREVIEW STATE
-  // ---------------------------
+  // -------------------------------------------
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
-
   const [results, setResults] = useState<any[]>([]);
-
   const [openCamera, setOpenCamera] = useState(false);
   const filePicker = useRef<HTMLInputElement | null>(null);
 
-  // ---------------------------
+  type Status = "queued" | "processing" | "analyzing" | "done" | "error";
+  const [statuses, setStatuses] = useState<Status[]>([]);
+  const [isProcessingAll, setIsProcessingAll] = useState(false);
+
+  // -------------------------------------------
   // PERSONA FIELDS
-  // ---------------------------
+  // -------------------------------------------
   const [hairType, setHairType] = useState("");
   const [density, setDensity] = useState("");
   const [scalpType, setScalpType] = useState("");
   const [hairGoals, setHairGoals] = useState<string[]>([]);
   const [lifestyle, setLifestyle] = useState<string[]>([]);
   const [stylingHabits, setStylingHabits] = useState("");
-
   const [notes, setNotes] = useState("");
 
-  const [isProcessingAll, setIsProcessingAll] = useState(false);
-  type Status = "queued" | "processing" | "analyzing" | "done" | "error";
-
-  const [statuses, setStatuses] = useState<Status[]>([]);
-  // ---------------------------
-  // FILE HANDLING
-  // ---------------------------
+  // -------------------------------------------
+  // FILE HANDLERS
+  // -------------------------------------------
   function addFiles(newFiles: File[]) {
-    const n = newFiles.map((f) => URL.createObjectURL(f));
-
-    setFiles((prev) => [...prev, ...newFiles]);
-    setPreviews((prev) => [...prev, ...n]);
-    setStatuses((prev) => [...prev, ...newFiles.map(() => "queued" as Status)]);
-    setResults((prev) => [...prev, ...newFiles.map(() => ({}))]);
+    setFiles((p) => [...p, ...newFiles]);
+    setPreviews((p) => [...p, ...newFiles.map((f) => URL.createObjectURL(f))]);
+    setStatuses((p) => [...p, ...newFiles.map(() => "queued" as Status)]);
+    setResults((p) => [...p, ...newFiles.map(() => ({}))]);
   }
 
   function handleSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -64,32 +59,33 @@ export default function HairFlow({
     if (f.length) addFiles(f);
   }
 
-  function handleCapture(f: File) {
-    addFiles([f]);
+  function handleCapture(file: File) {
+    addFiles([file]);
     setOpenCamera(false);
   }
 
-  function updateStatus(i: number, s: any) {
+  function updateStatus(i: number, status: Status) {
     setStatuses((prev) => {
-      const copy = [...prev];
-      copy[i] = s;
-      return copy;
+      const next = [...prev];
+      next[i] = status;
+      return next;
     });
   }
 
   function updateResult(i: number, r: any) {
     setResults((prev) => {
-      const copy = [...prev];
-      copy[i] = r;
-      return copy;
+      const next = [...prev];
+      next[i] = r;
+      return next;
     });
   }
 
-  // ---------------------------
-  // RUN ANALYSIS FOR ALL IMAGES
-  // ---------------------------
+  // -------------------------------------------
+  // ANALYZE ALL FILES
+  // -------------------------------------------
   async function analyzeAll() {
     if (!files.length || !userEmail) return;
+
     setIsProcessingAll(true);
 
     for (let i = 0; i < files.length; i++) {
@@ -111,7 +107,7 @@ export default function HairFlow({
         });
 
         const json = await res.json();
-        if (!json?.persona) throw new Error("Invalid AI response");
+        if (!json?.persona) throw new Error("Invalid response");
 
         updateStatus(i, "done");
 
@@ -126,7 +122,7 @@ export default function HairFlow({
           fileUrl: json.persona.photoUrls?.[0] || null,
         });
 
-        // Autofill persona fields from FIRST analysis
+        // Autofill from FIRST image
         if (i === 0) {
           if (json.persona.hairType) setHairType(json.persona.hairType);
           if (json.persona.density) setDensity(json.persona.density);
@@ -146,9 +142,9 @@ export default function HairFlow({
     setIsProcessingAll(false);
   }
 
-  // ---------------------------
-  // SAVE TO PERSONA DB
-  // ---------------------------
+  // -------------------------------------------
+  // SAVE TO DB
+  // -------------------------------------------
   async function handleSave() {
     const payload = {
       hair: {
@@ -169,9 +165,9 @@ export default function HairFlow({
     onClose();
   }
 
-  // ---------------------------
+  // -------------------------------------------
   // UI RENDER
-  // ---------------------------
+  // -------------------------------------------
   return (
     <>
       {openCamera && (
@@ -222,7 +218,7 @@ export default function HairFlow({
             />
           </div>
 
-          {/* PREVIEW LIST */}
+          {/* PREVIEWS */}
           {previews.map((src, i) => (
             <div key={i} className="mb-3 p-3 border rounded-xl bg-stone-50">
               <div className="flex gap-3">
@@ -267,7 +263,7 @@ export default function HairFlow({
             <div className="mt-6 space-y-4">
               <h3 className="font-semibold">Refine Hair Profile</h3>
 
-              {/* Hair Type */}
+              {/* HAIR TYPE */}
               <div>
                 <label className="text-xs text-stone-600">Hair Type</label>
                 <select
@@ -282,7 +278,7 @@ export default function HairFlow({
                 </select>
               </div>
 
-              {/* Density */}
+              {/* DENSITY */}
               <div>
                 <label className="text-xs text-stone-600">Density</label>
                 <select
@@ -296,7 +292,7 @@ export default function HairFlow({
                 </select>
               </div>
 
-              {/* Scalp Type */}
+              {/* SCALP TYPE */}
               <div>
                 <label className="text-xs text-stone-600">Scalp Type</label>
                 <select
@@ -311,74 +307,92 @@ export default function HairFlow({
                 </select>
               </div>
 
-              {/* Hair Goals */}
+              {/* HAIR GOALS (FIXED CHECKBOX PILLS) */}
               <div>
                 <label className="text-xs text-stone-600">Hair Goals</label>
+
                 <div className="flex flex-wrap gap-2 mt-1">
                   {["volume", "frizz-control", "growth", "shine", "repair"].map(
-                    (g) => (
-                      <button
-                        type="button"
-                        key={g}
-                        onClick={() =>
-                          setHairGoals((prev) =>
-                            prev.includes(g)
-                              ? prev.filter((x) => x !== g)
-                              : [...prev, g]
-                          )
-                        }
-                        className={`px-3 py-1 rounded-full text-xs border ${
-                          hairGoals.includes(g)
-                            ? "bg-amber-600 text-white border-amber-600"
-                            : "bg-white text-stone-600 border-stone-300"
-                        }`}
-                      >
-                        {g}
-                      </button>
-                    )
+                    (goal) => {
+                      const selected = hairGoals.includes(goal);
+
+                      return (
+                        <label
+                          key={goal}
+                          className={`px-3 py-1 rounded-full text-xs border cursor-pointer select-none ${
+                            selected
+                              ? "bg-amber-600 text-white border-amber-600"
+                              : "bg-white text-stone-600 border-stone-300"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() =>
+                              setHairGoals((prev) =>
+                                prev.includes(goal)
+                                  ? prev.filter((x) => x !== goal)
+                                  : [...prev, goal]
+                              )
+                            }
+                            className="hidden"
+                          />
+                          {goal}
+                        </label>
+                      );
+                    }
                   )}
                 </div>
               </div>
 
-              {/* Lifestyle Factors */}
+              {/* LIFESTYLE (FIXED CHECKBOX PILLS) */}
               <div>
                 <label className="text-xs text-stone-600">
                   Lifestyle Factors
                 </label>
+
                 <div className="flex flex-wrap gap-2 mt-1">
                   {["gym sweat", "swimming", "bike helmet", "outdoor sun"].map(
-                    (l) => (
-                      <button
-                        type="button"
-                        key={l}
-                        onClick={() =>
-                          setLifestyle((prev) =>
-                            prev.includes(l)
-                              ? prev.filter((x) => x !== l)
-                              : [...prev, l]
-                          )
-                        }
-                        className={`px-3 py-1 rounded-full text-xs border ${
-                          lifestyle.includes(l)
-                            ? "bg-amber-600 text-white border-amber-600"
-                            : "bg-white text-stone-600 border-stone-300"
-                        }`}
-                      >
-                        {l}
-                      </button>
-                    )
+                    (item) => {
+                      const selected = lifestyle.includes(item);
+
+                      return (
+                        <label
+                          key={item}
+                          className={`px-3 py-1 rounded-full text-xs border cursor-pointer select-none ${
+                            selected
+                              ? "bg-amber-600 text-white border-amber-600"
+                              : "bg-white text-stone-600 border-stone-300"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() =>
+                              setLifestyle((prev) =>
+                                prev.includes(item)
+                                  ? prev.filter((x) => x !== item)
+                                  : [...prev, item]
+                              )
+                            }
+                            className="hidden"
+                          />
+                          {item}
+                        </label>
+                      );
+                    }
                   )}
                 </div>
               </div>
 
-              {/* Styling Habits */}
+              {/* STYLING HABITS */}
               <div>
                 <label className="text-xs text-stone-600">Styling Habits</label>
                 <input
                   value={stylingHabits}
                   onChange={(e) => setStylingHabits(e.target.value)}
                   className="w-full p-3 bg-stone-50 rounded-xl"
-                  placeholder="E.g., blowdrying, heat styling, wax, gel..."
+                  placeholder="E.g., heat styling, wax, gel, blowdrying…"
                 />
               </div>
 

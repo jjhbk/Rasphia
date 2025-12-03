@@ -15,7 +15,7 @@ export default function SkinFlow({
   userEmail: string | null;
 }) {
   // ---------------------------
-  // FILE + PREVIEW STATE
+  // IMAGE STATE
   // ---------------------------
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
@@ -23,9 +23,9 @@ export default function SkinFlow({
 
   const [statuses, setStatuses] = useState<Status[]>([]);
   const [results, setResults] = useState<any[]>([]);
-
   const [openCamera, setOpenCamera] = useState(false);
   const filePicker = useRef<HTMLInputElement | null>(null);
+  const [isProcessingAll, setIsProcessingAll] = useState(false);
 
   // ---------------------------
   // PERSONA FIELDS
@@ -35,65 +35,61 @@ export default function SkinFlow({
   const [sensitivity, setSensitivity] = useState("normal");
   const [fitzpatrick, setFitzpatrick] = useState("IV");
   const [climate, setClimate] = useState("mixed");
-
   const [ingredients, setIngredients] = useState<string[]>([]);
   const [brands, setBrands] = useState("");
   const [budget, setBudget] = useState("medium");
-
   const [notes, setNotes] = useState("");
 
-  const [isProcessingAll, setIsProcessingAll] = useState(false);
-
   // ---------------------------
-  // FILE HANDLING
+  // FILE ADDING
   // ---------------------------
   function addFiles(newFiles: File[]) {
-    const n = newFiles.map((f) => URL.createObjectURL(f));
-
-    setFiles((prev) => [...prev, ...newFiles]);
-    setPreviews((prev) => [...prev, ...n]);
-    setStatuses((prev) => [...prev, ...newFiles.map(() => "queued" as Status)]);
-    setResults((prev) => [...prev, ...newFiles.map(() => ({}))]);
+    setFiles((p) => [...p, ...newFiles]);
+    setPreviews((p) => [...p, ...newFiles.map((f) => URL.createObjectURL(f))]);
+    setStatuses((p) => [...p, ...newFiles.map(() => "queued" as Status)]);
+    setResults((p) => [...p, ...newFiles.map(() => ({}))]);
   }
 
   function handleSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = Array.from(e.target.files || []);
-    if (f.length) addFiles(f);
+    const arr = Array.from(e.target.files || []);
+    if (arr.length) addFiles(arr);
   }
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
-    const f = Array.from(e.dataTransfer.files || []);
-    if (f.length) addFiles(f);
+    const arr = Array.from(e.dataTransfer.files || []);
+    if (arr.length) addFiles(arr);
   }
 
-  function handleCapture(f: File) {
-    addFiles([f]);
+  function handleCapture(file: File) {
+    addFiles([file]);
     setOpenCamera(false);
   }
 
-  function updateStatus(i: number, s: any) {
+  // ---------------------------
+  // UPDATE STATUS / RESULT
+  // ---------------------------
+  function updateStatus(i: number, status: any) {
     setStatuses((prev) => {
       const copy = [...prev];
-      copy[i] = s;
+      copy[i] = status;
       return copy;
     });
   }
 
-  function updateResult(i: number, r: any) {
+  function updateResult(i: number, result: any) {
     setResults((prev) => {
       const copy = [...prev];
-      copy[i] = r;
+      copy[i] = result;
       return copy;
     });
   }
 
   // ---------------------------
-  // RUN ANALYSIS FOR ALL FILES
+  // ANALYZE ALL
   // ---------------------------
   async function analyzeAll() {
     if (!files.length || !userEmail) return;
-
     setIsProcessingAll(true);
 
     for (let i = 0; i < files.length; i++) {
@@ -129,7 +125,6 @@ export default function SkinFlow({
           fileUrl: json.persona.photoUrls?.[0] || null,
         });
 
-        // autofill persona from FIRST result
         if (i === 0) {
           if (json.persona.skinType) setSkinType(json.persona.skinType);
           if (json.persona.concerns) setConcerns(json.persona.concerns);
@@ -151,7 +146,7 @@ export default function SkinFlow({
   }
 
   // ---------------------------
-  // FINAL SAVE TO DB
+  // SAVE TO DB
   // ---------------------------
   async function handleSave() {
     const payload = {
@@ -178,9 +173,9 @@ export default function SkinFlow({
     onClose();
   }
 
-  // ---------------------------------------------------------------------
-  // RENDER UI
-  // ---------------------------------------------------------------------
+  // ---------------------------
+  // UI START
+  // ---------------------------
   return (
     <>
       {openCamera && (
@@ -203,7 +198,7 @@ export default function SkinFlow({
             </button>
           </div>
 
-          {/* UPLOAD BAR */}
+          {/* UPLOAD */}
           <div className="flex gap-3 mb-4">
             <button
               onClick={() => filePicker.current?.click()}
@@ -231,7 +226,7 @@ export default function SkinFlow({
             />
           </div>
 
-          {/* FILE PREVIEW LIST */}
+          {/* PREVIEWS */}
           {previews.map((src, i) => (
             <div key={i} className="mb-3 p-3 border rounded-xl bg-stone-50">
               <div className="flex gap-3">
@@ -271,7 +266,7 @@ export default function SkinFlow({
             </button>
           )}
 
-          {/* PERSONA FORM */}
+          {/* FORM AFTER ANALYSIS */}
           {results.length > 0 && (
             <div className="mt-6 space-y-4">
               <h3 className="font-semibold">Refine Your Skin Profile</h3>
@@ -291,30 +286,40 @@ export default function SkinFlow({
                 </select>
               </div>
 
-              {/* CONCERNS */}
+              {/* CONCERNS (FIXED WITH CHECKBOX PILLS) */}
               <div>
                 <label className="text-xs text-stone-600">Skin Concerns</label>
+
                 <div className="flex flex-wrap gap-2 mt-1">
                   {["acne", "pigmentation", "texture", "sensitivity"].map(
-                    (c) => (
-                      <button
-                        key={c}
-                        onClick={() =>
-                          setConcerns((prev) =>
-                            prev.includes(c)
-                              ? prev.filter((x) => x !== c)
-                              : [...prev, c]
-                          )
-                        }
-                        className={`px-3 py-1 rounded-full text-xs border ${
-                          concerns.includes(c)
-                            ? "bg-amber-600 text-white border-amber-600"
-                            : "bg-white text-stone-600 border-stone-300"
-                        }`}
-                      >
-                        {c}
-                      </button>
-                    )
+                    (c) => {
+                      const selected = concerns.includes(c);
+
+                      return (
+                        <label
+                          key={c}
+                          className={`px-3 py-1 rounded-full text-xs border cursor-pointer select-none ${
+                            selected
+                              ? "bg-amber-600 text-white border-amber-600"
+                              : "bg-white text-stone-600 border-stone-300"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() =>
+                              setConcerns((prev) =>
+                                prev.includes(c)
+                                  ? prev.filter((x) => x !== c)
+                                  : [...prev, c]
+                              )
+                            }
+                            className="hidden"
+                          />
+                          {c}
+                        </label>
+                      );
+                    }
                   )}
                 </div>
               </div>
@@ -370,11 +375,12 @@ export default function SkinFlow({
                 </select>
               </div>
 
-              {/* INGREDIENT PREFERENCES */}
+              {/* INGREDIENTS (FIXED EXACTLY LIKE LIFESTYLE/TASTE) */}
               <div>
                 <label className="text-xs text-stone-600">
                   Ingredient Preferences
                 </label>
+
                 <div className="flex flex-wrap gap-2 mt-1">
                   {[
                     "fragrance-free",
@@ -382,29 +388,38 @@ export default function SkinFlow({
                     "minimal actives",
                     "non-comedogenic",
                     "gentle formula",
-                  ].map((p) => (
-                    <button
-                      key={p}
-                      onClick={() =>
-                        setIngredients((prev) =>
-                          prev.includes(p)
-                            ? prev.filter((x) => x !== p)
-                            : [...prev, p]
-                        )
-                      }
-                      className={`px-3 py-1 rounded-full text-xs border ${
-                        ingredients.includes(p)
-                          ? "bg-amber-600 text-white border-amber-600"
-                          : "bg-white text-stone-600 border-stone-300"
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
+                  ].map((p) => {
+                    const selected = ingredients.includes(p);
+
+                    return (
+                      <label
+                        key={p}
+                        className={`px-3 py-1 rounded-full text-xs border cursor-pointer select-none ${
+                          selected
+                            ? "bg-amber-600 text-white border-amber-600"
+                            : "bg-white text-stone-600 border-stone-300"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() =>
+                            setIngredients((prev) =>
+                              prev.includes(p)
+                                ? prev.filter((x) => x !== p)
+                                : [...prev, p]
+                            )
+                          }
+                          className="hidden"
+                        />
+                        {p}
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* BRAND PREFERENCES */}
+              {/* BRANDS */}
               <div>
                 <label className="text-xs text-stone-600">
                   Brand Preferences
@@ -413,7 +428,7 @@ export default function SkinFlow({
                   value={brands}
                   onChange={(e) => setBrands(e.target.value)}
                   className="w-full p-3 bg-stone-50 rounded-xl"
-                  placeholder="The Ordinary, Minimalist, Cetaphil..."
+                  placeholder="The Ordinary, Minimalist…"
                 />
               </div>
 
@@ -441,7 +456,7 @@ export default function SkinFlow({
                 />
               </div>
 
-              {/* SAVE BUTTON */}
+              {/* SAVE */}
               <button
                 onClick={handleSave}
                 className="w-full mt-3 py-3 rounded-full bg-amber-600 text-white"
