@@ -1,20 +1,31 @@
 // app/api/tools/list-analyses/route.ts
-import { NextResponse } from "next/server";
+
+import { NextRequest, NextResponse } from "next/server";
 import clientPromise from "@/app/lib/mongodb";
+import { authGuard } from "@/app/lib/auth-guard";
 
-export async function GET(req: Request) {
-  const email = new URL(req.url).searchParams.get("email");
-  if (!email)
-    return NextResponse.json({ error: "Email required" }, { status: 400 });
+export async function GET(req: NextRequest) {
+  try {
+    // 1️⃣ Authenticate user
+    const { sessionEmail, errorResponse } = await authGuard(req);
+    if (errorResponse) return errorResponse;
 
-  const client = await clientPromise;
-  const db = client.db("rasphia");
+    // Identity is ALWAYS taken from session, never query params
+    const email = sessionEmail;
 
-  const docs = await db
-    .collection("analyses")
-    .find({ userEmail: email })
-    .sort({ createdAt: -1 })
-    .toArray();
+    const client = await clientPromise;
+    const db = client.db("rasphia");
 
-  return NextResponse.json(docs);
+    // 2️⃣ Fetch ONLY the logged-in user’s analyses
+    const docs = await db
+      .collection("analyses")
+      .find({ userEmail: email })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return NextResponse.json(docs, { status: 200 });
+  } catch (err) {
+    console.error("❌ list-analyses error:", err);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
 }

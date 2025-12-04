@@ -1,5 +1,6 @@
 // app/api/tools/create-analysis/route.ts
-import { NextResponse } from "next/server";
+
+import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { v4 as uuid } from "uuid";
 import clientPromise from "@/app/lib/mongodb";
@@ -13,16 +14,14 @@ import {
   PRODUCT_RULES,
   OUTPUT_FORMATS,
 } from "@/utils/promptModules";
+import { authGuard } from "@/app/lib/auth-guard";
 
 export const runtime = "nodejs";
 
 // ----------------------------
-// FIXED: TYPE-SAFE TOOL MAPS
+// TOOL MAPS
 // ----------------------------
-const TOOL_RULE_MAP: Record<
-  "skin" | "hair" | "body" | "similar" | string,
-  string
-> = {
+const TOOL_RULE_MAP: Record<string, string> = {
   skin: SKIN_RULES,
   hair: HAIR_RULES,
   body: BODY_RULES,
@@ -30,10 +29,7 @@ const TOOL_RULE_MAP: Record<
   default: "",
 };
 
-const TOOL_OUTPUT_MAP: Record<
-  "skin" | "hair" | "body" | "similar" | string,
-  string
-> = {
+const TOOL_OUTPUT_MAP: Record<string, string> = {
   skin: OUTPUT_FORMATS.skin,
   hair: OUTPUT_FORMATS.hair,
   body: OUTPUT_FORMATS.body,
@@ -56,39 +52,44 @@ ${TOOL_OUTPUT_MAP[type] || TOOL_OUTPUT_MAP.default}
 }
 
 // ----------------------------
-// MAIN ROUTE HANDLER
+// MAIN HANDLER (SECURED)
 // ----------------------------
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const form = await req.formData();
-    const userEmail = req.headers.get("x-user-email");
-    if (!userEmail)
-      return NextResponse.json(
-        { error: "Missing user email" },
-        { status: 401 }
-      );
+    // 1️⃣ Authenticate user first
+    const { sessionEmail, errorResponse } = await authGuard(req);
+    if (errorResponse) return errorResponse;
 
-    const file = form.get("file") as File | null;
+    // 2️⃣ Parse form data (multipart)
+    const form = await req.formData();
+
     const type = String(form.get("tool") || "skin");
     const blur = form.get("blurSensitive") === "true";
+    const file = form.get("file") as File | null;
 
-    if (!file || !userEmail) {
+    if (!file) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Missing image file" },
         { status: 400 }
       );
     }
+
+    // User identity comes ONLY from session
+    const userEmail = sessionEmail;
 
     // ----------------------------
     // IMAGE → BUFFER → COMPRESS
     // ----------------------------
     const arrBuff = await file.arrayBuffer();
-    let buffer = Buffer.from(arrBuff) as any;
+    let buffer = Buffer.from(arrBuff);
 
-    buffer = await sharp(buffer).rotate().jpeg({ quality: 85 }).toBuffer();
+    buffer = (await sharp(buffer)
+      .rotate()
+      .jpeg({ quality: 85 })
+      .toBuffer()) as any;
 
     // ----------------------------
-    // SAVE TO VERCEL BLOB
+    // SAVE IMAGE TO VERCEL BLOB
     // ----------------------------
     const blobName = `analysis-${uuid()}.jpg`;
     const uploaded = await put(blobName, buffer, {
@@ -99,17 +100,16 @@ export async function POST(req: Request) {
     const fileUrl = uploaded.url;
 
     // ----------------------------
-    // PREPARE IMAGE FOR GEMINI
-    // inlineData REQUIRED
+    // PREP GEMINI INPUT
     // ----------------------------
     const base64Image = buffer.toString("base64");
-
     const finalPrompt = buildPrompt(type);
 
-    // ----------------------------
-    // GEMINI CALL (WORKING)
-    // ----------------------------
     let parsedResult: any = {};
+
+    // ----------------------------
+    // CALL GEMINI
+    // ----------------------------
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -133,9 +133,7 @@ export async function POST(req: Request) {
 
       const raw = result.text as string;
       const cleaned = raw.replace(/```json|```/g, "").trim();
-
       parsedResult = JSON.parse(cleaned);
-      console.log("The analysisi is:", raw, cleaned, parsedResult);
     } catch (err) {
       console.error("Gemini error:", err);
       parsedResult = {
@@ -146,7 +144,7 @@ export async function POST(req: Request) {
     }
 
     // ----------------------------
-    // SAVE TO MONGODB
+    // SAVE ANALYSIS TO DATABASE
     // ----------------------------
     const client = await clientPromise;
     const db = client.db("rasphia");
@@ -156,7 +154,7 @@ export async function POST(req: Request) {
 
     const doc = {
       analysisId,
-      userEmail,
+      userEmail, // 🔐 secure identity
       type,
       fileUrl,
       blurSensitive: blur,

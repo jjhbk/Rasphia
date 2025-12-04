@@ -192,22 +192,8 @@ const App: React.FC = () => {
           setActiveChatId(newChat._id);
           setMessages(newChat.messages || [initialMessage]);
         }
-        if (!analyses || analyses.length === 0) {
-          setRecentAnalyses([
-            {
-              analysisId: "demo-analysis-1",
-              title: "Demo analysis",
-              fileUrl: DEMO_IMG_PATH,
-              createdAt: new Date().toISOString(),
-              prompt: "Demo prompt: show me product suggestions for this item",
-              aiResult: {
-                text: "Demo analysis: Use this to test insert/paste flow.",
-              },
-            },
-          ]);
-        } else {
-          setRecentAnalyses(analyses);
-        }
+
+        setRecentAnalyses(analyses);
       } catch (error) {
         console.error("Error loading user data:", error);
       }

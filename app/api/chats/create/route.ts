@@ -2,13 +2,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import clientPromise from "@/app/lib/mongodb";
 import { ChatSession, Message } from "@/app/types";
+import { authGuard } from "@/app/lib/auth-guard";
+
+// top of route:
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, initialMessage } = body;
-
-    if (!email)
+    const { sessionEmail, errorResponse } = await authGuard(req);
+    if (errorResponse) return errorResponse;
+    const { initialMessage } = body;
+    if (!sessionEmail)
       return NextResponse.json({ error: "Missing email" }, { status: 400 });
 
     const now = new Date().toISOString();
@@ -19,8 +23,8 @@ export async function POST(req: NextRequest) {
     };
 
     const newChat: Omit<ChatSession, "_id"> = {
-      userEmail: email,
-      title: "New conversation",
+      userEmail: sessionEmail,
+      title: new Date().toString(),
       createdAt: now,
       updatedAt: now,
       messages: [firstMessage],

@@ -1,10 +1,14 @@
 import Razorpay from "razorpay";
 import { NextResponse } from "next/server";
 import clientPromise from "@/app/lib/mongodb";
+import { authGuard } from "@/app/lib/auth-guard";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    // 1️⃣ Authenticate user + parse JSON safely
+    const { sessionEmail, body, errorResponse } = await authGuard(req);
+    if (errorResponse) return errorResponse;
+
     const { products, customer, totalAmount } = body;
 
     if (!products || products.length === 0 || !customer) {
@@ -14,33 +18,47 @@ export async function POST(req: Request) {
       );
     }
 
-    // Razorpay initialization
+    if (!customer.email) {
+      return NextResponse.json(
+        { error: "Missing customer email" },
+        { status: 400 }
+      );
+    }
+
+    // 2️⃣ Email gating: prevent ordering for someone else
+    if (customer.email !== sessionEmail) {
+      return NextResponse.json(
+        { error: "Forbidden: You can only create orders for your own account" },
+        { status: 403 }
+      );
+    }
+
+    // 3️⃣ Razorpay initialization
     const razorpay = new Razorpay({
       key_id: process.env.RAZORPAY_KEY_ID!,
       key_secret: process.env.RAZORPAY_KEY_SECRET!,
     });
 
-    // Amount = total of cart (converted to paisa)
-    const amount = totalAmount * 100;
+    const amount = totalAmount * 100; // convert to paisa
     const currency = "INR";
     const receipt = `receipt_${Date.now()}`;
 
-    // Create Razorpay order
+    // 4️⃣ Create Razorpay order
     const order = await razorpay.orders.create({
       amount,
       currency,
       receipt,
       notes: {
-        customerEmail: customer.email,
+        customerEmail: sessionEmail, // Trust session only
         items: products.map((p: any) => p.name).join(", "),
       },
     });
 
-    // Connect to DB
+    // 5️⃣ DB connection
     const client = await clientPromise;
     const db = client.db("rasphia");
 
-    // 1️⃣ Upsert ALL products
+    // 6️⃣ Upsert products (safe)
     for (const p of products) {
       await db.collection("products").updateOne(
         { name: p.name },
@@ -58,9 +76,9 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2️⃣ Upsert user
+    // 7️⃣ Upsert user profile (safe)
     await db.collection("users").updateOne(
-      { email: customer.email },
+      { email: sessionEmail },
       {
         $setOnInsert: { createdAt: new Date() },
         $set: {
@@ -73,7 +91,7 @@ export async function POST(req: Request) {
       { upsert: true }
     );
 
-    // 3️⃣ Create order entry
+    // 8️⃣ Create order record in DB
     const orderDoc = {
       order_id: order.id,
       payment_id: null,
@@ -89,7 +107,7 @@ export async function POST(req: Request) {
       })),
       customer: {
         name: customer.name,
-        email: customer.email,
+        email: sessionEmail, // Trust session only
         phone: customer.phone,
         address: customer.address,
       },
@@ -100,12 +118,11 @@ export async function POST(req: Request) {
 
     await db.collection("orders").insertOne(orderDoc);
 
-    // Return Razorpay order
-    return NextResponse.json(order);
-  } catch (error) {
+    return NextResponse.json(order, { status: 200 });
+  } catch (error: any) {
     console.error("❌ Error creating Razorpay order:", error);
     return NextResponse.json(
-      { error: "Error creating Razorpay order" },
+      { error: error.message || "Error creating Razorpay order" },
       { status: 500 }
     );
   }

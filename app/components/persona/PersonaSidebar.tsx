@@ -28,6 +28,21 @@ export default function PersonaSidebar({
   persona: any;
   onOpenFlow: (type: string) => void;
 }) {
+  function isPersonaSectionComplete(section: any): boolean {
+    if (!section || typeof section !== "object") return false;
+
+    // if updatedAt exists and is not null → section is completed at least once
+    if (section.updatedAt) return true;
+
+    // otherwise check if any field has meaningful content
+    return Object.values(section).some((value) => {
+      if (value === null) return false;
+      if (value === "") return false;
+      if (Array.isArray(value) && value.length === 0) return false;
+      return true;
+    });
+  }
+
   return (
     <div className="p-4 flex flex-col gap-3 h-full">
       <h3 className="text-xs uppercase tracking-widest text-stone-500">
@@ -37,7 +52,8 @@ export default function PersonaSidebar({
       <div className="mt-2 space-y-2">
         {SECTIONS.map((s) => {
           const Icon = s.icon;
-          const done = !!persona?.[s.key];
+          const done = isPersonaSectionComplete(persona?.[s.key]);
+
           return (
             <button
               key={s.key}

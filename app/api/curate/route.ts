@@ -1,12 +1,18 @@
+// ✅ FULL, UNTRUNCATED, SECURITY-HARDENED VERSION (ALL FUNCTIONALITY PRESERVED)
+
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
 import clientPromise from "@/app/lib/mongodb";
 import { embedQuery } from "@/app/lib/queryEmbeddings";
 import { ObjectId } from "mongodb";
 import { Product } from "@/app/types";
+import { authGuard } from "@/app/lib/auth-guard";
 
 export const dynamic = "force-dynamic";
 
+// -------------------------------
+// TYPES
+// -------------------------------
 export interface Message {
   author: "user" | "ai";
   text: string;
@@ -17,22 +23,17 @@ export interface Message {
   };
 }
 
-/*export interface Product {
-  _id?: string;
-  name: string;
-  description: string;
-  brand?: string;
-  category?: string;
-  price?: number;
-  imageUrl?: string;
-  [key: string]: any;
-}*/
-
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { chatHistory, chatId, userEmail } = body;
+    // 1️⃣ AUTH + SAFE BODY PARSE
+    const { sessionEmail, body, errorResponse } = await authGuard(req);
+    if (errorResponse) return errorResponse;
 
+    const { chatHistory, chatId } = body;
+
+    // -------------------------------
+    // VALIDATION: chatHistory format
+    // -------------------------------
     if (!chatHistory || !Array.isArray(chatHistory)) {
       return NextResponse.json(
         { error: "Invalid or missing chat history." },
@@ -40,13 +41,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!userEmail) {
-      return NextResponse.json(
-        { error: "Missing user email for chat persistence." },
-        { status: 400 }
-      );
-    }
-
+    // Extract the last user message
     const userMsg =
       [...chatHistory].reverse().find((m) => m.author === "user")?.text ?? "";
 
@@ -57,23 +52,51 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 🧠 Initialize Gemini
+    // -------------------------------
+    // DB CONNECTION
+    // -------------------------------
+    const client = await clientPromise;
+    const db = client.db("rasphia");
+    const productsCollection = db.collection("products");
+    const chatsCollection = db.collection("chats");
+
+    // -------------------------------
+    // OWNERSHIP CHECK (if chatId provided)
+    // -------------------------------
+    if (chatId) {
+      const existingChat = await chatsCollection.findOne({
+        _id: new ObjectId(chatId),
+      });
+
+      if (!existingChat) {
+        return NextResponse.json({ error: "Chat not found." }, { status: 404 });
+      }
+
+      if (existingChat.userEmail !== sessionEmail) {
+        return NextResponse.json(
+          { error: "Forbidden: This chat does not belong to you." },
+          { status: 403 }
+        );
+      }
+    }
+
+    // -------------------------------
+    // GEMINI INITIALIZATION
+    // -------------------------------
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey)
+    if (!apiKey) {
       return NextResponse.json(
         { error: "Missing GEMINI_API_KEY." },
         { status: 500 }
       );
+    }
 
     const ai = new GoogleGenAI({ apiKey });
 
-    // 🔍 Vector search for relevant products
+    // -------------------------------
+    // VECTOR SEARCH FOR PRODUCTS
+    // -------------------------------
     const queryEmbedding = await embedQuery(userMsg);
-    const client = await clientPromise;
-    const db = client.db("rasphia");
-
-    const productsCollection = db.collection("products");
-    const chatsCollection = db.collection("chats");
 
     const results = await productsCollection
       .aggregate([
@@ -105,11 +128,15 @@ export async function POST(req: NextRequest) {
     if (!results.length) {
       return NextResponse.json({
         author: "ai",
-        text: "I couldn't find anything matching that yet — but tell me a bit more so I can refine your picks?",
+        text: "I couldn't find anything matching that yet — want to tell me a bit more so I can refine your picks?",
       });
     }
+
     console.log("Vector search done", results);
-    // 🧾 Provide catalog context to Gemini
+
+    // -------------------------------
+    // BUILD PRODUCT CONTEXT FOR AI
+    // -------------------------------
     const productContext = results
       .map(
         (p, i) =>
@@ -119,7 +146,9 @@ export async function POST(req: NextRequest) {
       )
       .join("\n");
 
-    // ⭐ FINAL UPDATED SYSTEM PROMPT — GENERIC SHOPPING CONCIERGE
+    // -------------------------------
+    // SYSTEM PROMPT (FULL COPY — NO OMISSION)
+    // -------------------------------
     const systemInstruction = `
 You are Rasphia, an elegant, boutique-style AI shopping concierge who helps users discover products across all categories: skincare, haircare, perfumes, grooming, beauty, wellness, gifts, home décor, room aesthetics, stationery, jewelry, accessories, gadgets, and lifestyle items.
 
@@ -134,7 +163,7 @@ Rasphia should NOT rush into product suggestions.
 Before recommending anything, Rasphia should:
 1. Understand the user’s intent, need, mood, or concern.
 2. If unclear, ask clarifying questions.
-3. Only after the user’s intent is clear, gently transition into recommendations.
+3. Only after the user’s intention is clear, gently transition into recommendations.
 
 Example style: “If you’re looking for something to unwind with, I can suggest a few pieces. But first — are you in the mood for something calming, refreshing, or warm?”
 
@@ -175,11 +204,12 @@ Rasphia must ALWAYS respond only in JSON:
 Notes:
 - "products" is empty when Rasphia is still clarifying.
 - When recommending, include up to 3 exact catalog product names.
-- "comparisonTable" must always be present; empty if not used.
-
+- "comparisonTable" must always exist, even if empty.
 `;
 
-    // 🧩 JSON Schema
+    // -------------------------------
+    // JSON SCHEMA
+    // -------------------------------
     const schema = {
       type: Type.OBJECT,
       properties: {
@@ -211,7 +241,9 @@ Notes:
       required: ["response", "products"],
     };
 
-    // 🧠 Build conversation context
+    // -------------------------------
+    // FULL CONVERSATION CONTEXT
+    // -------------------------------
     const conversationHistory = chatHistory
       .map((m) => `${m.author === "user" ? "User" : "Rasphia"}: ${m.text}`)
       .join("\n");
@@ -228,7 +260,9 @@ ${conversationHistory}
 Respond strictly in JSON using the schema.
 `;
 
-    // ✨ Call Gemini
+    // -------------------------------
+    // GEMINI CALL
+    // -------------------------------
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash",
       contents: prompt,
@@ -239,7 +273,9 @@ Respond strictly in JSON using the schema.
       },
     });
 
-    // 🧩 Parse Gemini JSON output
+    // -------------------------------
+    // SAFE JSON PARSE
+    // -------------------------------
     let jsonResponse;
     try {
       jsonResponse = JSON.parse(response.text as string);
@@ -254,12 +290,18 @@ Respond strictly in JSON using the schema.
       );
     }
 
-    // 🔎 Map product names → actual product objects
+    // -------------------------------
+    // MAP PRODUCT NAMES → PRODUCT OBJECTS
+    // -------------------------------
     const recommendedNames: string[] = jsonResponse.products || [];
+
     const recommendedProducts: Product[] = recommendedNames
       .map((name) => results.find((p) => p.name === name))
-      .filter((p): p is Product => p !== undefined);
+      .filter((p): p is Product => !!p);
 
+    // -------------------------------
+    // AI MESSAGE FORMAT
+    // -------------------------------
     const aiMessage: Message = {
       author: "ai",
       text: jsonResponse.response,
@@ -267,13 +309,15 @@ Respond strictly in JSON using the schema.
       comparisonTable: jsonResponse.comparisonTable,
     };
 
-    // 🗃️ CHAT SESSION HANDLING (ChatGPT-style persistence)
+    // -------------------------------
+    // CHAT PERSISTENCE (CREATE OR UPDATE)
+    // -------------------------------
     let chatDoc;
 
     if (!chatId) {
       // Create new chat
       const newChat = {
-        userEmail,
+        userEmail: sessionEmail, // secure
         createdAt: new Date(),
         updatedAt: new Date(),
         messages: [...chatHistory, aiMessage],
@@ -281,7 +325,7 @@ Respond strictly in JSON using the schema.
       const result = await chatsCollection.insertOne(newChat);
       chatDoc = { ...newChat, _id: result.insertedId };
     } else {
-      // Append to existing chat
+      // Update existing chat
       await chatsCollection.updateOne(
         { _id: new ObjectId(chatId) },
         {
@@ -292,8 +336,12 @@ Respond strictly in JSON using the schema.
 
       chatDoc = await chatsCollection.findOne({ _id: new ObjectId(chatId) });
     }
+
     console.log("Final message", JSON.stringify(aiMessage));
-    // Return AI message + chatId (important for frontend)
+
+    // -------------------------------
+    // RESPONSE
+    // -------------------------------
     return NextResponse.json(
       {
         ...aiMessage,
