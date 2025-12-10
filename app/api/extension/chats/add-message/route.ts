@@ -3,73 +3,83 @@ import OpenAI from "openai";
 import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
 import { loadPersona } from "@/app/lib/loadPersona";
 import clientPromise from "@/app/lib/mongodb";
+import { ObjectId } from "mongodb";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(req: Request) {
   try {
-    const emailFromExt = verifyExtensionToken(req.headers);
-    const { query, chatId } = await req.json();
-
-    // Determine the requester email:
-    // 1. Extension user (preferred)
-    // 2. Website-side NextAuth user (fallback)
-    let email = emailFromExt;
-
-    if (!email) {
-      // Allow website calls too
-      const session = (await import("next-auth")).getServerSession;
-      const s = await session();
-      email = s?.user?.email as string;
-    }
-
+    // 1️⃣ EXTENSION-ONLY AUTH
+    const email = verifyExtensionToken(req.headers);
     if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // 2️⃣ Parse request
+    const { query, chatId } = await req.json();
+    if (!query) {
+      return NextResponse.json(
+        { error: "Missing user query" },
+        { status: 400 }
+      );
     }
 
     const client = await clientPromise;
     const db = client.db("rasphia");
 
-    // 1. load persona
+    // 3️⃣ Load persona
     const persona = await loadPersona(email);
 
-    // 2. load or create chat
+    // 4️⃣ Load or create chat
     let chat = null;
 
     if (chatId) {
-      chat = await db.collection("chats").findOne({ _id: chatId });
+      chat = await db
+        .collection("chats")
+        .findOne({ _id: new ObjectId(chatId) });
+
+      // Ownership check
+      if (chat && chat.email !== email) {
+        return NextResponse.json(
+          { error: "Forbidden: You do not own this chat" },
+          { status: 403 }
+        );
+      }
     }
 
+    // If chat not found → create new one
     if (!chat) {
+      const now = new Date().toISOString();
       const res = await db.collection("chats").insertOne({
         email,
         title: query.slice(0, 80),
+        createdAt: now,
+        updatedAt: now,
         messages: [],
-        createdAt: new Date(),
       });
+
       chat = { _id: res.insertedId, messages: [] };
     }
 
-    // 3. Prepare messages for OpenAI
-    const messages = [
+    // 5️⃣ Build OpenAI message context
+    const formattedMessages = [
       {
         role: "system",
         content: `
-You are Rasphia — a hyper-personal AI stylist, dermatologist assistant, 
+You are Rasphia — a hyper-personal AI stylist, dermatologist assistant,
 haircare expert, home stylist, gifting consultant, and fashion advisor.
 
 User Persona:
 ${JSON.stringify(persona, null, 2)}
 
-Always give:
-- personalised advice,
-- safe ingredient suggestions,
-- suitability for skin type + hair type,
-- budget-conscious alternatives,
-- brand preferences,
-- lifestyle-based adjustments.
+Always provide:
+- personalised suggestions,
+- safe ingredient guidance,
+- suitability per skin/hair type,
+- budget-friendly options,
+- lifestyle-aware solutions.
 
-DO NOT hallucinate ingredients or claims.`,
+Avoid hallucinating ingredients or claims.`,
       },
       ...chat.messages.map((m: any) => ({
         role: m.sender === "user" ? "user" : "assistant",
@@ -78,10 +88,10 @@ DO NOT hallucinate ingredients or claims.`,
       { role: "user", content: query },
     ];
 
-    // 4. Call OpenAI
+    // 6️⃣ OpenAI API Call
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
-      messages,
+      messages: formattedMessages,
       max_tokens: 500,
       temperature: 0.7,
     });
@@ -90,39 +100,32 @@ DO NOT hallucinate ingredients or claims.`,
       completion.choices[0].message?.content ??
       "I’m not sure, could you rephrase?";
 
-    // 5. Save to DB
+    const now = new Date().toISOString();
+
+    // 7️⃣ Save BOTH user + assistant messages in one update
     await db.collection("chats").updateOne(
-      { _id: chat._id },
+      { _id: new ObjectId(chat._id) },
       {
         $push: {
           messages: {
-            sender: "user",
-            text: query,
-            timestamp: new Date(),
+            $each: [
+              { sender: "user", text: query, createdAt: now },
+              { sender: "assistant", text: reply, createdAt: now },
+            ],
           } as any,
         },
+        $set: { updatedAt: now },
       }
     );
 
-    await db.collection("chats").updateOne(
-      { _id: chat._id },
-      {
-        $push: {
-          messages: {
-            sender: "assistant",
-            text: reply,
-            timestamp: new Date(),
-          },
-        } as any,
-      }
-    );
-
+    // 8️⃣ Return response
     return NextResponse.json(
       {
-        reply,
         chatId: chat._id,
+        reply,
       },
       {
+        status: 200,
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Headers": "Content-Type, Authorization",
@@ -130,15 +133,15 @@ DO NOT hallucinate ingredients or claims.`,
       }
     );
   } catch (err) {
-    console.error("❌ CHAT ROUTE ERROR:", err);
+    console.error("❌ /chats/send ERROR:", err);
     return NextResponse.json(
       { error: "Chat route failed" },
       {
+        status: 500,
         headers: {
           "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Headers": "Content-Type, Authorization",
         },
-        status: 500,
       }
     );
   }

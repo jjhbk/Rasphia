@@ -1,0 +1,137 @@
+// app/api/chats/summarize/route.ts
+import { NextResponse } from "next/server";
+import OpenAI from "openai";
+import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
+import { loadPersona } from "@/app/lib/loadPersona";
+import clientPromise from "@/app/lib/mongodb";
+import { ObjectId } from "mongodb";
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+export async function POST(req: Request) {
+  try {
+    // 1️⃣ EXTENSION AUTH
+    const email = verifyExtensionToken(req.headers);
+    if (!email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // 2️⃣ Parse request body
+    const { product, chatId } = await req.json();
+
+    if (!product) {
+      return NextResponse.json({ error: "Missing product" }, { status: 400 });
+    }
+
+    const client = await clientPromise;
+    const db = client.db("rasphia");
+
+    // 3️⃣ Load persona
+    const persona = await loadPersona(email);
+
+    // 4️⃣ Build prompt
+    const prompt = `
+Analyze this product for this specific user.
+
+User Persona:
+${JSON.stringify(persona, null, 2)}
+
+Product Data:
+${JSON.stringify(product, null, 2)}
+
+Provide analysis in structured JSON:
+
+{
+  "summary": "...",
+  "pros": [...],
+  "cons": [...],
+  "suitability": {
+      "skin": "...",
+      "hair": "...",
+      "lifestyle": "..."
+  },
+  "risks": "...",
+  "shadeRecommendation": "...",
+  "ingredientAnalysis": "...",
+  "alternatives": [
+    { "name": "...", "why": "..." },
+    { "name": "...", "why": "..." },
+    { "name": "...", "why": "..." }
+  ]
+}
+`;
+
+    // 5️⃣ OpenAI call
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
+    });
+
+    const analysis = completion.choices[0].message?.content?.trim() ?? "{}";
+
+    // 6️⃣ Load or create chat
+    let chat = null;
+
+    if (chatId) {
+      chat = await db
+        .collection("chats")
+        .findOne({ _id: new ObjectId(chatId) });
+
+      if (chat && chat.email !== email) {
+        return NextResponse.json(
+          { error: "Forbidden: You do not own this chat" },
+          { status: 403 }
+        );
+      }
+    }
+
+    // If no chat exists, create one
+    if (!chat) {
+      const now = new Date().toISOString();
+      const res = await db.collection("chats").insertOne({
+        email,
+        title: "Product Analysis",
+        createdAt: now,
+        updatedAt: now,
+        messages: [],
+      });
+      chat = { _id: res.insertedId };
+    }
+
+    // 7️⃣ Save the AI analysis as a new assistant message
+    const now = new Date().toISOString();
+
+    await db.collection("chats").updateOne(
+      { _id: new ObjectId(chat._id) },
+      {
+        $push: {
+          messages: {
+            sender: "assistant",
+            text: analysis,
+            createdAt: now,
+            meta: { type: "product-analysis" },
+          } as any,
+        },
+        $set: { updatedAt: now },
+      }
+    );
+
+    return NextResponse.json(
+      {
+        chatId: chat._id,
+        analysis,
+      },
+      {
+        status: 200,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        },
+      }
+    );
+  } catch (e) {
+    console.error("❌ SUMMARIZER ERROR:", e);
+    return NextResponse.json({ error: "Summarizer failed" }, { status: 500 });
+  }
+}
