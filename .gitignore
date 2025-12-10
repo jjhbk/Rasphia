@@ -46,3 +46,10 @@ next-env.d.ts
 /tryon
 /stylist
 /scraper
+/data/*csv
+/catalog/data
+/catalog/modules/__pycache__
+/catalog/outputs
+/extension-api/node_modules
+/catalog
+/extension

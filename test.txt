@@ -61,3 +61,11 @@ curl -X POST \
   "reviews": [],
   "embedding": []
 }
+
+
+Cetaphil Gentle Skin Cleanser is a clinically proven creamy formula that gently yet effectively removes dirt, 
+make-up, and impurities and provides continuous hydration to protect against dryness. The formula is developed 
+with a dermatologists-backed blend of Niacinamide, Vitamin B5 and Hydrating Glycerin to improve the resilience of 
+sensitive skin. Ideal for Dry to Normal, Sensitive Skin, Cetaphil Gentle Skin Cleanser is • Paraben-Free • Sulphate-Free • 
+Fragrance Free • Hypoallergenic • Non Comedogenic: Won't Clog Pores
+

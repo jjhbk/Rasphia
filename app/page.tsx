@@ -286,7 +286,7 @@ const App: React.FC = () => {
           }),
         });
 
-        const res = await fetch("/api/curate", {
+        const res = await fetch("/api/curate-openai", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

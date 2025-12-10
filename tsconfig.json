@@ -34,5 +34,5 @@
     "app/data/harifall.js",
     "app/data/skincare.js"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "extension", "catalog"]
 }
