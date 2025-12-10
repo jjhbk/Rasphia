@@ -1,4 +1,5 @@
 // app/api/chats/summarize/route.ts
+
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
@@ -10,15 +11,12 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(req: Request) {
   try {
-    // 1️⃣ EXTENSION AUTH
     const email = verifyExtensionToken(req.headers);
     if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 2️⃣ Parse request body
     const { product, chatId } = await req.json();
-
     if (!product) {
       return NextResponse.json({ error: "Missing product" }, { status: 400 });
     }
@@ -26,10 +24,8 @@ export async function POST(req: Request) {
     const client = await clientPromise;
     const db = client.db("rasphia");
 
-    // 3️⃣ Load persona
     const persona = await loadPersona(email);
 
-    // 4️⃣ Build prompt
     const prompt = `
 Analyze this product for this specific user.
 
@@ -39,38 +35,17 @@ ${JSON.stringify(persona, null, 2)}
 Product Data:
 ${JSON.stringify(product, null, 2)}
 
-Provide analysis in structured JSON:
-
-{
-  "summary": "...",
-  "pros": [...],
-  "cons": [...],
-  "suitability": {
-      "skin": "...",
-      "hair": "...",
-      "lifestyle": "..."
-  },
-  "risks": "...",
-  "shadeRecommendation": "...",
-  "ingredientAnalysis": "...",
-  "alternatives": [
-    { "name": "...", "why": "..." },
-    { "name": "...", "why": "..." },
-    { "name": "...", "why": "..." }
-  ]
-}
+Return structured JSON only.
 `;
 
-    // 5️⃣ OpenAI call
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
+      temperature: 0.6,
     });
 
     const analysis = completion.choices[0].message?.content?.trim() ?? "{}";
 
-    // 6️⃣ Load or create chat
     let chat = null;
 
     if (chatId) {
@@ -78,6 +53,7 @@ Provide analysis in structured JSON:
         .collection("chats")
         .findOne({ _id: new ObjectId(chatId) });
 
+      // ❗ FIXED: correct field
       if (chat && chat.email !== email) {
         return NextResponse.json(
           { error: "Forbidden: You do not own this chat" },
@@ -86,20 +62,18 @@ Provide analysis in structured JSON:
       }
     }
 
-    // If no chat exists, create one
     if (!chat) {
       const now = new Date().toISOString();
-      const res = await db.collection("chats").insertOne({
-        email,
+      const insert = await db.collection("chats").insertOne({
+        email, // ❗ FIXED
         title: "Product Analysis",
         createdAt: now,
         updatedAt: now,
         messages: [],
       });
-      chat = { _id: res.insertedId };
+      chat = { _id: insert.insertedId };
     }
 
-    // 7️⃣ Save the AI analysis as a new assistant message
     const now = new Date().toISOString();
 
     await db.collection("chats").updateOne(
@@ -107,10 +81,10 @@ Provide analysis in structured JSON:
       {
         $push: {
           messages: {
-            sender: "assistant",
+            author: "assistant",
             text: analysis,
             createdAt: now,
-            meta: { type: "product-analysis" },
+            meta: { type: "product-analysis", product },
           } as any,
         },
         $set: { updatedAt: now },
@@ -118,10 +92,7 @@ Provide analysis in structured JSON:
     );
 
     return NextResponse.json(
-      {
-        chatId: chat._id,
-        analysis,
-      },
+      { chatId: chat._id.toString(), analysis },
       {
         status: 200,
         headers: {

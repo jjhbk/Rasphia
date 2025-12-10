@@ -82,7 +82,7 @@ Always provide:
 Avoid hallucinating ingredients or claims.`,
       },
       ...chat.messages.map((m: any) => ({
-        role: m.sender === "user" ? "user" : "assistant",
+        role: m.author === "user" ? "user" : "assistant",
         content: m.text,
       })),
       { role: "user", content: query },
@@ -109,8 +109,8 @@ Avoid hallucinating ingredients or claims.`,
         $push: {
           messages: {
             $each: [
-              { sender: "user", text: query, createdAt: now },
-              { sender: "assistant", text: reply, createdAt: now },
+              { author: "user", text: query, createdAt: now },
+              { author: "assistant", text: reply, createdAt: now },
             ],
           } as any,
         },
