@@ -8,7 +8,9 @@ export function middleware(req: NextRequest) {
   if (path.startsWith("/api/auth")) {
     return NextResponse.next();
   }
-
+  if (path.startsWith("/api/extension")) {
+    return NextResponse.next();
+  }
   // 2️⃣ Require NextAuth session cookie for all other API routes
   if (path.startsWith("/api/")) {
     const sessionToken =

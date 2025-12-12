@@ -45,7 +45,7 @@ Return structured JSON only.
     });
 
     const analysis = completion.choices[0].message?.content?.trim() ?? "{}";
-
+    console.log("analysisi is", analysis);
     let chat = null;
 
     if (chatId) {
