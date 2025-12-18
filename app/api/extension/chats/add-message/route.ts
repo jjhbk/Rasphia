@@ -10,7 +10,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 export async function POST(req: Request) {
   try {
     // 1️⃣ EXTENSION-ONLY AUTH
-    const email = verifyExtensionToken(req.headers);
+    const email = await verifyExtensionToken(req.headers.get("authorization"));
     if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

@@ -1,16 +1,23 @@
-import jwt from "jsonwebtoken";
+// lib/verifyExtensionTokenEdge.ts
+import { jwtVerify } from "jose";
 
-export function verifyExtensionToken(headers: Headers) {
-  const auth = headers.get("authorization");
-  if (!auth) return null;
+const secret = new TextEncoder().encode(process.env.EXTENSION_JWT_SECRET!);
 
-  const token = auth.replace("Bearer ", "");
+export async function verifyExtensionToken(
+  authHeader: string | null
+): Promise<string | null> {
+  if (!authHeader?.startsWith("Bearer ")) return null;
+
+  const token = authHeader.replace("Bearer ", "");
 
   try {
-    const decoded = jwt.verify(token, process.env.EXTENSION_JWT_SECRET!) as any;
+    const { payload } = await jwtVerify(token, secret, {
+      audience: "rasphia_extension",
+    });
 
-    return decoded.sub as string; // this is EMAIL
-  } catch {
+    return payload.sub as string; // email
+  } catch (err) {
+    console.error("Edge JWT verify failed:", err);
     return null;
   }
 }

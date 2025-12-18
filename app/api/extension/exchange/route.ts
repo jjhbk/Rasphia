@@ -40,6 +40,6 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     access_token: jwtToken,
-    expires_in: 7 * 24 * 3600,
+    expires_in: 24 * 3600,
   });
 }

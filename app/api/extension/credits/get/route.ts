@@ -3,7 +3,7 @@ import clientPromise from "@/app/lib/mongodb";
 import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
 
 export async function GET(req: Request) {
-  const email = verifyExtensionToken(req.headers);
+  const email = await verifyExtensionToken(req.headers.get("authorization"));
   if (!email)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

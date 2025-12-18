@@ -11,7 +11,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(req: Request) {
   try {
-    const email = verifyExtensionToken(req.headers);
+    const email = await verifyExtensionToken(req.headers.get("authorization"));
     if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -56,7 +56,7 @@ Return structured JSON only.
     console.log("analysis is", analysis);
     let chat = null;
 
-    if (chatId) {
+    /*if (chatId) {
       chat = await db
         .collection("chats")
         .findOne({ _id: new ObjectId(chatId) });
@@ -98,9 +98,9 @@ Return structured JSON only.
         $set: { updatedAt: now },
       }
     );
-
+*/
     return NextResponse.json(
-      { chatId: chat._id.toString(), analysis },
+      { chatId: chatId, analysis },
       {
         status: 200,
         headers: {
