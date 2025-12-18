@@ -10,11 +10,6 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(req: Request) {
   try {
-    console.log({
-      authHeader: req,
-      hasSecret: !!process.env.EXTENSION_JWT_SECRET,
-    });
-
     // 1️⃣ EXTENSION-ONLY AUTH
     const email = await verifyExtensionToken(req);
     if (!email) {

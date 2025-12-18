@@ -6,11 +6,6 @@ export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   try {
-    console.log({
-      authHeader: req,
-      hasSecret: !!process.env.EXTENSION_JWT_SECRET,
-    });
-
     // 1️⃣ EXTENSION-ONLY AUTH
     const email = await verifyExtensionToken(req);
     if (!email) {
