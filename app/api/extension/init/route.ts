@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import clientPromise from "@/app/lib/mongodb";
 import crypto from "crypto";
+export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);

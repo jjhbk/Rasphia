@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/app/lib/mongodb";
 import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
+export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   try {

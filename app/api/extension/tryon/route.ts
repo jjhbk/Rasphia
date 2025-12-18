@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyExtensionTokenFromString } from "@/app/lib/verifyExtTokenString";
 import OpenAI from "openai";
+export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {

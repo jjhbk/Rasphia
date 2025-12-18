@@ -1,6 +1,7 @@
 import { SignJWT } from "jose";
 import { NextResponse } from "next/server";
 import clientPromise from "@/app/lib/mongodb";
+export const runtime = "nodejs";
 
 const secret = new TextEncoder().encode(process.env.EXTENSION_JWT_SECRET!);
 

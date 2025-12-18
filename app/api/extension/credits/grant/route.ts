@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/app/lib/mongodb";
 import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   const email = await verifyExtensionToken(req.headers.get("authorization"));

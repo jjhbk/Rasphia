@@ -4,11 +4,17 @@ import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
 import { loadPersona } from "@/app/lib/loadPersona";
 import clientPromise from "@/app/lib/mongodb";
 import { ObjectId } from "mongodb";
+export const runtime = "nodejs";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(req: Request) {
   try {
+    console.log({
+      authHeader: req.headers.get("authorization"),
+      hasSecret: !!process.env.EXTENSION_JWT_SECRET,
+    });
+
     // 1️⃣ EXTENSION-ONLY AUTH
     const email = await verifyExtensionToken(req.headers.get("authorization"));
     if (!email) {

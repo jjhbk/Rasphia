@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { verifyExtensionTokenFromString } from "@/app/lib/verifyExtTokenString";
+export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
