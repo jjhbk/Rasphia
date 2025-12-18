@@ -43,9 +43,17 @@ Return structured JSON only.
       messages: [{ role: "user", content: prompt }],
       temperature: 0.6,
     });
+    let raw = completion.choices[0].message?.content ?? "{}";
 
-    const analysis = completion.choices[0].message?.content?.trim() ?? "{}";
-    console.log("analysisi is", analysis);
+    // Remove ```json ``` wrappers safely
+    raw = raw
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```$/i, "")
+      .trim();
+
+    const analysis = JSON.parse(raw);
+    console.log("analysis is", analysis);
     let chat = null;
 
     if (chatId) {
