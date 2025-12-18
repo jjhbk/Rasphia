@@ -4,39 +4,17 @@ import type { NextRequest } from "next/server";
 export function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
 
-  // ------------------------------------------------
-  // 1️⃣ NextAuth internals — always public
-  // ------------------------------------------------
+  // ✅ Always allow NextAuth
   if (path.startsWith("/api/auth")) {
     return NextResponse.next();
   }
 
-  // ------------------------------------------------
-  // 2️⃣ EXTENSION — PUBLIC BOOTSTRAP ENDPOINTS
-  // ------------------------------------------------
-  if (path === "/api/extension/init" || path === "/api/extension/exchange") {
-    return NextResponse.next();
-  }
-
-  // ------------------------------------------------
-  // 3️⃣ EXTENSION — PROTECTED (Bearer token)
-  // ------------------------------------------------
+  // ✅ Always allow ALL extension routes
   if (path.startsWith("/api/extension")) {
-    const authHeader = req.headers.get("authorization");
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json(
-        { error: "Missing or invalid extension token" },
-        { status: 401 }
-      );
-    }
-
     return NextResponse.next();
   }
 
-  // ------------------------------------------------
-  // 4️⃣ WEB APIs — NextAuth cookie only
-  // ------------------------------------------------
+  // 🔐 Protect other API routes via session cookie
   if (path.startsWith("/api/")) {
     const sessionToken =
       req.cookies.get("next-auth.session-token")?.value ||
