@@ -10,7 +10,8 @@ export async function verifyExtensionTokenFromString(
 
   try {
     const { payload } = await jwtVerify(token, secret, {
-      audience: "rasphia_extension", // IMPORTANT
+      audience: "rasphia_extension",
+      issuer: "rasphia", // 🔒 IMPORTANT
     });
 
     return payload.sub as string; // EMAIL

@@ -5,12 +5,80 @@ import OpenAI from "openai";
 import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
 import { loadPersona } from "@/app/lib/loadPersona";
 import clientPromise from "@/app/lib/mongodb";
-import { ObjectId } from "mongodb";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+});
+
+/**
+ * 🔒 Hard JSON contract enforced by OpenAI
+ * This shape is aligned with normalizeInsight()
+ */
+const PRODUCT_INSIGHT_SCHEMA = {
+  name: "product_insight",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "title",
+      "brand",
+      "price",
+      "discount",
+      "rating",
+      "numberOfReviews",
+      "productUrl",
+      "image",
+      "domain",
+      "confidence",
+      "fitForUser",
+      "overallRecommendation",
+    ],
+    properties: {
+      title: { type: "string" },
+      brand: { type: ["string", "null"] },
+      price: { type: ["number", "null"] },
+      discount: { type: ["string", "null"] },
+
+      rating: {
+        type: ["object", "null"],
+        required: ["score", "count"],
+        properties: {
+          score: { type: "number" },
+          count: { type: "number" },
+        },
+      },
+
+      numberOfReviews: { type: ["number", "null"] },
+      productUrl: { type: ["string", "null"] },
+      image: { type: ["string", "null"] },
+      domain: { type: ["string", "null"] },
+
+      confidence: {
+        type: "number",
+        minimum: 0,
+        maximum: 1,
+      },
+
+      fitForUser: { type: ["string", "null"] },
+
+      overallRecommendation: {
+        type: "object",
+        required: ["suitability", "notes"],
+        properties: {
+          suitability: {
+            type: "string",
+            enum: ["high", "medium", "low"],
+          },
+          notes: { type: "string" },
+        },
+      },
+    },
+  },
+};
 
 export async function POST(req: Request) {
   try {
+    // 🔐 Extension auth
     const email = await verifyExtensionToken(req.headers.get("authorization"));
     if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -21,86 +89,60 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing product" }, { status: 400 });
     }
 
+    // DB + persona
     const client = await clientPromise;
     const db = client.db("rasphia");
-
     const persona = await loadPersona(email);
 
+    // 🧠 Prompt (no formatting tricks needed)
     const prompt = `
-Analyze this product for this specific user.
+Analyze the following product strictly for this user.
 
 User Persona:
 ${JSON.stringify(persona, null, 2)}
 
 Product Data:
 ${JSON.stringify(product, null, 2)}
-
-Return structured JSON only.
 `;
 
+    // 🤖 OpenAI call with HARD schema enforcement
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.6,
+      temperature: 0.4,
+      response_format: {
+        type: "json_schema",
+        json_schema: PRODUCT_INSIGHT_SCHEMA,
+      },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a strict JSON generator. Output must match the schema exactly.",
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
     });
-    let raw = completion.choices[0].message?.content ?? "{}";
 
-    // Remove ```json ``` wrappers safely
-    raw = raw
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/```$/i, "")
-      .trim();
+    const raw = completion.choices[0].message?.content;
+    if (!raw) throw new Error("Empty model response");
 
     const analysis = JSON.parse(raw);
-    console.log("analysis is", analysis);
-    let chat = null;
 
-    /*if (chatId) {
-      chat = await db
-        .collection("chats")
-        .findOne({ _id: new ObjectId(chatId) });
-
-      // ❗ FIXED: correct field
-      if (chat && chat.email !== email) {
-        return NextResponse.json(
-          { error: "Forbidden: You do not own this chat" },
-          { status: 403 }
-        );
-      }
-    }
-
-    if (!chat) {
-      const now = new Date().toISOString();
-      const insert = await db.collection("chats").insertOne({
-        email, // ❗ FIXED
-        title: "Product Analysis",
-        createdAt: now,
-        updatedAt: now,
-        messages: [],
-      });
-      chat = { _id: insert.insertedId };
-    }
-
-    const now = new Date().toISOString();
-
-    await db.collection("chats").updateOne(
-      { _id: new ObjectId(chat._id) },
-      {
-        $push: {
-          messages: {
-            author: "assistant",
-            text: analysis,
-            createdAt: now,
-            meta: { type: "product-analysis", product },
-          } as any,
-        },
-        $set: { updatedAt: now },
-      }
+    console.log(
+      JSON.stringify(JSON.stringify(analysis), analysis?.overallRecommendation)
     );
-*/
+    if (!analysis) {
+      throw new Error("Empty model response");
+    }
+
     return NextResponse.json(
-      { chatId: chatId, analysis },
+      {
+        chatId,
+        analysis, // already guaranteed schema-safe
+      },
       {
         status: 200,
         headers: {
@@ -109,8 +151,8 @@ Return structured JSON only.
         },
       }
     );
-  } catch (e) {
-    console.error("❌ SUMMARIZER ERROR:", e);
+  } catch (err) {
+    console.error("❌ SUMMARIZER ERROR:", err);
     return NextResponse.json({ error: "Summarizer failed" }, { status: 500 });
   }
 }
