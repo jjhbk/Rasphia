@@ -12,7 +12,14 @@ export function middleware(req: NextRequest) {
   }
 
   // ------------------------------------------------
-  // 2️⃣ EXTENSION APIs — Bearer token ONLY
+  // 2️⃣ EXTENSION — PUBLIC BOOTSTRAP ENDPOINTS
+  // ------------------------------------------------
+  if (path === "/api/extension/init" || path === "/api/extension/exchange") {
+    return NextResponse.next();
+  }
+
+  // ------------------------------------------------
+  // 3️⃣ EXTENSION — PROTECTED (Bearer token)
   // ------------------------------------------------
   if (path.startsWith("/api/extension")) {
     const authHeader = req.headers.get("authorization");
@@ -24,12 +31,11 @@ export function middleware(req: NextRequest) {
       );
     }
 
-    // Let the route handler verify the token properly
     return NextResponse.next();
   }
 
   // ------------------------------------------------
-  // 3️⃣ WEB APIs — NextAuth session cookie ONLY
+  // 4️⃣ WEB APIs — NextAuth cookie only
   // ------------------------------------------------
   if (path.startsWith("/api/")) {
     const sessionToken =
