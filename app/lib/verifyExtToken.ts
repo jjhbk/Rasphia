@@ -1,14 +1,18 @@
-// lib/verifyExtensionToken.ts
 import { jwtVerify } from "jose";
 
 const secret = new TextEncoder().encode(process.env.EXTENSION_JWT_SECRET!);
 
+/**
+ * Verifies Rasphia extension JWT from request headers.
+ * Uses custom header to avoid Authorization stripping.
+ */
 export async function verifyExtensionToken(
-  authHeader: string | null
+  req: Request
 ): Promise<string | null> {
-  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  // ✅ PRIMARY: custom extension header (PROD SAFE)
+  const token = req.headers.get("x-rasphia-extension-token") || null;
 
-  const token = authHeader.slice("Bearer ".length);
+  if (!token) return null;
 
   try {
     const { payload } = await jwtVerify(token, secret, {

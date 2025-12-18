@@ -80,7 +80,7 @@ const PRODUCT_INSIGHT_SCHEMA = {
 export async function POST(req: Request) {
   try {
     // 🔐 Extension auth
-    const email = await verifyExtensionToken(req.headers.get("authorization"));
+    const email = await verifyExtensionToken(req);
     if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export async function GET(req: Request) {
   try {
     // 1️⃣ EXTENSION-ONLY AUTH
-    const email = await verifyExtensionToken(req.headers.get("authorization"));
+    const email = await verifyExtensionToken(req);
     if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
