@@ -4,14 +4,33 @@ import type { NextRequest } from "next/server";
 export function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
 
-  // 1️⃣ Allow Auth routes to pass through (NextAuth MUST stay public)
+  // ------------------------------------------------
+  // 1️⃣ NextAuth internals — always public
+  // ------------------------------------------------
   if (path.startsWith("/api/auth")) {
     return NextResponse.next();
   }
+
+  // ------------------------------------------------
+  // 2️⃣ EXTENSION APIs — Bearer token ONLY
+  // ------------------------------------------------
   if (path.startsWith("/api/extension")) {
+    const authHeader = req.headers.get("authorization");
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return NextResponse.json(
+        { error: "Missing or invalid extension token" },
+        { status: 401 }
+      );
+    }
+
+    // Let the route handler verify the token properly
     return NextResponse.next();
   }
-  // 2️⃣ Require NextAuth session cookie for all other API routes
+
+  // ------------------------------------------------
+  // 3️⃣ WEB APIs — NextAuth session cookie ONLY
+  // ------------------------------------------------
   if (path.startsWith("/api/")) {
     const sessionToken =
       req.cookies.get("next-auth.session-token")?.value ||
@@ -25,7 +44,6 @@ export function middleware(req: NextRequest) {
   return NextResponse.next();
 }
 
-// 3️⃣ Correct matcher for your Next.js version
 export const config = {
   matcher: ["/api/:path*"],
 };
