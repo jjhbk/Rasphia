@@ -1,15 +1,21 @@
 import Image from "next/image";
 import type { Metadata } from "next";
 
+const BLOB_BASE_URL = process.env.NEXT_PUBLIC_BLOB_BASE_URL;
+
 /* -------------------------------------------
-   Dynamic SEO / Social metadata
+   Metadata (already correct)
 -------------------------------------------- */
 export async function generateMetadata({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const imageUrl = `https://tvzzfsvzdfh5zcwq.public.blob.vercel-storage.com/tryons/${params.id}.png`;
+  const { id } = await params;
+
+  if (!BLOB_BASE_URL) return {};
+
+  const imageUrl = `${BLOB_BASE_URL}/tryons/${id}.png`;
 
   return {
     title: "AI Outfit Try-On | Rasphia",
@@ -28,31 +34,29 @@ export async function generateMetadata({
     },
     twitter: {
       card: "summary_large_image",
-      title: "AI Outfit Try-On | Rasphia",
-      description:
-        "See how this outfit looks using Rasphia’s AI virtual try-on.",
       images: [imageUrl],
     },
   };
 }
 
 /* -------------------------------------------
-   Page UI
+   Page UI (FIXED)
 -------------------------------------------- */
-export default function TryOnSharePage({ params }: { params: { id: string } }) {
-  const imageUrl = `https://tvzzfsvzdfh5zcwq.public.blob.vercel-storage.com/tryons/${params.id}.png`;
+export default async function TryOnSharePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+
+  const imageUrl = BLOB_BASE_URL ? `${BLOB_BASE_URL}/tryons/${id}.png` : "";
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-[#0e0e11] via-[#14141a] to-black text-white flex items-center justify-center px-4">
       <div className="max-w-xl w-full text-center">
         {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-6">
-          <Image
-            src="/icons/icon-128.png"
-            alt="Rasphia"
-            width={36}
-            height={36}
-          />
+          <Image src="/icon128.png" alt="Rasphia" width={36} height={36} />
           <span className="text-lg font-semibold tracking-wide">Rasphia</span>
         </div>
 
@@ -66,13 +70,15 @@ export default function TryOnSharePage({ params }: { params: { id: string } }) {
         </p>
 
         {/* Image */}
-        <div className="relative rounded-2xl overflow-hidden shadow-2xl mb-8 border border-white/10">
-          <img
-            src={imageUrl}
-            alt="AI Outfit Try-On"
-            className="w-full h-auto"
-          />
-        </div>
+        {imageUrl && (
+          <div className="relative rounded-2xl overflow-hidden shadow-2xl mb-8 border border-white/10">
+            <img
+              src={imageUrl}
+              alt="AI Outfit Try-On"
+              className="w-full h-auto"
+            />
+          </div>
+        )}
 
         {/* CTA */}
         <a
