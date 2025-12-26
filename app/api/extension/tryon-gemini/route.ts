@@ -2,19 +2,19 @@ import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { verifyExtensionTokenFromString } from "@/app/lib/verifyExtTokenString";
 import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
+import { put } from "@vercel/blob";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 export const OPTIONS = handleOptions;
 
 export const POST = withExtensionCors(async (req: Request) => {
   try {
-    // Parse form data
     const form = await req.formData();
     const userFile = form.get("userImage") as File | null;
     const productUrl = form.get("productImageUrl") as string | null;
     const extToken = form.get("ext_token") as string | null;
 
-    // Auth
     if (!extToken) {
       return NextResponse.json({ error: "Missing token" }, { status: 401 });
     }
@@ -31,7 +31,7 @@ export const POST = withExtensionCors(async (req: Request) => {
       );
     }
 
-    console.log("GEMINI TRYON REQUEST for:", email);
+    console.log("👗 GEMINI TRY-ON for:", email);
 
     // Fetch product image
     const productRes = await fetch(productUrl);
@@ -46,11 +46,11 @@ export const POST = withExtensionCors(async (req: Request) => {
     const productBase64 = productBuf.toString("base64");
     const productMime = productRes.headers.get("content-type") || "image/jpeg";
 
-    // Convert user image
+    // User image
     const userBuf = Buffer.from(await userFile.arrayBuffer());
     const userBase64 = userBuf.toString("base64");
 
-    // Init Gemini client
+    // Gemini
     const ai = new GoogleGenAI({
       apiKey: process.env.GEMINI_API_KEY!,
     });
@@ -73,7 +73,6 @@ CRITICAL REQUIREMENTS:
 - OUTPUT: A high-quality photorealistic image.`,
     };
 
-    // Gemini contents
     const contents = [
       prompt,
       {
@@ -90,7 +89,6 @@ CRITICAL REQUIREMENTS:
       },
     ];
 
-    // Gemini call
     const response = await ai.models.generateContent({
       model: "gemini-3-pro-image-preview",
       contents,
@@ -108,17 +106,30 @@ CRITICAL REQUIREMENTS:
       );
     }
 
-    const resultBase64 = (parts[0] as any).inlineData.data;
+    // Convert Gemini base64 → buffer
+    const imageBase64 = (parts[0] as any).inlineData.data;
+    const imageBuffer = Buffer.from(imageBase64, "base64");
+
+    // Upload to Vercel Blob
+    const id = crypto.randomUUID();
+
+    const blob = await put(`tryons/${id}.png`, imageBuffer, {
+      access: "public",
+      contentType: "image/png",
+    });
+
+    const shareUrl = `https://rasphia.com/tryon/${id}`;
 
     return NextResponse.json(
       {
         ok: true,
-        tryonImage: resultBase64,
+        tryonImage: blob.url,
+        shareUrl: shareUrl,
       },
       { status: 200 }
     );
   } catch (err: any) {
-    console.error("🔥 GEMINI TRYON ERROR:", err);
+    console.error("🔥 TRY-ON ERROR:", err);
     return NextResponse.json(
       { error: "server_error", detail: String(err) },
       { status: 500 }
