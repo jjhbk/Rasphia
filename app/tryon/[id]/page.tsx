@@ -9,7 +9,7 @@ export async function generateMetadata({
 }: {
   params: { id: string };
 }): Promise<Metadata> {
-  const imageUrl = `https://blob.vercel-storage.com/tryons/${params.id}.png`;
+  const imageUrl = `https://tvzzfsvzdfh5zcwq.public.blob.vercel-storage.com/tryons/${params.id}.png`;
 
   return {
     title: "AI Outfit Try-On | Rasphia",
