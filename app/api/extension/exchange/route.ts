@@ -36,8 +36,19 @@ export async function POST(req: Request) {
     .setExpirationTime("7d") // exp
     .sign(secret);
 
-  return NextResponse.json({
-    access_token: jwtToken,
-    expires_in: 7 * 24 * 3600,
-  });
+  return NextResponse.json(
+    {
+      access_token: jwtToken,
+      expires_in: 7 * 24 * 3600,
+    },
+    {
+      status: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "chrome-extension://*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers":
+          "Content-Type, Authorization, X-Rasphia-Extension-Token",
+      },
+    }
+  );
 }

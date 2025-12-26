@@ -39,7 +39,15 @@ export async function GET(req: Request) {
 
     const redirectUrl = `chrome-extension://${EXT_ID}/bridge/bridge.html?token=${token}`;
 
-    return NextResponse.redirect(redirectUrl, { status: 302 });
+    return NextResponse.redirect(redirectUrl, {
+      status: 302,
+      headers: {
+        "Access-Control-Allow-Origin": "chrome-extension://*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers":
+          "Content-Type, Authorization, X-Rasphia-Extension-Token",
+      },
+    });
   }
 
   return NextResponse.json({ one_time_token: token });
