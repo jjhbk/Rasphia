@@ -1,15 +1,16 @@
-// app/api/chats/summarize/route.ts
-
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
 import { loadPersona } from "@/app/lib/loadPersona";
 import clientPromise from "@/app/lib/mongodb";
+import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
+
 export const runtime = "nodejs";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
+export const OPTIONS = handleOptions;
 
 /**
  * 🔒 Hard JSON contract enforced by OpenAI
@@ -77,7 +78,7 @@ const PRODUCT_INSIGHT_SCHEMA = {
   },
 };
 
-export async function POST(req: Request) {
+export const POST = withExtensionCors(async (req: Request) => {
   try {
     // 🔐 Extension auth
     const email = await verifyExtensionToken(req);
@@ -95,7 +96,7 @@ export async function POST(req: Request) {
     const db = client.db("rasphia");
     const persona = await loadPersona(email);
 
-    // 🧠 Prompt (no formatting tricks needed)
+    // 🧠 Prompt
     const prompt = `
 Analyze the following product strictly for this user.
 
@@ -131,29 +132,19 @@ ${JSON.stringify(product, null, 2)}
     if (!raw) throw new Error("Empty model response");
 
     const analysis = JSON.parse(raw);
-
-    console.log(
-      JSON.stringify(JSON.stringify(analysis), analysis?.overallRecommendation)
-    );
     if (!analysis) {
-      throw new Error("Empty model response");
+      throw new Error("Invalid model response");
     }
 
     return NextResponse.json(
       {
         chatId,
-        analysis, // already guaranteed schema-safe
+        analysis, // schema-guaranteed
       },
-      {
-        status: 200,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-      }
+      { status: 200 }
     );
   } catch (err) {
     console.error("❌ SUMMARIZER ERROR:", err);
     return NextResponse.json({ error: "Summarizer failed" }, { status: 500 });
   }
-}
+});

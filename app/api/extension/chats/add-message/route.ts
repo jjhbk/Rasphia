@@ -4,11 +4,16 @@ import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
 import { loadPersona } from "@/app/lib/loadPersona";
 import clientPromise from "@/app/lib/mongodb";
 import { ObjectId } from "mongodb";
+import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
+
 export const runtime = "nodejs";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+export const OPTIONS = handleOptions;
 
-export async function POST(req: Request) {
+export const POST = withExtensionCors(async (req: Request) => {
   try {
     // 1️⃣ EXTENSION-ONLY AUTH
     const email = await verifyExtensionToken(req);
@@ -32,15 +37,14 @@ export async function POST(req: Request) {
     const persona = await loadPersona(email);
 
     // 4️⃣ Load or create chat
-    let chat = null;
+    let chat: any = null;
 
     if (chatId) {
       chat = await db
         .collection("chats")
         .findOne({ _id: new ObjectId(chatId) });
 
-      // Ownership check
-      if (chat && chat.email !== email) {
+      if (chat && chat.userEmail !== email) {
         return NextResponse.json(
           { error: "Forbidden: You do not own this chat" },
           { status: 403 }
@@ -48,7 +52,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // If chat not found → create new one
     if (!chat) {
       const now = new Date().toISOString();
       const res = await db.collection("chats").insertOne({
@@ -62,7 +65,7 @@ export async function POST(req: Request) {
       chat = { _id: res.insertedId, messages: [] };
     }
 
-    // 5️⃣ Build OpenAI message context
+    // 5️⃣ Build OpenAI context
     const formattedMessages = [
       {
         role: "system",
@@ -74,11 +77,11 @@ User Persona:
 ${JSON.stringify(persona, null, 2)}
 
 Always provide:
-- personalised suggestions,
-- safe ingredient guidance,
-- suitability per skin/hair type,
-- budget-friendly options,
-- lifestyle-aware solutions.
+- personalised suggestions
+- safe ingredient guidance
+- suitability per skin/hair type
+- budget-friendly options
+- lifestyle-aware solutions
 
 Avoid hallucinating ingredients or claims.`,
       },
@@ -89,7 +92,7 @@ Avoid hallucinating ingredients or claims.`,
       { role: "user", content: query },
     ];
 
-    // 6️⃣ OpenAI API Call
+    // 6️⃣ OpenAI call
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
       messages: formattedMessages,
@@ -103,7 +106,7 @@ Avoid hallucinating ingredients or claims.`,
 
     const now = new Date().toISOString();
 
-    // 7️⃣ Save BOTH user + assistant messages in one update
+    // 7️⃣ Persist messages
     await db.collection("chats").updateOne(
       { _id: new ObjectId(chat._id) },
       {
@@ -119,31 +122,13 @@ Avoid hallucinating ingredients or claims.`,
       }
     );
 
-    // 8️⃣ Return response
-    return NextResponse.json(
-      {
-        chatId: chat._id,
-        reply,
-      },
-      {
-        status: 200,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-      }
-    );
+    // 8️⃣ Response
+    return NextResponse.json({
+      chatId: chat._id,
+      reply,
+    });
   } catch (err) {
     console.error("❌ /chats/send ERROR:", err);
-    return NextResponse.json(
-      { error: "Chat route failed" },
-      {
-        status: 500,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-      }
-    );
+    return NextResponse.json({ error: "Chat route failed" }, { status: 500 });
   }
-}
+});

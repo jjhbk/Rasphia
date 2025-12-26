@@ -1,54 +1,66 @@
 import { SignJWT } from "jose";
 import { NextResponse } from "next/server";
 import clientPromise from "@/app/lib/mongodb";
+import { withExtensionCors } from "@/app/lib/extensionCors";
+
 export const runtime = "nodejs";
 
 const secret = new TextEncoder().encode(process.env.EXTENSION_JWT_SECRET!);
 
-export async function POST(req: Request) {
+/**
+ * ✅ REQUIRED for Chrome extension preflight
+ * Next.js App Router will NOT call POST for OPTIONS
+ */
+export const OPTIONS = withExtensionCors(async () => {
+  return new NextResponse(null);
+});
+
+export const POST = withExtensionCors(async (req: Request) => {
   const { one_time_token } = await req.json();
+
+  if (!one_time_token) {
+    return NextResponse.json(
+      { error: "Missing one_time_token" },
+      { status: 400 }
+    );
+  }
+
   const client = await clientPromise;
   const db = client.db("rasphia");
 
-  const tokenRecord = await db.collection("extension_tokens").findOne({
-    token: one_time_token,
-  });
+  const tokenRecord = await db
+    .collection("extension_tokens")
+    .findOne({ token: one_time_token });
 
-  if (!tokenRecord)
+  if (!tokenRecord) {
     return NextResponse.json({ error: "Invalid token" }, { status: 400 });
+  }
 
-  if (tokenRecord.consumed)
+  if (tokenRecord.consumed) {
     return NextResponse.json({ error: "Token already used" }, { status: 400 });
+  }
 
-  if (new Date(tokenRecord.expiresAt) < new Date())
+  if (new Date(tokenRecord.expiresAt) < new Date()) {
     return NextResponse.json({ error: "Token expired" }, { status: 400 });
+  }
 
   await db
     .collection("extension_tokens")
     .updateOne({ token: one_time_token }, { $set: { consumed: true } });
 
-  // ✅ FINAL, CORRECT JWT
   const jwtToken = await new SignJWT({})
-    .setProtectedHeader({ alg: "HS256" }) // 🔥 REQUIRED
-    .setSubject(tokenRecord.email) // sub
-    .setAudience("rasphia_extension") // aud
-    .setIssuer("rasphia") // iss
-    .setExpirationTime("7d") // exp
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(tokenRecord.email)
+    .setAudience("rasphia_extension")
+    .setIssuer("rasphia")
+    .setExpirationTime("7d")
     .sign(secret);
 
   return NextResponse.json(
     {
       access_token: jwtToken,
-      expires_in: 7 * 24 * 3600,
+      expires_in: 7 * 24 * 60 * 60,
     },
-    {
-      status: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "chrome-extension://*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers":
-          "Content-Type, Authorization, X-Rasphia-Extension-Token",
-      },
-    }
+    { status: 200 }
   );
-}
+});

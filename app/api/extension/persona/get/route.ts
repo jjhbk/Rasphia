@@ -1,12 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import clientPromise from "@/app/lib/mongodb";
 import { defaultPersona } from "@/app/utils/defaultPersona";
 import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
-export const runtime = "nodejs";
+import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
 
-export async function GET(req: NextRequest) {
+export const runtime = "nodejs";
+export const OPTIONS = handleOptions;
+
+export const GET = withExtensionCors(async (req: Request) => {
   try {
-    // 1️⃣ EXTENSION TOKEN AUTH (NOT session-based)
+    // 1️⃣ Extension token auth (NOT session-based)
     const email = await verifyExtensionToken(req);
     if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -15,7 +18,7 @@ export async function GET(req: NextRequest) {
     const client = await clientPromise;
     const db = client.db("rasphia");
 
-    // 2️⃣ Fetch user by verified extension token email
+    // 2️⃣ Fetch user persona
     const user = await db
       .collection("users")
       .findOne({ email }, { projection: { persona: 1 } });
@@ -26,7 +29,7 @@ export async function GET(req: NextRequest) {
       ...(user?.persona || {}),
     };
 
-    // 4️⃣ Build extension-friendly "preview"
+    // 4️⃣ Extension-friendly preview
     const preview = {
       name: persona.name || "Your Persona",
       summary: persona.summary || "",
@@ -47,4 +50,4 @@ export async function GET(req: NextRequest) {
     console.error("EXT-PERSONA-GET ERROR:", err);
     return NextResponse.json({ error: "server_error" }, { status: 500 });
   }
-}
+});

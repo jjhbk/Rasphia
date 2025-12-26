@@ -1,4 +1,4 @@
-import { validateWebhookSignature } from "razorpay/dist/utils/razorpay-utils";
+import crypto from "crypto";
 import clientPromise from "@/app/lib/mongodb";
 import { NextResponse } from "next/server";
 
@@ -24,21 +24,18 @@ export async function POST(req: Request) {
       );
     }
 
+    // 🔐 CORRECT Razorpay Checkout signature verification
     const secret = process.env.RAZORPAY_KEY_SECRET!;
     const body = `${razorpay_order_id}|${razorpay_payment_id}`;
 
-    const isValidSignature = validateWebhookSignature(
-      body,
-      razorpay_signature,
-      secret
-    );
+    const expectedSignature = crypto
+      .createHmac("sha256", secret)
+      .update(body)
+      .digest("hex");
 
-    const client = await clientPromise;
-    const db = client.db("rasphia");
-
-    if (!isValidSignature) {
+    if (expectedSignature !== razorpay_signature) {
       console.warn(
-        "⚠️ Invalid Razorpay signature for order:",
+        "⚠️ Invalid Razorpay checkout signature for order:",
         razorpay_order_id
       );
       return NextResponse.json(
@@ -46,6 +43,9 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+
+    const client = await clientPromise;
+    const db = client.db("rasphia");
 
     // ✅ Update the order as paid
     const orderUpdate = await db.collection("orders").findOneAndUpdate(
@@ -56,11 +56,11 @@ export async function POST(req: Request) {
           payment_id: razorpay_payment_id,
           verifiedAt: new Date(),
         },
-      },
-      { returnDocument: "after" }
+      }
     );
+    console.log("order doc is:", orderUpdate);
 
-    const orderDoc: any = orderUpdate?.value;
+    const orderDoc: any = orderUpdate;
     if (!orderDoc) {
       console.warn("⚠️ No order found for verification:", razorpay_order_id);
     }
@@ -85,7 +85,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ Ensure product record exists (for non-credit purchases)
+    // ✅ Ensure product record exists
     if (product?.name) {
       await db.collection("products").updateOne(
         { name: product.name },
@@ -110,6 +110,7 @@ export async function POST(req: Request) {
     // - order document in DB, or
     // - totalAmount passed from the client as a fallback.
     if (email) {
+      console.log("updating the ledger....", email);
       const rupees =
         typeof orderDoc?.amount === "number"
           ? orderDoc.amount

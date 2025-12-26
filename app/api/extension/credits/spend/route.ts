@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server";
 import clientPromise from "@/app/lib/mongodb";
 import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
+import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
+
 export const runtime = "nodejs";
+export const OPTIONS = handleOptions;
 
-export async function POST(req: Request) {
+export const POST = withExtensionCors(async (req: Request) => {
+  // 1️⃣ Extension auth
   const email = await verifyExtensionToken(req);
-  if (!email)
+  if (!email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
+  // 2️⃣ Parse + validate input
   const { amount, reason } = await req.json();
 
   const client = await clientPromise;
@@ -32,9 +38,10 @@ export async function POST(req: Request) {
     email,
     type: "debit",
     amount,
-    reason,
+    reason: reason ?? "usage",
     createdAt: new Date(),
   });
 
-  return NextResponse.json({ ok: true });
-}
+  // 5️⃣ Response
+  return NextResponse.json({ ok: true }, { status: 200 });
+});

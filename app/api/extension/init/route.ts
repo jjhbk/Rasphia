@@ -11,11 +11,21 @@ export async function GET(req: Request) {
 
   const session = await getServerSession(authOptions);
 
+  // Get the base URL (works for both localhost and production)
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXTAUTH_URL || url.origin;
+
   if (!session?.user?.email) {
     if (isExtension) {
-      return NextResponse.redirect("https://rasphia.com/login?ext=1", {
-        status: 302,
-      });
+      // Redirect to login with return URL
+      return NextResponse.redirect(
+        `${baseUrl}&returnUrl=${encodeURIComponent(
+          "/api/extension/init?ext=1"
+        )}`,
+        {
+          status: 302,
+        }
+      );
     }
     return NextResponse.json({ error: "Not logged in" }, { status: 401 });
   }
@@ -35,9 +45,8 @@ export async function GET(req: Request) {
   });
 
   if (isExtension) {
-    const EXT_ID = process.env.NEXT_PUBLIC_EXTENSION_ID;
-
-    const redirectUrl = `chrome-extension://${EXT_ID}/bridge/bridge.html?token=${token}`;
+    // Redirect to HTTPS callback page (extension script will handle it)
+    const redirectUrl = `${baseUrl}/extension/auth?token=${token}`;
 
     return NextResponse.redirect(redirectUrl, {
       status: 302,

@@ -1,11 +1,13 @@
-// app/api/chats/get/route.ts
 import { NextResponse } from "next/server";
 import clientPromise from "@/app/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
-export const runtime = "nodejs";
+import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
 
-export async function GET(req: Request) {
+export const runtime = "nodejs";
+export const OPTIONS = handleOptions;
+
+export const GET = withExtensionCors(async (req: Request) => {
   try {
     // 1️⃣ EXTENSION-ONLY AUTH
     const email = await verifyExtensionToken(req);
@@ -18,7 +20,7 @@ export async function GET(req: Request) {
     const chatId = url.searchParams.get("chatId");
 
     if (!chatId) {
-      return NextResponse.json({ error: "Missing id" }, { status: 400 });
+      return NextResponse.json({ error: "Missing chatId" }, { status: 400 });
     }
 
     // 3️⃣ Connect to DB
@@ -34,8 +36,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
     }
 
-    // 5️⃣ Ownership check (new schema uses `email`)
-    if (chat.email !== email) {
+    // 5️⃣ Ownership check (extension schema)
+    if (chat.userEmail !== email) {
       return NextResponse.json(
         { error: "Forbidden: You do not own this chat" },
         { status: 403 }
@@ -43,24 +45,12 @@ export async function GET(req: Request) {
     }
 
     // 6️⃣ Return chat
-    return NextResponse.json(chat, {
-      status: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      },
-    });
+    return NextResponse.json(chat, { status: 200 });
   } catch (err: any) {
     console.error("❌ Chat fetch error:", err);
     return NextResponse.json(
       { error: err.message || "Server error" },
-      {
-        status: 500,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-      }
+      { status: 500 }
     );
   }
-}
+});

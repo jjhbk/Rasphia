@@ -1,11 +1,13 @@
-// app/api/chats/create/route.ts
 import { NextResponse } from "next/server";
 import clientPromise from "@/app/lib/mongodb";
 import { ChatSession, Message } from "@/app/types";
 import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
-export const runtime = "nodejs";
+import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
 
-export async function POST(req: Request) {
+export const runtime = "nodejs";
+export const OPTIONS = handleOptions;
+
+export const POST = withExtensionCors(async (req: Request) => {
   try {
     // 1️⃣ EXTENSION-ONLY AUTH
     const email = await verifyExtensionToken(req);
@@ -27,7 +29,7 @@ export async function POST(req: Request) {
 
     // 4️⃣ New chat schema (extension version)
     const newChat: Omit<ChatSession, "_id"> = {
-      userEmail: email, // 👈 extension user identity
+      userEmail: email,
       title: firstMessage.text.slice(0, 50) || "New Chat",
       createdAt: now,
       updatedAt: now,
@@ -41,25 +43,13 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       { ...newChat, _id: res.insertedId },
-      {
-        status: 201,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-      }
+      { status: 201 }
     );
   } catch (err: any) {
     console.error("❌ Chat Create Error:", err);
     return NextResponse.json(
       { error: err.message || "Server error" },
-      {
-        status: 500,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-      }
+      { status: 500 }
     );
   }
-}
+});

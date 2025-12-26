@@ -1,11 +1,13 @@
-// app/api/chats/rename/route.ts
 import { NextResponse } from "next/server";
 import clientPromise from "@/app/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
-export const runtime = "nodejs";
+import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
 
-export async function POST(req: Request) {
+export const runtime = "nodejs";
+export const OPTIONS = handleOptions;
+
+export const POST = withExtensionCors(async (req: Request) => {
   try {
     // 1️⃣ EXTENSION-ONLY AUTH
     const email = await verifyExtensionToken(req);
@@ -24,14 +26,14 @@ export async function POST(req: Request) {
     const db = client.db("rasphia");
     const coll = db.collection("chats");
 
-    // 3️⃣ Find chat + verify ownership
+    // 3️⃣ Find chat + verify ownership (extension schema)
     const chat = await coll.findOne({ _id: new ObjectId(chatId) });
 
     if (!chat) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
     }
 
-    if (chat.email !== email) {
+    if (chat.userEmail !== email) {
       return NextResponse.json(
         { error: "Forbidden: You do not own this chat" },
         { status: 403 }
@@ -40,9 +42,10 @@ export async function POST(req: Request) {
 
     const now = new Date().toISOString();
 
-    // 4️⃣ Provided title → update directly
-    if (title && typeof title === "string" && title.trim().length > 0) {
+    // 4️⃣ Explicit title provided
+    if (typeof title === "string" && title.trim().length > 0) {
       const finalTitle = title.trim();
+
       await coll.updateOne(
         { _id: new ObjectId(chatId) },
         { $set: { title: finalTitle, updatedAt: now } }
@@ -50,20 +53,14 @@ export async function POST(req: Request) {
 
       return NextResponse.json(
         { ok: true, title: finalTitle },
-        {
-          status: 200,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          },
-        }
+        { status: 200 }
       );
     }
 
     // 5️⃣ Auto-generate title from last user message
     const messages = chat.messages ?? [];
 
-    let candidate =
+    const candidate =
       messages
         .slice()
         .reverse()
@@ -80,27 +77,12 @@ export async function POST(req: Request) {
       { $set: { title: finalTitle, updatedAt: now } }
     );
 
-    return NextResponse.json(
-      { ok: true, title: finalTitle },
-      {
-        status: 200,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-      }
-    );
+    return NextResponse.json({ ok: true, title: finalTitle }, { status: 200 });
   } catch (err: any) {
     console.error("❌ Chat rename error:", err);
     return NextResponse.json(
       { error: err.message || "Server error" },
-      {
-        status: 500,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-      }
+      { status: 500 }
     );
   }
-}
+});
