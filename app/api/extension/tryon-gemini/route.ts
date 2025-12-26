@@ -119,11 +119,11 @@ CRITICAL REQUIREMENTS:
     });
 
     const shareUrl = `https://rasphia.com/tryon/${id}`;
-
+    console.log("the links are", blob.url, blob.downloadUrl, shareUrl);
     return NextResponse.json(
       {
         ok: true,
-        tryonImage: blob.url,
+        imageUrl: blob.url,
         shareUrl: shareUrl,
       },
       { status: 200 }

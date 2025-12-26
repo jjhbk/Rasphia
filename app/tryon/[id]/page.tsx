@@ -40,7 +40,7 @@ export async function generateMetadata({
    Page UI
 -------------------------------------------- */
 export default function TryOnSharePage({ params }: { params: { id: string } }) {
-  const imageUrl = `https://blob.vercel-storage.com/tryons/${params.id}.png`;
+  const imageUrl = `https://tvzzfsvzdfh5zcwq.public.blob.vercel-storage.com/tryons/${params.id}.png`;
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-[#0e0e11] via-[#14141a] to-black text-white flex items-center justify-center px-4">
