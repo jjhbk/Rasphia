@@ -55,6 +55,7 @@ export const authOptions: NextAuthOptions = {
           phone: "",
           address: "",
           wishlist: [],
+          credits:50,
           createdAt: new Date(),
           updatedAt: new Date(),
         });
