@@ -59,18 +59,42 @@ export const POST = withExtensionCors(async (req: Request) => {
     const prompt = {
       text: `
 Identify the images provided:
-1. The FIRST image is the "Target Outfit" (clothing product).
-2. The SECOND image is the "User Model" (person).
+1. The FIRST image is the "Target Product".
+2. The SECOND image is the "User Model".
 
-TASK: Create a photorealistic virtual try-on.
-Generate a NEW image of the person from the SECOND image wearing the outfit from the FIRST image.
+TASK:
+Create a photorealistic digital try-on by generating a NEW image of the User Model wearing or using the Target Product.
 
-CRITICAL REQUIREMENTS:
-- STRUCTURE: Preserve the exact pose, body shape, and environment of the User Model (Image 2).
-- IDENTITY: Keep the User Model's face, hair, and skin tone exactly as they appear.
-- CLOTHING: Replace the User Model's original clothes entirely with the Target Outfit (Image 1).
-- REALISM: Ensure natural fabric draping, lighting matching the room, and realistic shadows.
-- OUTPUT: A high-quality photorealistic image.`,
+CORE REQUIREMENTS:
+- STRUCTURE: Preserve the exact pose, body shape, facial structure, and environment of the User Model.
+- IDENTITY: Keep the User Model’s face, hair, skin tone, and expression exactly as shown.
+- REALISM: Match lighting, shadows, reflections, and perspective to the original environment.
+- QUALITY: Output a high-resolution, photorealistic image with natural textures and materials.
+
+PRODUCT APPLICATION RULES:
+- If the Target Product is CLOTHING or FOOTWEAR:
+  - Replace ONLY the relevant clothing or footwear region.
+  - Preserve all other clothing and accessories.
+  - Ensure realistic fabric drape, folds, and grounding with accurate shadows.
+
+- If the Target Product is JEWELLERY, EYEWEAR, or ACCESSORIES:
+  - Preserve the User Model’s original clothing.
+  - Place the product on anatomically correct positions:
+    - Eyewear → nose bridge and ears
+    - Jewellery → neck, ears, wrists, fingers
+    - Accessories → hands, shoulders, waist, or wrist as appropriate
+  - Ensure correct scale, weight, and natural alignment.
+  - Avoid floating, clipping, or distortion.
+
+- If the Target Product is a HIGH-END or LUXURY item:
+  - Preserve fine details such as stitching, texture grain, metal reflections, and brand elements.
+  - Avoid over-smoothing or artificial beautification.
+  - Maintain a premium, realistic look rather than a stylized or exaggerated output.
+
+FINAL OUTPUT:
+- The result must look like a real photograph taken in the same environment as the original User Model image.
+
+`,
     };
 
     const contents = [
