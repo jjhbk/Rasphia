@@ -31,6 +31,20 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
+    async redirect({ url, baseUrl }) {
+      // ✅ ALLOW extension init callback
+      if (url.startsWith(`${baseUrl}/api/extension/init`)) {
+        return url;
+      }
+
+      // Allow normal internal redirects
+      if (url.startsWith(baseUrl)) {
+        return url;
+      }
+
+      // Block external redirects
+      return baseUrl;
+    },
   },
 
   events: {
@@ -55,7 +69,7 @@ export const authOptions: NextAuthOptions = {
           phone: "",
           address: "",
           wishlist: [],
-          credits:50,
+          credits: 50,
           createdAt: new Date(),
           updatedAt: new Date(),
         });
