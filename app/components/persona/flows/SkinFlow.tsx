@@ -252,7 +252,7 @@ export default function SkinFlow({
           ))}
 
           {/* ANALYZE BUTTON */}
-          {files.length > 0 && (
+          {
             <button
               disabled={isProcessingAll}
               onClick={analyzeAll}
@@ -264,10 +264,10 @@ export default function SkinFlow({
                 "Analyze Images"
               )}
             </button>
-          )}
+          }
 
           {/* FORM AFTER ANALYSIS */}
-          {results.length > 0 && (
+          {
             <div className="mt-6 space-y-4">
               <h3 className="font-semibold">Refine Your Skin Profile</h3>
 
@@ -464,7 +464,7 @@ export default function SkinFlow({
                 Save Skin Profile
               </button>
             </div>
-          )}
+          }
         </div>
       </div>
     </>

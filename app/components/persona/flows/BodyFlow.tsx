@@ -36,6 +36,19 @@ export default function BodyFlow({
   const [hipWidth, setHipWidth] = useState("average");
   const [chestShape, setChestShape] = useState("average");
   const [waistShape, setWaistShape] = useState("average");
+  // ----------------------------------------------------
+  // BODY MEASUREMENTS (USER INPUT)
+  // ----------------------------------------------------
+  const [gender, setGender] = useState("");
+  const [heightCm, setHeightCm] = useState<number | "">("");
+  const [weightKg, setWeightKg] = useState<number | "">("");
+
+  // Clothing fit measurements (cm)
+  const [chestCm, setChestCm] = useState<number | "">("");
+  const [waistCm, setWaistCm] = useState<number | "">("");
+  const [hipCm, setHipCm] = useState<number | "">("");
+  const [shoulderCm, setShoulderCm] = useState<number | "">("");
+  const [inseamCm, setInseamCm] = useState<number | "">("");
 
   const [fitPreference, setFitPreference] = useState<string[]>([]);
   const [activities, setActivities] = useState<string[]>([]);
@@ -158,7 +171,17 @@ export default function BodyFlow({
         hipWidth,
         chestShape,
         waistShape,
-
+        // Measurements
+        gender,
+        heightCm,
+        weightKg,
+        measurements: {
+          chestCm,
+          waistCm,
+          hipCm,
+          shoulderCm,
+          inseamCm,
+        },
         fitPreferences: fitPreference,
         activities,
         notes,
@@ -253,7 +276,7 @@ export default function BodyFlow({
           ))}
 
           {/* ANALYZE BUTTON */}
-          {files.length > 0 && (
+          {
             <button
               disabled={isProcessingAll}
               onClick={analyzeAll}
@@ -265,14 +288,67 @@ export default function BodyFlow({
                 "Analyze Images"
               )}
             </button>
-          )}
+          }
 
           {/* BODY FORM */}
-          {files.length > 0 && (
+          {
             <div className="mt-6 space-y-4">
               <h3 className="font-semibold text-stone-700">
                 Refine Body Profile
               </h3>
+              <div>
+                <label className="text-xs text-stone-600">Gender</label>
+                <select
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value)}
+                  className="w-full p-3 rounded-xl bg-stone-50"
+                >
+                  <option value="">Prefer not to say</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="non-binary">Non-binary</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-stone-600">Height (cm)</label>
+                  <input
+                    type="number"
+                    value={heightCm}
+                    onChange={(e) => setHeightCm(Number(e.target.value))}
+                    className="w-full p-3 rounded-xl bg-stone-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-stone-600">Weight (kg)</label>
+                  <input
+                    type="number"
+                    value={weightKg}
+                    onChange={(e) => setWeightKg(Number(e.target.value))}
+                    className="w-full p-3 rounded-xl bg-stone-50"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  ["Chest (cm)", chestCm, setChestCm],
+                  ["Waist (cm)", waistCm, setWaistCm],
+                  ["Hip (cm)", hipCm, setHipCm],
+                  ["Shoulder (cm)", shoulderCm, setShoulderCm],
+                  ["Inseam (cm)", inseamCm, setInseamCm],
+                ].map(([label, value, setter]: any) => (
+                  <div key={label}>
+                    <label className="text-xs text-stone-600">{label}</label>
+                    <input
+                      type="number"
+                      value={value}
+                      onChange={(e) => setter(Number(e.target.value))}
+                      className="w-full p-3 rounded-xl bg-stone-50"
+                    />
+                  </div>
+                ))}
+              </div>
 
               {/* BODY TYPE */}
               <div>
@@ -448,7 +524,7 @@ export default function BodyFlow({
                 Save Body Profile
               </button>
             </div>
-          )}
+          }
         </div>
       </div>
     </>

@@ -17,16 +17,13 @@ export async function GET(req: Request) {
 
   if (!session?.user?.email) {
     if (isExtension) {
-      // Redirect to login with return URL
-      return NextResponse.redirect(
-        `${baseUrl}&returnUrl=${encodeURIComponent(
-          "/api/extension/init?ext=1"
-        )}`,
-        {
-          status: 302,
-        }
-      );
+      const signinUrl = `${baseUrl}/api/auth/signin?callbackUrl=${encodeURIComponent(
+        `${baseUrl}/api/extension/init?ext=1`
+      )}`;
+
+      return NextResponse.redirect(signinUrl, { status: 302 });
     }
+
     return NextResponse.json({ error: "Not logged in" }, { status: 401 });
   }
 

@@ -258,7 +258,7 @@ export default function HomeFlow({
           ))}
 
           {/* ANALYZE BUTTON */}
-          {files.length > 0 && (
+          {
             <button
               disabled={isProcessingAll}
               onClick={analyzeAll}
@@ -270,10 +270,10 @@ export default function HomeFlow({
                 "Analyze Home Images"
               )}
             </button>
-          )}
+          }
 
           {/* PERSONA FIELDS */}
-          {results.length > 0 && (
+          {
             <div className="mt-6 space-y-5">
               {/* AESTHETIC */}
               <div>
@@ -452,7 +452,7 @@ export default function HomeFlow({
                 Save Home Profile
               </button>
             </div>
-          )}
+          }
         </div>
       </div>
     </>

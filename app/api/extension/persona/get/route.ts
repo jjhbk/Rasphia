@@ -33,9 +33,74 @@ export const GET = withExtensionCors(async (req: Request) => {
     const preview = {
       name: persona.name || "Your Persona",
       summary: persona.summary || "",
-      skin: { skinType: persona.skin?.skinType || "Unknown" },
-      hair: { hairType: persona.hair?.hairType || "Unknown" },
-      style: { archetypes: persona.style?.archetypes || [] },
+
+      skin: {
+        skinType: persona.skin?.skinType || "Unknown",
+        concerns: persona.skin?.concerns || [],
+        sensitivity: persona.skin?.sensitivity || "",
+        fitzpatrickType: persona.skin?.fitzpatrickType || "",
+        climateContext: persona.skin?.climateContext || "",
+        updatedAt: persona.skin?.updatedAt || null,
+      },
+
+      hair: {
+        hairType: persona.hair?.hairType || "Unknown",
+        density: persona.hair?.density || "",
+        scalpType: persona.hair?.scalpType || "",
+        goals: persona.hair?.goals || [],
+        lifestyle: persona.hair?.lifestyle || [],
+        updatedAt: persona.hair?.updatedAt || null,
+      },
+
+      body: {
+        bodyType: persona.body?.bodyType || "",
+        estimatedBodyFatPercent: persona.body?.estimatedBodyFatPercent || "",
+        proportions: persona.body?.proportions || [],
+        fitPreferences: persona.body?.fitPreferences || [],
+        activities: persona.body?.activities || [],
+        updatedAt: persona.body?.updatedAt || null,
+      },
+
+      lifestyle: {
+        work: persona.lifestyle?.work || "",
+        diet: persona.lifestyle?.diet || "",
+        fitness: persona.lifestyle?.fitness || [],
+        travelFrequency: persona.lifestyle?.travelFrequency || "",
+        climateContext: persona.lifestyle?.climateContext || "",
+        sleepQuality: persona.lifestyle?.sleepQuality || "",
+        stressLevel: persona.lifestyle?.stressLevel || "",
+        updatedAt: persona.lifestyle?.updatedAt || null,
+      },
+
+      taste: {
+        giftingStyle: persona.taste?.giftingStyle || [],
+        homeAesthetic: persona.taste?.homeAesthetic || [],
+        scentPreferences: persona.taste?.scentPreferences || [],
+        materialPreferences: persona.taste?.materialPreferences || [],
+        priceComfort: persona.taste?.priceComfort || "",
+        updatedAt: persona.taste?.updatedAt || null,
+      },
+
+      style: {
+        archetypes: persona.style?.archetypes || [],
+        colorsLike: persona.style?.colorsLike || [],
+        colorsAvoid: persona.style?.colorsAvoid || [],
+        boldness: persona.style?.boldness || "",
+        occasions: persona.style?.occasions || [],
+        footwear: persona.style?.footwear || [],
+        accessories: persona.style?.accessories || [],
+        updatedAt: persona.style?.updatedAt || null,
+      },
+
+      home: {
+        aesthetic: persona.home?.aesthetic || [],
+        materials: persona.home?.materials || [],
+        colors: persona.home?.colors || [],
+        decorElements: persona.home?.decorElements || [],
+        lightingStyle: persona.home?.lightingStyle || "",
+        budget: persona.home?.budget || "",
+        updatedAt: persona.home?.updatedAt || null,
+      },
     };
 
     return NextResponse.json(

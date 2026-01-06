@@ -244,7 +244,7 @@ export default function HairFlow({
           ))}
 
           {/* ANALYZE BUTTON */}
-          {files.length > 0 && (
+          {
             <button
               disabled={isProcessingAll}
               onClick={analyzeAll}
@@ -256,10 +256,10 @@ export default function HairFlow({
                 "Analyze Hair Images"
               )}
             </button>
-          )}
+          }
 
           {/* PERSONA FORM */}
-          {results.length > 0 && (
+          {
             <div className="mt-6 space-y-4">
               <h3 className="font-semibold">Refine Hair Profile</h3>
 
@@ -414,7 +414,7 @@ export default function HairFlow({
                 Save Hair Profile
               </button>
             </div>
-          )}
+          }
         </div>
       </div>
     </>
