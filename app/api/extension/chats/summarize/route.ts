@@ -4,6 +4,7 @@ import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
 import { loadPersona } from "@/app/lib/loadPersona";
 import clientPromise from "@/app/lib/mongodb";
 import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
+import { randomUUID } from "crypto";
 
 export const runtime = "nodejs";
 
@@ -135,10 +136,34 @@ ${JSON.stringify(product, null, 2)}
     if (!analysis) {
       throw new Error("Invalid model response");
     }
+    // 🆔 Generate insight ID
+    const insightId = randomUUID();
+
+    // 📦 Store insight
+    await db.collection("product_insights").insertOne({
+      insightId,
+      email,
+      chatId: chatId || null,
+
+      product: {
+        title: product?.title ?? null,
+        brand: product?.brand ?? null,
+        price: product?.price ?? null,
+        image: product?.image ?? null,
+        productUrl: product?.productUrl ?? null,
+        domain: product?.domain ?? null,
+      },
+
+      analysis, // schema-guaranteed JSON
+
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
     return NextResponse.json(
       {
         chatId,
+        insightId,
         analysis, // schema-guaranteed
       },
       { status: 200 }

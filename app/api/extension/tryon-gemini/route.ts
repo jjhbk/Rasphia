@@ -4,6 +4,7 @@ import { verifyExtensionTokenFromString } from "@/app/lib/verifyExtTokenString";
 import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
 import { put } from "@vercel/blob";
 import crypto from "crypto";
+import clientPromise from "@/app/lib/mongodb";
 
 export const runtime = "nodejs";
 export const OPTIONS = handleOptions;
@@ -144,6 +145,25 @@ FINAL OUTPUT:
 
     const shareUrl = `https://rasphia.com/tryon/${id}`;
     console.log("the links are", blob.url, blob.downloadUrl, shareUrl);
+    // 🗄️ Store try-on record
+    const client = await clientPromise;
+    const db = client.db("rasphia");
+
+    await db.collection("tryons").insertOne({
+      tryonId: id,
+      email: email,
+
+      extSource: "extension",
+
+      productImageUrl: productUrl,
+      userImageName: userFile?.name || null,
+
+      imageUrl: blob.url,
+      shareUrl,
+
+      createdAt: new Date(),
+    });
+
     return NextResponse.json(
       {
         ok: true,

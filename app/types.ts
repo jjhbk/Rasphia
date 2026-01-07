@@ -146,3 +146,48 @@ export interface UserProfile {
   address: string;
   wishlist: Product[];
 }
+
+const BEST_PICK_SCHEMA = {
+  name: "best_pick",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["bestProduct", "verdict", "confidence", "oneLineReason"],
+    properties: {
+      bestProduct: {
+        type: "object",
+        required: [
+          "productId",
+          "title",
+          "image",
+          "price",
+          "productUrl",
+          "domain",
+        ],
+        properties: {
+          productId: { type: "string" },
+          title: { type: "string" },
+          image: { type: ["string", "null"] },
+          price: { type: ["number", "null"] },
+          productUrl: { type: "string" },
+          domain: { type: "string" },
+        },
+      },
+
+      verdict: {
+        type: "string",
+        enum: ["buy", "wait", "skip"],
+      },
+
+      confidence: {
+        type: "number",
+        minimum: 0,
+        maximum: 1,
+      },
+
+      oneLineReason: {
+        type: "string",
+      },
+    },
+  },
+};
