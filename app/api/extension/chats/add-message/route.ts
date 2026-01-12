@@ -7,15 +7,15 @@ import { ObjectId } from "mongodb";
 import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
 
 export const runtime = "nodejs";
+export const OPTIONS = handleOptions;
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-export const OPTIONS = handleOptions;
 
 export const POST = withExtensionCors(async (req: Request) => {
   try {
-    // 1️⃣ EXTENSION-ONLY AUTH
+    // 1️⃣ EXTENSION AUTH
     const email = await verifyExtensionToken(req);
     if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -39,7 +39,7 @@ export const POST = withExtensionCors(async (req: Request) => {
     // 4️⃣ Load or create chat
     let chat: any = null;
 
-    if (chatId) {
+    if (chatId && ObjectId.isValid(chatId)) {
       chat = await db
         .collection("chats")
         .findOne({ _id: new ObjectId(chatId) });
@@ -54,18 +54,34 @@ export const POST = withExtensionCors(async (req: Request) => {
 
     if (!chat) {
       const now = new Date().toISOString();
+
       const res = await db.collection("chats").insertOne({
-        email,
-        title: query.slice(0, 80),
+        userEmail: email, // ✅ FIXED (critical)
+        title: new Date().toLocaleString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        }),
         createdAt: now,
         updatedAt: now,
         messages: [],
+        context: {}, // 👈 context lives here
       });
 
-      chat = { _id: res.insertedId, messages: [] };
+      chat = {
+        _id: res.insertedId,
+        messages: [],
+        context: {},
+      };
     }
 
-    // 5️⃣ Build OpenAI context
+    // 5️⃣ Load chat-scoped product context (if any)
+    const productsContext = chat?.context?.products;
+
+    // 6️⃣ Build OpenAI messages
     const formattedMessages = [
       {
         role: "system",
@@ -76,6 +92,22 @@ haircare expert, home stylist, gifting consultant, and fashion advisor.
 User Persona:
 ${JSON.stringify(persona, null, 2)}
 
+${
+  productsContext
+    ? `
+The user is discussing the following products in this chat.
+This product data is ATTACHED TO THE CHAT and is the single source of truth.
+
+${JSON.stringify(productsContext, null, 2)}
+
+Rules:
+- Use ONLY this product data
+- Do NOT hallucinate missing attributes
+- Do NOT suggest different products unless explicitly asked
+`
+    : ""
+}
+
 Always provide:
 - personalised suggestions
 - safe ingredient guidance
@@ -83,16 +115,19 @@ Always provide:
 - budget-friendly options
 - lifestyle-aware solutions
 
-Avoid hallucinating ingredients or claims.`,
+Avoid hallucinating ingredients or claims.
+`,
       },
-      ...chat.messages.map((m: any) => ({
+
+      ...(chat.messages || []).map((m: any) => ({
         role: m.author === "user" ? "user" : "assistant",
         content: m.text,
       })),
+
       { role: "user", content: query },
     ];
 
-    // 6️⃣ OpenAI call
+    // 7️⃣ OpenAI call
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
       messages: formattedMessages,
@@ -106,7 +141,7 @@ Avoid hallucinating ingredients or claims.`,
 
     const now = new Date().toISOString();
 
-    // 7️⃣ Persist messages
+    // 8️⃣ Persist messages
     await db.collection("chats").updateOne(
       { _id: new ObjectId(chat._id) },
       {
@@ -122,7 +157,7 @@ Avoid hallucinating ingredients or claims.`,
       }
     );
 
-    // 8️⃣ Response
+    // 9️⃣ Response
     return NextResponse.json({
       chatId: chat._id,
       reply,

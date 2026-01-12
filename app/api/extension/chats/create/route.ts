@@ -18,21 +18,69 @@ export const POST = withExtensionCors(async (req: Request) => {
     // 2️⃣ Parse body
     const { initialMessage } = await req.json();
 
-    const now = new Date().toISOString();
+    const now = new Date();
+    function formatChatTitle(date: Date) {
+      return date.toLocaleString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+    }
 
     // 3️⃣ Ensure first message exists
     const firstMessage: Message = initialMessage ?? {
       author: "ai",
-      text: "Hello — tell me what you're looking for and I'll find the best picks.",
+      text: `### 👋 Welcome to **Rasphia**
+Your personalized **AI Shopping Assistant**
+
+Rasphia helps you make **smarter buying decisions** by understanding *you* and the products you’re browsing.
+
+---
+
+### 🚀 Get Started (2 quick steps)
+
+**1️⃣ Complete your Persona**  
+Tell Rasphia about your **skin, hair, body, lifestyle, and preferences** to unlock truly personalized recommendations.
+
+**2️⃣ Analyze Products on Any Shopping Site**  
+Browse a product page and click **Analyze Page** to load product context instantly.
+
+---
+
+### 💡 What You Can Do with Rasphia
+
+- 🧠 **Ask smart questions** about products tailored to *your persona*
+- 🛍️ **Compare options** and get a clear **Best Pick**
+- 🔍 Get **deep insights** — ingredients, suitability, pros & cons
+- 👗 **Try-On products** to visualize how they look on *you*
+- 💸 Discover **value-for-money** and safer alternatives
+
+---
+
+### ✨ Pro Tips
+
+- You can chat freely about analyzed products — Rasphia remembers the context  
+- Switch products? Just click **Analyze Page** again  
+- The more complete your persona, the better the recommendations
+
+---
+
+> 🔐 Your data stays private.  
+> Rasphia works only for *you* — never for advertisers.
+
+      `,
       createdAt: now,
     };
 
     // 4️⃣ New chat schema (extension version)
     const newChat: Omit<ChatSession, "_id"> = {
       userEmail: email,
-      title: firstMessage.text.slice(0, 50) || "New Chat",
-      createdAt: now,
-      updatedAt: now,
+      title: formatChatTitle(now),
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
       messages: [firstMessage],
     };
 

@@ -89,7 +89,6 @@ TASK:
 - Do NOT recommend multiple options.
 - Be decisive and opinionated.
 `;
-    console.log("the prompt is:", prompt);
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-mini",
