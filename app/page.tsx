@@ -194,7 +194,7 @@ const App: React.FC = () => {
         }
 
         setRecentAnalyses(analyses);
-        alert("User Login successful! Try reconnecting the extension now!");
+        //alert("User Login successful! Try reconnecting the extension now!");
       } catch (error) {
         console.error("Error loading user data:", error);
       }
