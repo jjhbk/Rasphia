@@ -33,43 +33,11 @@ export const POST = withExtensionCors(async (req: Request) => {
     // 3️⃣ Ensure first message exists
     const firstMessage: Message = initialMessage ?? {
       author: "ai",
-      text: `### 👋 Welcome to **Rasphia**
-Your personalized **AI Shopping Assistant**
+      text: `👋 Hi, I’m Rasphia. I understand your persona and the products you analyze.
 
-Rasphia helps you make **smarter buying decisions** by understanding *you* and the products you’re browsing.
+💬 Chat to compare products, get best picks, and personalized recommendations.
 
----
-
-### 🚀 Get Started (2 quick steps)
-
-**1️⃣ Complete your Persona**  
-Tell Rasphia about your **skin, hair, body, lifestyle, and preferences** to unlock truly personalized recommendations.
-
-**2️⃣ Analyze Products on Any Shopping Site**  
-Browse a product page and click **Analyze Page** to load product context instantly.
-
----
-
-### 💡 What You Can Do with Rasphia
-
-- 🧠 **Ask smart questions** about products tailored to *your persona*
-- 🛍️ **Compare options** and get a clear **Best Pick**
-- 🔍 Get **deep insights** — ingredients, suitability, pros & cons
-- 👗 **Try-On products** to visualize how they look on *you*
-- 💸 Discover **value-for-money** and safer alternatives
-
----
-
-### ✨ Pro Tips
-
-- You can chat freely about analyzed products — Rasphia remembers the context  
-- Switch products? Just click **Analyze Page** again  
-- The more complete your persona, the better the recommendations
-
----
-
-> 🔐 Your data stays private.  
-> Rasphia works only for *you* — never for advertisers.
+🛍️ Analyze a product page anytime to refresh the context.
 
       `,
       createdAt: now,
