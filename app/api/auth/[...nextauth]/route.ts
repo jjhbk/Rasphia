@@ -32,8 +32,6 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
     async redirect({ url, baseUrl }) {
-      console.log("REDIRECT URL:", url);
-      console.log("BASE URL:", baseUrl);
       // Always allow callbackUrl param if it belongs to us
       if (url.startsWith("/")) return `${baseUrl}${url}`;
       if (url.startsWith(baseUrl)) return url;

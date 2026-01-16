@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     if (errorResponse) return errorResponse;
 
     // Extract persona patch safely from body
-    const { persona: patch } = body;
+    const patch = body;
 
     if (!patch || typeof patch !== "object") {
       return NextResponse.json(

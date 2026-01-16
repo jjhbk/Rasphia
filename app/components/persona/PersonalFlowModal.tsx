@@ -1,13 +1,13 @@
 "use client";
 import React, { useMemo } from "react";
 
-import SkinFlow from "./flows/SkinFlow";
-import HairFlow from "./flows/HairFlow";
-import BodyFlow from "./flows/BodyFlow";
-import StyleFlow from "./flows/StyleFlow";
-import TasteFlow from "./flows/TasteFlow";
-import LifestyleFlow from "./flows/LifestyleFlow";
-import HomeFlow from "./flows/HomeFlow";
+import SkinFlow from "./steps/SkinFlow";
+import HairFlow from "./steps/HairFlow";
+import BodyFlow from "./steps/BodyFlow";
+import StyleFlow from "./steps/StyleFlow";
+import TasteFlow from "./steps/TasteFlow";
+import LifestyleFlow from "./steps/LifestyleFlow";
+import HomeFlow from "./steps/HomeFlow";
 
 export default function PersonaFlowModal({
   type,

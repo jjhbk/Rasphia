@@ -1,73 +1,154 @@
+// ===============================
+// GLOBAL BASE RULES
+// ===============================
 export const BASE_RULES = `
-You MUST avoid identifying people.
-Ignore background, people, clothes, objects, animals, scenery.
-Analyze ONLY the relevant subject of the tool.
-Return ONLY JSON. No prose, no explanations.
-optimized prompt should be directed towards finding relevant products depending on the variables inferred from the picture`;
+You MUST NOT identify, guess, or infer identity.
+Do NOT infer gender, age, ethnicity, attractiveness, or facial traits.
+Ignore background people, animals, scenery, and unrelated objects.
+Analyze ONLY the subject relevant to the tool type.
 
+All inferences must be:
+- visual-only
+- surface-level
+- probabilistic, not absolute
+
+Return ONLY valid JSON.
+No prose. No explanations.
+
+The optimizedPrompt MUST be suitable for downstream
+product discovery, comparison, and recommendation systems.
+`;
+
+// ===============================
+// SKIN RULES
+// ===============================
 export const SKIN_RULES = `
-Focus ONLY on non-identifiable surface-level skin features:
-- texture (smooth, rough, grainy)
-- pore visibility
-- shine / oiliness
-- dryness / flakiness
-- redness or inflammation
-- hyperpigmentation
-- acne scars and their type
+Focus ONLY on visible, non-identifiable skin surface characteristics.
+
+Observe and infer:
+- texture uniformity (smooth, uneven, rough)
+- pore visibility (low, medium, high)
+- oil or shine distribution (none, T-zone, overall)
+- dryness or flaking
+- redness or irritation
+- pigmentation irregularities
+- acne or post-acne marks (if visible)
+
+Do NOT diagnose medical conditions.
+
+Emphasize:
+- dominant skin concerns
+- relative severity
+- implications for skincare products
 `;
 
+// ===============================
+// HAIR RULES
+// ===============================
 export const HAIR_RULES = `
-Focus ONLY on hair & scalp:
-- dryness
-- breakage
-- split ends
-- frizz
-- shine
-- density
-- dandruff
-- oiliness
+Focus ONLY on hair strands and visible scalp.
+
+Infer:
+- dryness vs oiliness balance
+- frizz level
+- breakage or split ends
+- apparent density (low, medium, high)
+- shine level
+- dandruff or scalp flaking if visible
+
+Do NOT infer medical causes or hair loss diagnoses.
+
+Translate observations into:
+- care priorities
+- styling vs treatment needs
 `;
 
+// ===============================
+// BODY RULES
+// ===============================
 export const BODY_RULES = `
-Focus on body composition indicators:
-- fat distribution patterns
-- silhouette outline
-- muscle definition
-- waist–hip relation
-- abdomen visibility
-Do NOT guess gender. Do NOT describe the face.
+Focus ONLY on non-identifying body composition indicators.
+
+Visually infer:
+- overall silhouette category
+- relative fat distribution
+- muscle definition visibility
+- waist-to-hip balance
+- abdomen prominence or flatness
+- posture cues if visible
+
+Do NOT:
+- guess gender
+- describe face
+- estimate age
+- infer health conditions
+
+All estimates must be approximate and range-based.
+
+Strongly prioritize implications for:
+- clothing fit
+- fabric choice
+- cut and silhouette suitability
 `;
 
+// ===============================
+// PRODUCT RULES
+// ===============================
 export const PRODUCT_RULES = `
-Focus ONLY on:
-- product shape
-- color palette
-- packaging style
-- material
-- branding text if visible
-- category inference
+Focus ONLY on the product itself.
+
+Infer:
+- product category
+- functional purpose
+- dominant colors
+- materials
+- form factor
+- branding text if clearly visible
+
+Do NOT guess brand if unclear.
+
+Output should support:
+- product matching
+- alternatives
+- recommendations
 `;
 
+// ===============================
+// HOME RULES
+// ===============================
 export const HOME_RULES = `
-Analyze the uploaded room/home image.
+Analyze ONLY the interior space shown.
 
-Identify:
-- Interior aesthetic (e.g., minimal, modern, rustic, boho, industrial, luxury, scandinavian)
-- Dominant materials (wood, metal, stone, cotton, leather, glass)
-- Color palette (white, beige, earthy, pastel, dark, bold)
-- Decor elements present (plants, minimal furniture, art, rugs, bookshelf, lighting)
-- Lighting style (warm, neutral, cool)
-- Overall organization and vibe
-Provide neutral observations only.
+Infer:
+- dominant interior aesthetic styles
+- primary materials
+- color palette tendencies
+- decor density (minimal, moderate, layered)
+- lighting temperature and mood
+- spatial organization
+
+Avoid assumptions about lifestyle, income, or people.
+
+Focus on attributes useful for
+home decor, furniture, and lifestyle products.
 `;
 
+// ===============================
+// OUTPUT FORMATS
+// ===============================
 export const OUTPUT_FORMATS = {
   skin: `
 {
   "summary": "",
   "issuesObserved": [],
+  "severity": {
+    "oiliness": "",
+    "dryness": "",
+    "redness": ""
+  },
   "skinTypeGuess": "",
-  "suggestions": "",
+  "confidence": 0.0,
+  "productImplications": [],
   "optimizedPrompt": ""
 }
 `,
@@ -76,8 +157,10 @@ export const OUTPUT_FORMATS = {
 {
   "summary": "",
   "issuesObserved": [],
+  "scalpCondition": "",
   "hairTypeGuess": "",
-  "suggestions": "",
+  "confidence": 0.0,
+  "productImplications": [],
   "optimizedPrompt": ""
 }
 `,
@@ -85,9 +168,11 @@ export const OUTPUT_FORMATS = {
   body: `
 {
   "summary": "",
-  "estimatedBodyFatPercent": "",
+  "silhouette": "",
+  "estimatedBodyFatRange": "",
   "indicatorsUsed": [],
-  "suggestions": "",
+  "fitImplications": [],
+  "confidence": 0.0,
   "optimizedPrompt": ""
 }
 `,
@@ -96,6 +181,7 @@ export const OUTPUT_FORMATS = {
 {
   "summary": "",
   "attributes": [],
+  "confidence": 0.0,
   "optimizedPrompt": ""
 }
 `,
@@ -103,10 +189,12 @@ export const OUTPUT_FORMATS = {
   default: `
 {
   "summary": "",
+  "confidence": 0.0,
   "suggestions": "",
   "optimizedPrompt": ""
 }
 `,
+
   home: `
 {
   "summary": "",
@@ -115,6 +203,7 @@ export const OUTPUT_FORMATS = {
   "colors": [],
   "decorElements": [],
   "lightingStyle": "",
+  "confidence": 0.0,
   "optimizedPrompt": "",
   "photoUrls": []
 }
