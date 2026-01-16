@@ -32,17 +32,11 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
     async redirect({ url, baseUrl }) {
-      // ✅ ALLOW extension init callback
-      if (url.startsWith(`${baseUrl}/api/extension/init`)) {
-        return url;
-      }
-
-      // Allow normal internal redirects
-      if (url.startsWith(baseUrl)) {
-        return url;
-      }
-
-      // Block external redirects
+      console.log("REDIRECT URL:", url);
+      console.log("BASE URL:", baseUrl);
+      // Always allow callbackUrl param if it belongs to us
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      if (url.startsWith(baseUrl)) return url;
       return baseUrl;
     },
   },

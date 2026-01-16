@@ -17,9 +17,9 @@ export async function GET(req: Request) {
 
   if (!session?.user?.email) {
     if (isExtension) {
-      const signinUrl = `${baseUrl}/api/auth/signin?callbackUrl=${encodeURIComponent(
-        `${baseUrl}/api/extension/init?ext=1`
-      )}`;
+      const signinUrl = `${baseUrl}/api/auth/signin/google?callbackUrl=/api/extension/init?ext=1`;
+
+      return NextResponse.redirect(signinUrl, { status: 302 });
 
       return NextResponse.redirect(signinUrl, { status: 302 });
     }
