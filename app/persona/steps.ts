@@ -1,10 +1,10 @@
 // persona/steps.ts
 export const PERSONA_STEPS = [
   "body",
-  "skin",
-  "hair",
+  // "skin",
+  //"hair",
   "style",
-  "taste",
+  //"taste",
   "lifestyle",
 ] as const;
 

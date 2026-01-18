@@ -30,11 +30,11 @@ export default function PersonaFlowModal({
 
   // Map keys to components (all mounted once)
   const flows = {
-    skin: <SkinFlow {...commonProps} />,
-    hair: <HairFlow {...commonProps} />,
+    // skin: <SkinFlow {...commonProps} />,
+    // hair: <HairFlow {...commonProps} />,
     body: <BodyFlow {...commonProps} />,
     style: <StyleFlow {...commonProps} />,
-    taste: <TasteFlow {...commonProps} />,
+    //taste: <TasteFlow {...commonProps} />,
     lifestyle: <LifestyleFlow {...commonProps} />,
   };
 
