@@ -7,7 +7,6 @@ import BodyFlow from "./steps/BodyFlow";
 import StyleFlow from "./steps/StyleFlow";
 import TasteFlow from "./steps/TasteFlow";
 import LifestyleFlow from "./steps/LifestyleFlow";
-import HomeFlow from "./steps/HomeFlow";
 
 export default function PersonaFlowModal({
   type,
@@ -31,7 +30,6 @@ export default function PersonaFlowModal({
 
   // Map keys to components (all mounted once)
   const flows = {
-    home: <HomeFlow {...commonProps} />,
     skin: <SkinFlow {...commonProps} />,
     hair: <HairFlow {...commonProps} />,
     body: <BodyFlow {...commonProps} />,

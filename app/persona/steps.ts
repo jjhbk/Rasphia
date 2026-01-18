@@ -6,7 +6,6 @@ export const PERSONA_STEPS = [
   "style",
   "taste",
   "lifestyle",
-  "home",
 ] as const;
 
 export type PersonaStep = (typeof PERSONA_STEPS)[number];
