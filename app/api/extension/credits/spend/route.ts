@@ -21,7 +21,7 @@ export const POST = withExtensionCors(async (req: Request) => {
 
   const user = await db.collection("user_profiles").findOne({ email });
 
-  if (!user || (user.credits ?? 0) < amount) {
+  if (!user || (user.credits ?? 0) < amount || amount < 5) {
     return NextResponse.json(
       { error: "Insufficient credits" },
       { status: 400 }
