@@ -11,6 +11,7 @@ import {
   Search,
   HeartHandshake,
 } from "lucide-react";
+import SocialLinks from "./SocialLinks";
 
 interface LandingPageProps {
   onLogin: () => void;
@@ -153,13 +154,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
               ))}
             </div>
 
-            <button
+            {/*   <button
               onClick={onLogin}
               className="hidden md:inline-flex items-center gap-2 rounded-full bg-stone-900 px-6 py-2.5 text-sm font-medium text-white shadow-lg shadow-stone-400/40 hover:-translate-y-0.5 hover:bg-stone-800"
             >
               Sign in
               <ArrowRight className="h-4 w-4" />
-            </button>
+            </button>*/}
           </nav>
 
           {/* HERO */}
@@ -192,12 +193,14 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                   <ArrowRight className="h-5 w-5" />
                 </a>
 
-                <button
-                  onClick={onLogin}
-                  className="inline-flex items-center justify-center rounded-full border border-stone-300 px-9 py-3 text-stone-800 hover:bg-white"
-                >
-                  Open web app
-                </button>
+                {/*
+                  <button
+                    onClick={onLogin}
+                    className="inline-flex items-center justify-center rounded-full border border-stone-300 px-9 py-3 text-stone-800 hover:bg-white"
+                  >
+                    Open web app
+                  </button>
+               */}
               </div>
 
               <div className="mt-10 grid gap-6 sm:grid-cols-3">
@@ -366,7 +369,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
             </div>
             <div className="flex flex-col gap-4">
               <button
-                onClick={onLogin}
+                onClick={() =>
+                  window.open(
+                    "https://chromewebstore.google.com/detail/lhcccmjjmabkbaiidfeljkmheodijgmc",
+                    "_blank",
+                    "noopener,noreferrer"
+                  )
+                }
                 className="inline-flex items-center justify-center gap-3 rounded-full bg-white px-9 py-3 text-stone-900 font-semibold shadow-lg shadow-black/10 hover:-translate-y-0.5 hover:bg-amber-50 transition"
                 style={{ borderRadius: "999px" }}
               >
@@ -384,7 +393,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
           </div>
         </section>
       </main>
-
       {/* FOOTER */}
       <footer className="border-t border-stone-200 bg-white">
         <div className="mx-auto flex flex-col gap-8 px-6 py-12 text-sm text-stone-500 md:flex-row md:items-center md:justify-between lg:px-8">
@@ -394,6 +402,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
               AI-powered shopping intelligence for the open web.
             </p>
           </div>
+          <SocialLinks />
+
           <div className="flex flex-wrap gap-6">
             <a href="/privacy" className="hover:text-stone-900">
               Privacy Policy
