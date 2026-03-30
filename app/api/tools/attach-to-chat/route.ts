@@ -1,7 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import type { Message } from "@/app/types";
 import { authGuard } from "@/app/lib/auth-guard";
 import { prisma } from "@/app/lib/prisma";
+
+function isMessage(value: unknown): value is Message {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    (candidate.author === "user" || candidate.author === "ai") &&
+    typeof candidate.text === "string"
+  );
+}
+
+function extractMessages(value: unknown): Message[] {
+  if (!Array.isArray(value)) return [];
+  const out: Message[] = [];
+  for (const item of value as unknown[]) {
+    if (isMessage(item)) out.push(item);
+  }
+  return out;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -60,13 +79,11 @@ export async function POST(req: NextRequest) {
       comparisonTable: undefined,
     };
 
-    const existingMessages = Array.isArray(chat.messages)
-      ? (chat.messages as Message[])
-      : [];
+    const existingMessages = extractMessages(chat.messages);
     await prisma.chat.update({
       where: { id: String(chatId) },
       data: {
-        messages: [...existingMessages, newMessage],
+        messages: [...existingMessages, newMessage] as unknown as Prisma.InputJsonValue,
         updatedAt: new Date(),
       },
     });
@@ -81,7 +98,7 @@ export async function POST(req: NextRequest) {
         payload: {
           ...payload,
           chatRefs: nextRefs,
-        },
+        } as unknown as Prisma.InputJsonValue,
         updatedAt: new Date(),
       },
     });

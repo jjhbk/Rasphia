@@ -1,7 +1,26 @@
 // app/api/chats/search/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { Message } from "@/app/types";
 import { authGuard } from "@/app/lib/auth-guard";
 import { prisma } from "@/app/lib/prisma";
+
+function isMessage(value: unknown): value is Message {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    (candidate.author === "user" || candidate.author === "ai") &&
+    typeof candidate.text === "string"
+  );
+}
+
+function extractMessages(value: unknown): Message[] {
+  if (!Array.isArray(value)) return [];
+  const out: Message[] = [];
+  for (const item of value as unknown[]) {
+    if (isMessage(item)) out.push(item);
+  }
+  return out;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,25 +37,38 @@ export async function GET(req: NextRequest) {
     });
 
     if (!q) {
-      return NextResponse.json(chats.map((c) => ({ ...c, _id: c.id })), {
+      return NextResponse.json(
+        chats.map((c) => ({
+          ...c,
+          _id: c.id,
+          createdAt: c.createdAt.toISOString(),
+          updatedAt: c.updatedAt.toISOString(),
+          messages: extractMessages(c.messages),
+        })),
+        {
         status: 200,
-      });
+        }
+      );
     }
 
     const filtered = chats.filter((chat) => {
       const title = chat.title?.toLowerCase() || "";
-      const messages = Array.isArray(chat.messages)
-        ? (chat.messages as Array<{ text?: string }>)
-        : [];
+      const messages = extractMessages(chat.messages);
       const inTitle = title.includes(q.toLowerCase());
       const inMessages = messages.some((m) =>
-        (m.text || "").toLowerCase().includes(q.toLowerCase())
+        m.text.toLowerCase().includes(q.toLowerCase())
       );
       return inTitle || inMessages;
     });
 
     return NextResponse.json(
-      filtered.map((c) => ({ ...c, _id: c.id })),
+      filtered.map((c) => ({
+        ...c,
+        _id: c.id,
+        createdAt: c.createdAt.toISOString(),
+        updatedAt: c.updatedAt.toISOString(),
+        messages: extractMessages(c.messages),
+      })),
       { status: 200 }
     );
   } catch (err: unknown) {

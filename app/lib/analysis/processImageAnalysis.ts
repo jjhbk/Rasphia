@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { Prisma } from "@prisma/client";
 import { v4 as uuid } from "uuid";
 import { put } from "@vercel/blob";
 import { GoogleGenAI } from "@google/genai";
@@ -45,10 +46,10 @@ export async function processImageAnalysis(
 ) {
   // buffer
   const arrBuff = await file.arrayBuffer();
-  let buffer = Buffer.from(arrBuff);
+  const inputBuffer = Buffer.from(arrBuff);
 
   // sharp compress
-  buffer = await sharp(buffer).rotate().jpeg({ quality: 85 }).toBuffer();
+  const buffer = await sharp(inputBuffer).rotate().jpeg({ quality: 85 }).toBuffer();
 
   // blob upload
   const blobName = `analysis-${uuid()}.jpg`;
@@ -115,7 +116,7 @@ export async function processImageAnalysis(
       payload: {
         fileUrl: doc.fileUrl,
         aiResult: doc.aiResult,
-      },
+      } as unknown as Prisma.InputJsonValue,
       createdAt: new Date(doc.createdAt),
       updatedAt: new Date(doc.updatedAt),
     },

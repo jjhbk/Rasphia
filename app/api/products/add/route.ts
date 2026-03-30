@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getManagementAccess } from "@/app/lib/auth";
 import { generateProductEmbedding } from "@/app/lib/generateEmbeddings";
 import { prisma } from "@/app/lib/prisma";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 export async function POST(req: Request) {
   try {
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const newProduct = {
+    const newProduct: Prisma.ProductUncheckedCreateInput = {
       name,
       brand: brand || "Unknown",
       description,
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
       recipient: recipient || "Anyone",
       story: story || "",
       affiliateLink: affiliateLink || "",
-      embedding: null, // 💤 lazy embedding
+      embedding: Prisma.JsonNull, // 💤 lazy embedding
       merchantEmail: access.role === "merchant" ? access.email : null,
       merchantId: access.role === "merchant" ? access.merchantId : null,
       createdAt: new Date(),
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     };
 
     const created = await prisma.product.create({
-      data: newProduct as Prisma.ProductCreateInput,
+      data: newProduct,
     });
     const productId = created.id;
 

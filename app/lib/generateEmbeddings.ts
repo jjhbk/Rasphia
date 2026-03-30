@@ -6,10 +6,19 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
+function jsonToStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter((item) => item.length > 0);
+}
+
 export async function generateProductEmbedding(productId: string) {
   const product = await prisma.product.findUnique({ where: { id: productId } });
 
   if (!product) throw new Error("Product not found for embedding generation");
+  const tags = jsonToStringArray(product.tags);
+  const occasion = jsonToStringArray(product.occasion);
 
   // 🧠 Combine product details for a rich embedding
   const textToEmbed = `
@@ -18,8 +27,8 @@ export async function generateProductEmbedding(productId: string) {
   Brand: ${product.brand || ""}
   Category: ${product.category || ""}
   Story: ${product.story || ""}
-  Tags: ${(product.tags || []).join(", ")}
-  Occasion: ${(product.occasion || []).join(", ")}
+  Tags: ${tags.join(", ")}
+  Occasion: ${occasion.join(", ")}
   Recipient: ${product.recipient || ""}
   `;
 

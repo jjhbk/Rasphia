@@ -1,11 +1,15 @@
 // ✅ FULL, FIXED, PRODUCTION-SAFE CURATE ROUTE (OpenAI Chat Completions API)
 
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { embedQuery } from "@/app/lib/queryEmbeddings";
 import { Product } from "@/app/types";
 import { authGuard } from "@/app/lib/auth-guard";
 import OpenAI from "openai";
-import { searchProductEmbeddings } from "@/app/lib/product-vector-store";
+import {
+  ProductVectorHit,
+  searchProductEmbeddings,
+} from "@/app/lib/product-vector-store";
 import { prisma } from "@/app/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +26,18 @@ export interface Message {
   comparisonTable?: {
     headers: string[];
     rows: string[][];
+  };
+}
+
+function toProduct(hit: ProductVectorHit): Product {
+  return {
+    _id: hit._id,
+    name: hit.name,
+    brand: hit.brand || undefined,
+    category: hit.category || "General",
+    price: hit.price ?? undefined,
+    description: hit.description || undefined,
+    imageUrl: hit.imageUrl || undefined,
   };
 }
 
@@ -243,9 +259,16 @@ ${conversationHistory}
     // -------------------------------
     // MAP PRODUCT NAMES → PRODUCT DOCS
     // -------------------------------
-    const recommendedProducts: Product[] = (jsonResponse.products || [])
-      .map((name: string) => results.find((p) => p.name === name))
-      .filter((p): p is Product => !!p);
+    const requestedProductNames: string[] = Array.isArray(jsonResponse.products)
+      ? jsonResponse.products.filter(
+          (value: unknown): value is string => typeof value === "string"
+        )
+      : [];
+    const byName = new Map(results.map((hit) => [hit.name, hit] as const));
+    const recommendedProducts: Product[] = requestedProductNames
+      .map((name: string) => byName.get(name))
+      .filter((hit: ProductVectorHit | undefined): hit is ProductVectorHit => Boolean(hit))
+      .map(toProduct);
 
     // -------------------------------
     // FINAL MESSAGE
@@ -260,36 +283,37 @@ ${conversationHistory}
     // -------------------------------
     // SAVE CHAT
     // -------------------------------
-    let chatDoc;
+    let chatDocId = chatId;
 
     if (!chatId) {
       const newChat = {
         userEmail: sessionEmail,
         createdAt: new Date(),
         updatedAt: new Date(),
-        messages: [...chatHistory, aiMessage],
+        messages: [...chatHistory, aiMessage] as unknown as Prisma.InputJsonValue,
       };
 
       const result = await prisma.chat.create({ data: newChat });
-      chatDoc = { ...newChat, _id: result.id };
+      chatDocId = result.id;
     } else {
       const existing = await prisma.chat.findUnique({ where: { id: chatId } });
       const messages = Array.isArray(existing?.messages)
         ? (existing?.messages as Array<Record<string, unknown>>)
         : [];
-      chatDoc = await prisma.chat.update({
+      const updated = await prisma.chat.update({
         where: { id: chatId },
         data: {
-          messages: [...messages, aiMessage as unknown as Record<string, unknown>],
+          messages: [...messages, aiMessage] as unknown as Prisma.InputJsonValue,
           updatedAt: new Date(),
         },
       });
+      chatDocId = updated.id;
     }
 
     return NextResponse.json(
       {
         ...aiMessage,
-        chatId: chatDoc?._id,
+        chatId: chatDocId,
       },
       { status: 200 }
     );

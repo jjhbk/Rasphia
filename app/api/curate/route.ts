@@ -1,11 +1,15 @@
 // ✅ FULL, UNTRUNCATED, SECURITY-HARDENED VERSION (ALL FUNCTIONALITY PRESERVED)
 
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { GoogleGenAI, Type } from "@google/genai";
 import { embedQuery } from "@/app/lib/queryEmbeddings";
 import { Product } from "@/app/types";
 import { authGuard } from "@/app/lib/auth-guard";
-import { searchProductEmbeddings } from "@/app/lib/product-vector-store";
+import {
+  ProductVectorHit,
+  searchProductEmbeddings,
+} from "@/app/lib/product-vector-store";
 import { prisma } from "@/app/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +24,18 @@ export interface Message {
   comparisonTable?: {
     headers: string[];
     rows: string[][];
+  };
+}
+
+function toProduct(hit: ProductVectorHit): Product {
+  return {
+    _id: hit._id,
+    name: hit.name,
+    brand: hit.brand || undefined,
+    category: hit.category || "General",
+    price: hit.price ?? undefined,
+    description: hit.description || undefined,
+    imageUrl: hit.imageUrl || undefined,
   };
 }
 
@@ -263,11 +279,20 @@ Respond strictly in JSON using the schema.
     // -------------------------------
     // MAP PRODUCT NAMES → PRODUCT OBJECTS
     // -------------------------------
-    const recommendedNames: string[] = jsonResponse.products || [];
+    const recommendedNames: string[] = Array.isArray(jsonResponse.products)
+      ? jsonResponse.products.filter(
+          (value: unknown): value is string => typeof value === "string"
+        )
+      : [];
 
+    const byName = new Map(results.map((hit) => [hit.name, hit] as const));
     const recommendedProducts: Product[] = recommendedNames
-      .map((name) => results.find((p) => p.name === name))
-      .filter((p): p is Product => !!p);
+      .map((name) => byName.get(name))
+      .filter(
+        (hit: ProductVectorHit | undefined): hit is ProductVectorHit =>
+          Boolean(hit)
+      )
+      .map(toProduct);
 
     // -------------------------------
     // AI MESSAGE FORMAT
@@ -282,7 +307,7 @@ Respond strictly in JSON using the schema.
     // -------------------------------
     // CHAT PERSISTENCE (CREATE OR UPDATE)
     // -------------------------------
-    let chatDoc;
+    let chatDocId = chatId;
 
     if (!chatId) {
       // Create new chat
@@ -290,23 +315,24 @@ Respond strictly in JSON using the schema.
         userEmail: sessionEmail, // secure
         createdAt: new Date(),
         updatedAt: new Date(),
-        messages: [...chatHistory, aiMessage],
+        messages: [...chatHistory, aiMessage] as unknown as Prisma.InputJsonValue,
       };
       const result = await prisma.chat.create({ data: newChat });
-      chatDoc = { ...newChat, _id: result.id };
+      chatDocId = result.id;
     } else {
       // Update existing chat
       const existing = await prisma.chat.findUnique({ where: { id: chatId } });
       const messages = Array.isArray(existing?.messages)
         ? (existing?.messages as Array<Record<string, unknown>>)
         : [];
-      chatDoc = await prisma.chat.update({
+      const updated = await prisma.chat.update({
         where: { id: chatId },
         data: {
-          messages: [...messages, aiMessage as unknown as Record<string, unknown>],
+          messages: [...messages, aiMessage] as unknown as Prisma.InputJsonValue,
           updatedAt: new Date(),
         },
       });
+      chatDocId = updated.id;
     }
 
     console.log("Final message", JSON.stringify(aiMessage));
@@ -317,7 +343,7 @@ Respond strictly in JSON using the schema.
     return NextResponse.json(
       {
         ...aiMessage,
-        chatId: chatDoc?._id,
+        chatId: chatDocId,
       },
       { status: 200 }
     );

@@ -1,8 +1,26 @@
 // app/api/chats/get/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { ChatSession } from "@/app/types";
+import { ChatSession, Message } from "@/app/types";
 import { authGuard } from "@/app/lib/auth-guard";
 import { prisma } from "@/app/lib/prisma";
+
+function isMessage(value: unknown): value is Message {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    (candidate.author === "user" || candidate.author === "ai") &&
+    typeof candidate.text === "string"
+  );
+}
+
+function extractMessages(value: unknown): Message[] {
+  if (!Array.isArray(value)) return [];
+  const out: Message[] = [];
+  for (const item of value as unknown[]) {
+    if (isMessage(item)) out.push(item);
+  }
+  return out;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -31,8 +49,17 @@ export async function GET(req: NextRequest) {
     }
 
     // 6️⃣ Success — return chat
+    const response: ChatSession = {
+      _id: chat.id,
+      userEmail: chat.userEmail,
+      title: chat.title || undefined,
+      createdAt: chat.createdAt.toISOString(),
+      updatedAt: chat.updatedAt.toISOString(),
+      messages: extractMessages(chat.messages),
+    };
+
     return NextResponse.json(
-      { ...chat, _id: chat.id } as ChatSession,
+      response,
       { status: 200 }
     );
   } catch (err: unknown) {

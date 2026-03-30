@@ -1,5 +1,6 @@
 // app/lib/whatsapp.ts
 import fetch from "node-fetch";
+import { put } from "@vercel/blob";
 
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN!;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID!;
@@ -92,4 +93,71 @@ export async function sendButtonLink(
       },
     }),
   });
+}
+
+function extFromMimeType(mimeType: string) {
+  if (mimeType.includes("jpeg") || mimeType.includes("jpg")) return "jpg";
+  if (mimeType.includes("png")) return "png";
+  if (mimeType.includes("webp")) return "webp";
+  if (mimeType.includes("gif")) return "gif";
+  return "bin";
+}
+
+export async function getWhatsAppMediaInfo(mediaId: string) {
+  const url = `https://graph.facebook.com/v17.0/${mediaId}`;
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch WhatsApp media info: ${res.status}`);
+  }
+  const data = (await res.json()) as {
+    url?: string;
+    mime_type?: string;
+  };
+  if (!data.url) {
+    throw new Error("WhatsApp media URL missing in response.");
+  }
+  return {
+    downloadUrl: data.url,
+    mimeType: data.mime_type || "application/octet-stream",
+  };
+}
+
+export async function downloadWhatsAppMedia(mediaId: string) {
+  const info = await getWhatsAppMediaInfo(mediaId);
+  const res = await fetch(info.downloadUrl, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to download WhatsApp media: ${res.status}`);
+  }
+  const arr = await res.arrayBuffer();
+  return {
+    bytes: Buffer.from(arr),
+    mimeType: info.mimeType,
+  };
+}
+
+export async function uploadWhatsAppMediaToBlob(
+  mediaId: string,
+  prefix = "whatsapp-products"
+) {
+  const { bytes, mimeType } = await downloadWhatsAppMedia(mediaId);
+  const ext = extFromMimeType(mimeType);
+  const blob = await put(
+    `${prefix}/${Date.now()}-${mediaId}.${ext}`,
+    bytes,
+    {
+      access: "public",
+      contentType: mimeType,
+    }
+  );
+  return blob.url;
 }

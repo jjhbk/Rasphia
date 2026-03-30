@@ -1,5 +1,6 @@
 // app/api/chats/create/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { ChatSession, Message } from "@/app/types";
 import { authGuard } from "@/app/lib/auth-guard";
 import { prisma } from "@/app/lib/prisma";
@@ -29,12 +30,13 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
       messages: [firstMessage],
     };
+    const jsonMessages = newChat.messages as unknown as Prisma.InputJsonValue;
 
     const res = await prisma.chat.create({
       data: {
         userEmail: newChat.userEmail,
         title: newChat.title,
-        messages: newChat.messages,
+        messages: jsonMessages,
         createdAt: new Date(newChat.createdAt),
         updatedAt: new Date(newChat.updatedAt),
       },

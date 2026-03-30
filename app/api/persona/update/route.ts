@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { authGuard } from "@/app/lib/auth-guard";
 import { prisma } from "@/app/lib/prisma";
 import { defaultPersona } from "@/app/utils/defaultPersona";
@@ -53,15 +54,16 @@ export async function POST(req: NextRequest) {
 
     const base = (existing?.data as Record<string, unknown>) || defaultPersona;
     const merged = deepMerge(base, incomingPersona);
+    const jsonPersona = merged as unknown as Prisma.InputJsonValue;
 
     await prisma.userPersona.upsert({
       where: { email: sessionEmail },
       create: {
         email: sessionEmail,
-        data: merged,
+        data: jsonPersona,
       },
       update: {
-        data: merged,
+        data: jsonPersona,
         updatedAt: new Date(),
       },
     });

@@ -1,8 +1,18 @@
 // app/api/chats/add-message/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { Message } from "@/app/types";
 import { authGuard } from "@/app/lib/auth-guard";
 import { prisma } from "@/app/lib/prisma";
+
+function isMessage(value: unknown): value is Message {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    (candidate.author === "user" || candidate.author === "ai") &&
+    typeof candidate.text === "string"
+  );
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -42,13 +52,14 @@ export async function POST(req: NextRequest) {
 
     // 💾 6. Update chat
     const existingMessages = Array.isArray(chat.messages)
-      ? (chat.messages as Message[])
+      ? chat.messages.filter(isMessage)
       : [];
+    const nextMessages = [...existingMessages, message] as unknown as Prisma.InputJsonValue;
 
     const updated = await prisma.chat.update({
       where: { id: chatId },
       data: {
-        messages: [...existingMessages, message],
+        messages: nextMessages,
         updatedAt: new Date(now),
       },
     });
