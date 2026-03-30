@@ -1,66 +1,75 @@
 import { NextRequest, NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
-import { defaultPersona } from "@/app/utils/defaultPersona";
 import { authGuard } from "@/app/lib/auth-guard";
+import { prisma } from "@/app/lib/prisma";
+import { defaultPersona } from "@/app/utils/defaultPersona";
 
-function deepMerge(target: any, patch: any) {
-  for (const key in patch) {
+function deepMerge(
+  target: Record<string, unknown>,
+  patch: Record<string, unknown>
+) {
+  const merged: Record<string, unknown> = { ...target };
+  for (const [key, value] of Object.entries(patch)) {
     if (
-      patch[key] &&
-      typeof patch[key] === "object" &&
-      !Array.isArray(patch[key])
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      typeof merged[key] === "object" &&
+      merged[key] !== null &&
+      !Array.isArray(merged[key])
     ) {
-      target[key] = deepMerge(target[key] || {}, patch[key]);
+      merged[key] = deepMerge(
+        merged[key] as Record<string, unknown>,
+        value as Record<string, unknown>
+      );
     } else {
-      target[key] = patch[key];
+      merged[key] = value;
     }
   }
-  return target;
+  return merged;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    // 1️⃣ Authenticate user
     const { sessionEmail, body, errorResponse } = await authGuard(req);
     if (errorResponse) return errorResponse;
 
-    // Extract persona patch safely from body
-    const patch = body;
+    const incomingPersona =
+      body?.persona && typeof body.persona === "object"
+        ? (body.persona as Record<string, unknown>)
+        : body && typeof body === "object"
+        ? (body as Record<string, unknown>)
+        : null;
 
-    if (!patch || typeof patch !== "object") {
+    if (!incomingPersona) {
       return NextResponse.json(
-        { error: "Invalid or missing persona patch" },
+        { error: "Invalid or missing persona payload" },
         { status: 400 }
       );
     }
 
-    const email = sessionEmail; // 🔐 NEVER trust email from client
+    const existing = await prisma.userPersona.findUnique({
+      where: { email: sessionEmail },
+    });
 
-    const client = await clientPromise;
-    const db = client.db("rasphia");
+    const base = (existing?.data as Record<string, unknown>) || defaultPersona;
+    const merged = deepMerge(base, incomingPersona);
 
-    // 2️⃣ Load existing persona
-    const user = await db.collection("users").findOne({ email });
-    const original = user?.persona || defaultPersona;
-
-    // 3️⃣ Deep merge patch → persona
-    const merged = deepMerge({ ...original }, patch);
-
-    // 4️⃣ Update persona safely (ONLY for logged-in user)
-    await db.collection("users").updateOne(
-      { email },
-      {
-        $set: {
-          persona: merged,
-          updatedAt: new Date().toISOString(),
-        },
+    await prisma.userPersona.upsert({
+      where: { email: sessionEmail },
+      create: {
+        email: sessionEmail,
+        data: merged,
       },
-      { upsert: true }
-    );
+      update: {
+        data: merged,
+        updatedAt: new Date(),
+      },
+    });
 
-    return NextResponse.json({ ok: true, persona: merged });
-  } catch (err) {
-    console.error("update-persona error:", err);
-    return NextResponse.json({ error: "server error" }, { status: 500 });
+    return NextResponse.json({ ok: true, persona: merged }, { status: 200 });
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Failed to update persona";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

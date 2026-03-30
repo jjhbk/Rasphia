@@ -1,25 +1,57 @@
 @import "tailwindcss";
 
-/* === Base color variables === */
+/* === Brand Design Tokens === */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --border-color: #d6d3d1;
-  --input-bg: #ffffff;
-  --placeholder-color: #a3a3a3;
+  /* Primary Neutrals — natural materials palette */
+  --color-cream: #FAF7F2;
+  --color-parchment: #F5F0E8;
+  --color-sand: #E8DFD3;
+  --color-clay: #D4A574;
+  --color-terracotta: #C17A56;
+  --color-charcoal: #2C2420;
+  --color-warm-black: #1A1614;
+
+  /* Secondary */
+  --color-sage: #8B9D83;
+  --color-sage-light: #C5CEBC;
+  --color-stone: #A39B93;
+
+  /* Accent — deep coral for emphasis */
+  --color-coral: #C75C3A;
+  --color-coral-light: #E8947A;
+  --color-mustard: #C4922A;
+
+  /* Functional */
+  --background: var(--color-cream);
+  --foreground: var(--color-charcoal);
+  --border-color: #E0D8CE;
+  --input-bg: #FFFFFF;
+  --placeholder-color: #B5ADA5;
+
+  /* Surfaces */
+  --surface-primary: #FFFFFF;
+  --surface-elevated: rgba(255, 255, 255, 0.85);
+  --surface-subtle: rgba(255, 255, 255, 0.5);
+  --surface-muted: var(--color-parchment);
 }
 
-/* === Global app layout === */
+/* === Global Layout === */
 html,
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-body), system-ui, -apple-system, sans-serif;
   min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* === Normalize all form controls === */
+/* === Typography Helpers === */
+.font-editorial {
+  font-family: var(--font-heading), Georgia, serif;
+}
+
+/* === Normalize Form Controls === */
 input,
 textarea,
 select,
@@ -27,7 +59,6 @@ button {
   color: var(--foreground);
   background-color: var(--input-bg);
   border: 1px solid var(--border-color);
-  /* border-radius removed to allow component-level styling */
   font-size: 0.95rem;
   padding: 0.5rem 0.75rem;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -38,17 +69,19 @@ textarea::placeholder {
   color: var(--placeholder-color);
 }
 
-/* Focus state */
 input:focus,
 textarea:focus,
-select:focus,
-button:focus {
+select:focus {
   outline: none;
-  border-color: #f59e0b; /* Tailwind amber-500 */
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+  border-color: var(--color-terracotta);
+  box-shadow: 0 0 0 3px rgba(193, 122, 86, 0.12);
 }
 
-/* === File input styling === */
+button:focus {
+  outline: none;
+}
+
+/* === File Input === */
 input[type="file"] {
   color: var(--foreground);
   border: 1px solid var(--border-color);
@@ -58,8 +91,8 @@ input[type="file"] {
 }
 
 input[type="file"]::file-selector-button {
-  background-color: #f5f5f4;
-  color: #171717;
+  background-color: var(--color-parchment);
+  color: var(--foreground);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 0.3rem 0.75rem;
@@ -70,7 +103,7 @@ input[type="file"]::file-selector-button {
 }
 
 input[type="file"]::file-selector-button:hover {
-  background-color: #e7e5e4;
+  background-color: var(--color-sand);
 }
 
 /* === Buttons === */
@@ -80,38 +113,43 @@ button {
 }
 
 button:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
-/* === Anchor links === */
+/* === Links === */
 a {
-  color: #92400e; /* amber-800 */
+  color: var(--color-terracotta);
   text-decoration: none;
+  transition: color 0.2s ease;
 }
 
 a:hover {
-  color: #b45309; /* amber-700 */
+  color: var(--color-coral);
 }
 
-/* === Card base === */
+/* === Card Base === */
 .card {
-  background-color: var(--input-bg);
+  background-color: var(--surface-primary);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   padding: 1rem;
 }
 
-/* === Smooth transitions === */
-* {
-  transition: background-color 0.2s ease, color 0.2s ease;
+/* === Smooth Transitions (scoped) === */
+a,
+button,
+input,
+textarea,
+select {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 /* === Custom Scrollbar === */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -119,11 +157,48 @@ a:hover {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgba(168, 162, 158, 0.3); /* stone-400 with opacity */
+  background-color: rgba(163, 155, 147, 0.25);
   border-radius: 9999px;
   transition: background-color 0.2s;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(168, 162, 158, 0.6);
+  background-color: rgba(163, 155, 147, 0.5);
+}
+
+/* === Brand Gradient Backgrounds === */
+.bg-brand-warm {
+  background: linear-gradient(135deg, var(--color-cream) 0%, var(--color-parchment) 50%, #F0E6D8 100%);
+}
+
+.bg-brand-hero {
+  background: linear-gradient(160deg, #FFF8F0 0%, var(--color-cream) 40%, #F0E6D8 80%, #E8D8C8 100%);
+}
+
+.bg-brand-dark {
+  background: linear-gradient(160deg, var(--color-warm-black) 0%, #2E2118 50%, #3D2E24 100%);
+}
+
+/* === Prose styles for AI messages === */
+.prose-rasphia p {
+  margin-bottom: 0.5em;
+}
+
+.prose-rasphia p:last-child {
+  margin-bottom: 0;
+}
+
+.prose-rasphia strong {
+  color: var(--color-charcoal);
+  font-weight: 600;
+}
+
+.prose-rasphia ul,
+.prose-rasphia ol {
+  padding-left: 1.25em;
+  margin-bottom: 0.5em;
+}
+
+.prose-rasphia li {
+  margin-bottom: 0.25em;
 }

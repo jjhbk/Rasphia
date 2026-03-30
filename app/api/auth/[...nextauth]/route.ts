@@ -1,13 +1,10 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import { MongoDBAdapter } from "@auth/mongodb-adapter";
-import clientPromise from "@/app/lib/mongodb";
+import { prisma } from "@/app/lib/prisma";
+import { PrismaAdapter } from "@next-auth/prisma-adapter";
 
 export const authOptions: NextAuthOptions = {
-  adapter: MongoDBAdapter(clientPromise, {
-    databaseName: "rasphia",
-  }),
-
+  adapter: PrismaAdapter(prisma),
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -16,18 +13,13 @@ export const authOptions: NextAuthOptions = {
   ],
 
   session: {
-    strategy: "jwt",
+    strategy: "database",
   },
 
   callbacks: {
-    async jwt({ token, user }) {
-      if (user) token.id = user.id;
-      return token;
-    },
-    async session({ session, token }) {
-      if (token?.id && session.user) {
-        // attach token ID to session.user
-        (session.user as any).id = token.id;
+    async session({ session, user }) {
+      if (user?.id && session.user) {
+        (session.user as { id?: string }).id = String(user.id);
       }
       return session;
     },
@@ -42,11 +34,10 @@ export const authOptions: NextAuthOptions = {
   events: {
     async createUser({ user }) {
       try {
-        const client = await clientPromise;
-        const db = client.db("rasphia");
-        const profiles = db.collection("user_profiles");
-
-        const existing = await profiles.findOne({ email: user.email });
+        if (!user.email) return;
+        const existing = await prisma.userProfile.findUnique({
+          where: { email: user.email },
+        });
         if (existing) return;
 
         // Determine if user is admin
@@ -54,16 +45,16 @@ export const authOptions: NextAuthOptions = {
           process.env.ADMIN_EMAILS?.split(",").map((e) => e.trim()) || [];
         const role = adminEmails.includes(user.email ?? "") ? "admin" : "user";
 
-        await profiles.insertOne({
-          name: user.name || "",
-          email: user.email,
-          role,
-          phone: "",
-          address: "",
-          wishlist: [],
-          credits: 50,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+        await prisma.userProfile.create({
+          data: {
+            name: user.name || "",
+            email: user.email,
+            role,
+            phone: "",
+            address: "",
+            wishlist: [],
+            credits: 50,
+          },
         });
 
         console.log(`✅ Created ${role} profile for ${user.email}`);
@@ -74,14 +65,17 @@ export const authOptions: NextAuthOptions = {
 
     async signIn({ user }) {
       try {
-        const client = await clientPromise;
-        const db = client.db("rasphia");
-        await db
-          .collection("user_profiles")
-          .updateOne(
-            { email: user.email },
-            { $set: { updatedAt: new Date() } }
-          );
+        if (!user.email) return;
+        await prisma.userProfile.upsert({
+          where: { email: user.email },
+          create: {
+            email: user.email,
+            name: user.name || "",
+            role: "user",
+            credits: 50,
+          },
+          update: { updatedAt: new Date() },
+        });
       } catch (err) {
         console.error("⚠️ Error updating login timestamp:", err);
       }

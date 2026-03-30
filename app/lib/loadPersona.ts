@@ -1,10 +1,7 @@
-import clientPromise from "./mongodb";
+import { prisma } from "@/app/lib/prisma";
 
 export async function loadPersona(email: string) {
-  const client = await clientPromise;
-  const db = client.db("rasphia");
-
-  const profile = await db.collection("users").findOne({ email });
+  const profile = await prisma.user.findUnique({ where: { email } });
 
   return profile?.persona || {};
 }

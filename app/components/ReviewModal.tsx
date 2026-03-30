@@ -5,7 +5,12 @@ import StarIcon from "./icons/StarIcon";
 interface ReviewModalProps {
   order: Order;
   onClose: () => void;
-  onSubmit: (orderId: string, rating: number, comment: string) => void;
+  onSubmit: (
+    orderId: string,
+    rating: number,
+    comment: string,
+    imageUrls: string[]
+  ) => void;
 }
 
 const ReviewModal: React.FC<ReviewModalProps> = ({
@@ -16,6 +21,7 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState("");
+  const [imageUrlInput, setImageUrlInput] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +29,11 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
       alert("Please select a star rating.");
       return;
     }
-    onSubmit(order.id, rating, comment);
+    const imageUrls = imageUrlInput
+      .split("\n")
+      .map((v) => v.trim())
+      .filter(Boolean);
+    onSubmit(order.id, rating, comment, imageUrls);
   };
 
   // 🟢 Convert product list → "A, B, C"
@@ -93,6 +103,23 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
               onChange={(e) => setComment(e.target.value)}
               rows={4}
               placeholder="What did you like or dislike? How did you use these products?"
+              className="w-full p-3 bg-white border border-stone-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+
+          <div className="mb-6">
+            <label
+              htmlFor="imageUrls"
+              className="block text-sm font-medium text-stone-600 mb-2"
+            >
+              Review Image URLs (optional, one per line)
+            </label>
+            <textarea
+              id="imageUrls"
+              value={imageUrlInput}
+              onChange={(e) => setImageUrlInput(e.target.value)}
+              rows={3}
+              placeholder="https://...jpg"
               className="w-full p-3 bg-white border border-stone-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500"
             />
           </div>

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
-import { requireAdmin } from "@/app/lib/auth"; // 🔒 optional admin check
+import { getManagementAccess } from "@/app/lib/auth";
 
 export async function POST(req: Request) {
   try {
-    await requireAdmin(); // optional, but good for security
+    // Allow both admins and approved merchants.
+    await getManagementAccess();
 
     const formData = await req.formData();
     const file = formData.get("file") as File;
@@ -21,6 +22,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ url: blob.url });
   } catch (err: any) {
     console.error("❌ Upload error:", err);
+    const message = err instanceof Error ? err.message : "Failed to upload file";
+    if (message.startsWith("Unauthorized")) {
+      return NextResponse.json({ error: message }, { status: 401 });
+    }
+    if (message.startsWith("Forbidden")) {
+      return NextResponse.json({ error: message }, { status: 403 });
+    }
     return NextResponse.json(
       { error: "Failed to upload file" },
       { status: 500 }

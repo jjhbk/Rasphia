@@ -1,8 +1,7 @@
 // app/api/chats/delete/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
-import { ObjectId } from "mongodb";
 import { authGuard } from "@/app/lib/auth-guard";
+import { prisma } from "@/app/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,13 +15,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing chatId" }, { status: 400 });
     }
 
-    const client = await clientPromise;
-    const db = client.db("rasphia");
-
-    // 2️⃣ Verify that the chat exists
-    const chat = await db.collection("chats").findOne({
-      _id: new ObjectId(chatId),
-    });
+    const chat = await prisma.chat.findUnique({ where: { id: chatId } });
 
     if (!chat) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
@@ -36,16 +29,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4️⃣ Delete the chat
-    await db.collection("chats").deleteOne({
-      _id: new ObjectId(chatId),
-    });
+    await prisma.chat.delete({ where: { id: chatId } });
 
     return NextResponse.json({ ok: true }, { status: 200 });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Server error";
     console.error("Chat delete error:", err);
     return NextResponse.json(
-      { error: err.message || "Server error" },
+      { error: message },
       { status: 500 }
     );
   }

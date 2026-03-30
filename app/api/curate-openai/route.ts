@@ -1,12 +1,12 @@
 // ✅ FULL, FIXED, PRODUCTION-SAFE CURATE ROUTE (OpenAI Chat Completions API)
 
 import { NextRequest, NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
 import { embedQuery } from "@/app/lib/queryEmbeddings";
-import { ObjectId } from "mongodb";
 import { Product } from "@/app/types";
 import { authGuard } from "@/app/lib/auth-guard";
 import OpenAI from "openai";
+import { searchProductEmbeddings } from "@/app/lib/product-vector-store";
+import { prisma } from "@/app/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -54,17 +54,12 @@ export async function POST(req: NextRequest) {
     // -------------------------------
     // DB CONNECTION
     // -------------------------------
-    const client = await clientPromise;
-    const db = client.db("rasphia");
-    const productsCollection = db.collection("products");
-    const chatsCollection = db.collection("chats");
-
     // -------------------------------
     // OWNERSHIP CHECK
     // -------------------------------
     if (chatId) {
-      const existingChat = await chatsCollection.findOne({
-        _id: new ObjectId(chatId),
+      const existingChat = await prisma.chat.findUnique({
+        where: { id: chatId },
       });
 
       if (!existingChat) {
@@ -84,32 +79,7 @@ export async function POST(req: NextRequest) {
     // -------------------------------
     const queryEmbedding = await embedQuery(userMsg);
 
-    const results = await productsCollection
-      .aggregate([
-        {
-          $vectorSearch: {
-            index: "products_index",
-            path: "embedding",
-            queryVector: queryEmbedding,
-            numCandidates: 100,
-            limit: 8,
-            similarity: "cosine",
-          },
-        },
-        {
-          $project: {
-            _id: 1,
-            name: 1,
-            brand: 1,
-            category: 1,
-            price: 1,
-            description: 1,
-            imageUrl: 1,
-            score: { $meta: "vectorSearchScore" },
-          },
-        },
-      ])
-      .toArray();
+    const results = await searchProductEmbeddings(queryEmbedding, 8);
 
     if (!results.length) {
       return NextResponse.json({
@@ -275,7 +245,7 @@ ${conversationHistory}
     // -------------------------------
     const recommendedProducts: Product[] = (jsonResponse.products || [])
       .map((name: string) => results.find((p) => p.name === name))
-      .filter((p: any): p is Product => !!p);
+      .filter((p): p is Product => !!p);
 
     // -------------------------------
     // FINAL MESSAGE
@@ -300,18 +270,20 @@ ${conversationHistory}
         messages: [...chatHistory, aiMessage],
       };
 
-      const result = await chatsCollection.insertOne(newChat);
-      chatDoc = { ...newChat, _id: result.insertedId };
+      const result = await prisma.chat.create({ data: newChat });
+      chatDoc = { ...newChat, _id: result.id };
     } else {
-      await chatsCollection.updateOne(
-        { _id: new ObjectId(chatId) },
-        {
-          $push: { messages: aiMessage } as any,
-          $set: { updatedAt: new Date() },
-        }
-      );
-
-      chatDoc = await chatsCollection.findOne({ _id: new ObjectId(chatId) });
+      const existing = await prisma.chat.findUnique({ where: { id: chatId } });
+      const messages = Array.isArray(existing?.messages)
+        ? (existing?.messages as Array<Record<string, unknown>>)
+        : [];
+      chatDoc = await prisma.chat.update({
+        where: { id: chatId },
+        data: {
+          messages: [...messages, aiMessage as unknown as Record<string, unknown>],
+          updatedAt: new Date(),
+        },
+      });
     }
 
     return NextResponse.json(
@@ -321,10 +293,12 @@ ${conversationHistory}
       },
       { status: 200 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "AI response failed.";
     console.error("❌ Curate route error:", error);
     return NextResponse.json(
-      { error: error?.message || "AI response failed." },
+      { error: message },
       { status: 500 }
     );
   }

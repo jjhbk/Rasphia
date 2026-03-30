@@ -1,7 +1,7 @@
 // app/api/chats/search/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
 import { authGuard } from "@/app/lib/auth-guard";
+import { prisma } from "@/app/lib/prisma";
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,42 +12,38 @@ export async function GET(req: NextRequest) {
     // 2️⃣ Extract query
     const q = String(req.nextUrl.searchParams.get("q") ?? "").trim();
 
-    const client = await clientPromise;
-    const db = client.db("rasphia");
+    const chats = await prisma.chat.findMany({
+      where: { userEmail: sessionEmail },
+      orderBy: { updatedAt: "desc" },
+    });
 
-    // 3️⃣ If query is empty → return all user's chats
     if (!q) {
-      const chats = await db
-        .collection("chats")
-        .find({ userEmail: sessionEmail })
-        .sort({ updatedAt: -1 })
-        .toArray();
-
-      return NextResponse.json(chats, { status: 200 });
+      return NextResponse.json(chats.map((c) => ({ ...c, _id: c.id })), {
+        status: 200,
+      });
     }
 
-    // 4️⃣ Escape regex characters to avoid injection
-    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const regex = new RegExp(escaped, "i");
+    const filtered = chats.filter((chat) => {
+      const title = chat.title?.toLowerCase() || "";
+      const messages = Array.isArray(chat.messages)
+        ? (chat.messages as Array<{ text?: string }>)
+        : [];
+      const inTitle = title.includes(q.toLowerCase());
+      const inMessages = messages.some((m) =>
+        (m.text || "").toLowerCase().includes(q.toLowerCase())
+      );
+      return inTitle || inMessages;
+    });
 
-    // 5️⃣ Search across user's own chats only
-    const chats = await db
-      .collection("chats")
-      .find({
-        userEmail: sessionEmail,
-        $or: [
-          { title: { $regex: regex } },
-          { "messages.text": { $regex: regex } },
-        ],
-      })
-      .sort({ updatedAt: -1 })
-      .toArray();
-
-    return NextResponse.json(chats, { status: 200 });
-  } catch (err: any) {
+    return NextResponse.json(
+      filtered.map((c) => ({ ...c, _id: c.id })),
+      { status: 200 }
+    );
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Server error";
     console.error("Chat search error:", err);
     return NextResponse.json(
-      { error: err.message || "Server error" },
+      { error: message },
       { status: 500 }
     );
   }

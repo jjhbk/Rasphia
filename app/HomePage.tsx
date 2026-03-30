@@ -49,11 +49,13 @@ const initialUser: UserProfile = {
   phone: "",
   address: "",
   wishlist: [],
+  addressBook: [],
 };
 
 const App: React.FC = () => {
   const { data: session, status } = useSession();
   const isAuthenticated = !!session?.user;
+  const [authCheckTimedOut, setAuthCheckTimedOut] = useState(false);
 
   const [messages, setMessages] = useState<Message[]>([initialMessage]);
   const [chatSessions, setChatSessions] = useState<any[]>([]);
@@ -122,6 +124,15 @@ const App: React.FC = () => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => {
+    if (status !== "loading") {
+      setAuthCheckTimedOut(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setAuthCheckTimedOut(true), 5000);
+    return () => window.clearTimeout(timer);
+  }, [status]);
+
   const handleOpenAnalysisDetails = (id: string) => {
     const found = recentAnalyses.find((a) => a.analysisId === id);
     if (found) {
@@ -173,6 +184,7 @@ const App: React.FC = () => {
           phone: profile?.phone || "",
           address: profile?.address || "",
           wishlist: profile?.wishlist || [],
+          addressBook: profile?.addressBook || [],
         });
 
         setOrders(userOrders || []);
@@ -368,7 +380,7 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
   const handleLogin = () => setIsSignInPopupOpen(true);
   const handleGoogleSignIn = async () => {
     setIsSignInPopupOpen(false);
-    await signIn("google");
+    await signIn("google", { callbackUrl: "/post-login" });
   };
   const handleLogout = async () => {
     await signOut({ callbackUrl: "/" });
@@ -380,6 +392,22 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
   };
 
   const handleAddToCart = (product: Product) => {
+    const inventoryTracked =
+      product.isAvailable !== undefined || product.stockQuantity !== undefined;
+    if (
+      inventoryTracked &&
+      (product.isAvailable === false || (product.stockQuantity ?? 0) <= 0)
+    ) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          author: "ai",
+          text: `Sorry, **${product.name}** is currently unavailable.`,
+        },
+      ]);
+      return;
+    }
+
     setCart((prev) => {
       const exists = prev.find((p) => p.name === product.name);
       if (exists) return prev;
@@ -426,12 +454,31 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
       const updatedOrders = await res.json();
       setOrders(updatedOrders);
 
+      const addressEntry = {
+        name: customer.name,
+        phone: customer.phone,
+        addressLine1: customer.addressLine1 || "",
+        addressLine2: customer.addressLine2 || "",
+        city: customer.city || "",
+        state: customer.state || "",
+        zipCode: customer.zipCode || "",
+        address: customer.address,
+      };
+      const nextAddressBook = (currentUser.addressBook || []).some(
+        (entry) => entry.address === addressEntry.address
+      )
+        ? (currentUser.addressBook || []).map((entry) =>
+            entry.address === addressEntry.address ? addressEntry : entry
+          )
+        : [addressEntry, ...(currentUser.addressBook || [])];
+
       setCurrentUser({
         ...currentUser,
         name: customer.name,
         email: customer.email,
         phone: customer.phone,
         address: customer.address,
+        addressBook: nextAddressBook,
       });
 
       setCheckoutProducts(null);
@@ -479,7 +526,8 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
   const handleAddReview = async (
     orderId: string,
     rating: number,
-    comment: string
+    comment: string,
+    imageUrls: string[]
   ) => {
     const orderToReview = orders.find((o) => o.id === orderId);
     if (!orderToReview) return;
@@ -493,6 +541,7 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
           productNames: orderToReview.products.map((p) => p.name),
           rating,
           comment,
+          imageUrls,
           authorEmail: currentUser.email,
           authorName: currentUser.name,
         }),
@@ -508,7 +557,7 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
     handleCloseReview();
   };
 
-  if (status === "loading")
+  if (status === "loading" && !authCheckTimedOut)
     return (
       <div className="flex h-screen items-center justify-center text-stone-500">
         Loading...
@@ -615,6 +664,18 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
             </div>
 
             <div className="flex items-center gap-1 sm:gap-2">
+              <a
+                href="/storefronts"
+                className="hidden md:inline-flex px-3 py-1.5 rounded-full text-xs font-medium text-stone-800 bg-white border border-stone-200 hover:bg-stone-100 transition-colors"
+              >
+                Explore Stores
+              </a>
+              <a
+                href="/merchant/onboarding"
+                className="hidden md:inline-flex px-3 py-1.5 rounded-full text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors"
+              >
+                Merchant Onboarding
+              </a>
               <button
                 onClick={() => setIsCartOpen(true)}
                 className="h-10 w-10 relative flex items-center justify-center rounded-full bg-white border border-stone-200 text-stone-700 shadow-sm hover:scale-105 transition-all"

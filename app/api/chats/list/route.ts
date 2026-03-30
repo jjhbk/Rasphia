@@ -1,8 +1,8 @@
 // app/api/chats/list/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
 import { ChatSession } from "@/app/types";
 import { authGuard } from "@/app/lib/auth-guard";
+import { prisma } from "@/app/lib/prisma";
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,21 +13,20 @@ export async function GET(req: NextRequest) {
     // 2️⃣ ALWAYS trust session identity — NEVER client query params
     const email = sessionEmail;
 
-    const client = await clientPromise;
-    const db = client.db("rasphia");
+    const chats = await prisma.chat.findMany({
+      where: { userEmail: email },
+      orderBy: { updatedAt: "desc" },
+    });
 
-    // 3️⃣ Fetch only chats owned by this user
-    const chats = await db
-      .collection<ChatSession>("chats")
-      .find({ userEmail: email })
-      .sort({ updatedAt: -1 })
-      .toArray();
-
-    return NextResponse.json(chats, { status: 200 });
-  } catch (err: any) {
+    return NextResponse.json(
+      chats.map((c) => ({ ...c, _id: c.id })) as ChatSession[],
+      { status: 200 }
+    );
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Server error";
     console.error("Chat list error:", err);
     return NextResponse.json(
-      { error: err.message || "Server error" },
+      { error: message },
       { status: 500 }
     );
   }

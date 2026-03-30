@@ -1,5 +1,4 @@
 // src/types/chat.ts
-import { ObjectId } from "mongodb";
 
 export type Author = "user" | "ai";
 
@@ -12,7 +11,7 @@ export interface Message {
 }
 
 export interface ChatSession {
-  _id?: ObjectId | string;
+  _id?: string;
   userEmail: string;
   title?: string;
   createdAt: string;
@@ -22,10 +21,16 @@ export interface ChatSession {
 
 export interface Product {
   _id?: string;
+  id?: string;
   name: string;
   brand?: string;
+  merchantSlug?: string;
+  merchantName?: string;
   category: string;
   price?: number;
+  quantity?: number;
+  stockQuantity?: number;
+  isAvailable?: boolean;
   description?: string;
   story?: string;
   imageUrl?: string;
@@ -117,9 +122,34 @@ export interface CheckoutCustomer {
   email: string;
   phone: string;
   address: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
 }
 
-export type OrderStatus = "Processing" | "Shipped" | "Delivered" | "Paid";
+export interface SavedAddress {
+  name: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  address: string;
+}
+
+export type OrderStatus =
+  | "created"
+  | "paid"
+  | "Paid"
+  | "Processing"
+  | "Shipped"
+  | "Delivered"
+  | "Cancelled"
+  | "Refunded"
+  | "Replacement";
 
 export interface Review {
   authorName: string;
@@ -145,6 +175,7 @@ export interface UserProfile {
   phone: string;
   address: string;
   wishlist: Product[];
+  addressBook?: SavedAddress[];
 }
 
 const BEST_PICK_SCHEMA = {

@@ -1,56 +1,31 @@
 import { NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
-import { ObjectId } from "mongodb";
-import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
-import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
 
-export const runtime = "nodejs";
-export const OPTIONS = handleOptions;
+function unavailable() {
+  return NextResponse.json(
+    {
+      error:
+        "Temporarily unavailable during SQL migration. This endpoint is being moved off MongoDB.",
+    },
+    { status: 503 }
+  );
+}
 
-export const GET = withExtensionCors(async (req: Request) => {
-  try {
-    // 1️⃣ EXTENSION-ONLY AUTH
-    const email = await verifyExtensionToken(req);
-    if (!email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+export async function GET() {
+  return unavailable();
+}
 
-    // 2️⃣ Extract chat ID
-    const url = new URL(req.url);
-    const chatId = url.searchParams.get("chatId");
+export async function POST() {
+  return unavailable();
+}
 
-    if (!chatId) {
-      return NextResponse.json({ error: "Missing chatId" }, { status: 400 });
-    }
+export async function PUT() {
+  return unavailable();
+}
 
-    // 3️⃣ Connect to DB
-    const client = await clientPromise;
-    const db = client.db("rasphia");
+export async function PATCH() {
+  return unavailable();
+}
 
-    // 4️⃣ Load chat
-    const chat = await db.collection("chats").findOne({
-      _id: new ObjectId(chatId),
-    });
-
-    if (!chat) {
-      return NextResponse.json({ error: "Chat not found" }, { status: 404 });
-    }
-
-    // 5️⃣ Ownership check (extension schema)
-    if (chat.userEmail !== email) {
-      return NextResponse.json(
-        { error: "Forbidden: You do not own this chat" },
-        { status: 403 }
-      );
-    }
-
-    // 6️⃣ Return chat
-    return NextResponse.json(chat, { status: 200 });
-  } catch (err: any) {
-    console.error("❌ Chat fetch error:", err);
-    return NextResponse.json(
-      { error: err.message || "Server error" },
-      { status: 500 }
-    );
-  }
-});
+export async function DELETE() {
+  return unavailable();
+}

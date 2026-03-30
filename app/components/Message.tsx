@@ -53,8 +53,11 @@ const Message: React.FC<MessageProps> = ({
         // Fetch all products in parallel
         const fetched = await Promise.all(
           message.products.map(async (p) => {
+            const productId = String((p as Product)._id || (p as Product).id || "").trim();
             const res = await fetch(
-              `/api/products/getByName?name=${encodeURIComponent(p.name)}`
+              productId
+                ? `/api/products/getByName?id=${encodeURIComponent(productId)}`
+                : `/api/products/getByName?name=${encodeURIComponent(p.name)}`
             );
             const data = await res.json();
             return {

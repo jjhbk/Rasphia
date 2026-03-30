@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
-import clientPromise from "@/app/lib/mongodb";
-import { requireAdmin } from "@/app/lib/auth";
+import { getManagementAccess } from "@/app/lib/auth";
+import { deleteProductEmbedding } from "@/app/lib/product-vector-store";
+import { prisma } from "@/app/lib/prisma";
 
 export async function DELETE(req: Request) {
   try {
-    await requireAdmin(); // 🔒 Admin check
+    const access = await getManagementAccess();
 
     const { id } = await req.json();
 
@@ -16,34 +16,38 @@ export async function DELETE(req: Request) {
       );
     }
 
-    const client = await clientPromise;
-    const db = client.db("rasphia");
-    const products = db.collection("products");
-
-    // 🗑️ Delete the product
-    const result = await products.deleteOne({ _id: new ObjectId(id) });
-
-    if (result.deletedCount === 0) {
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) {
       return NextResponse.json(
         { error: "Product not found or already deleted" },
         { status: 404 }
       );
     }
 
-    // 🧠 Optional future step: remove from embedding index if needed
-    // For now, Atlas Vector Search auto-handles this since embedding lives in same doc.
+    if (access.role === "merchant" && product.merchantEmail !== access.email) {
+      return NextResponse.json(
+        { error: "Forbidden: You can only delete your own products" },
+        { status: 403 }
+      );
+    }
+
+    // 🗑️ Delete the product
+    await prisma.product.delete({ where: { id } });
+
+    await deleteProductEmbedding(id);
 
     console.log(`🗑️ Deleted product with ID: ${id}`);
 
     return NextResponse.json({ success: true, deletedId: id });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("❌ Error deleting product:", err);
+    const message = err instanceof Error ? err.message : "Failed to delete product";
 
     if (
-      err.message?.startsWith("Unauthorized") ||
-      err.message?.startsWith("Forbidden")
+      message.startsWith("Unauthorized") ||
+      message.startsWith("Forbidden")
     ) {
-      return NextResponse.json({ error: err.message }, { status: 403 });
+      return NextResponse.json({ error: message }, { status: 403 });
     }
 
     return NextResponse.json(

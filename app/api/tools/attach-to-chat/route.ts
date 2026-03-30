@@ -1,19 +1,14 @@
-// app/api/tools/attach-to-chat/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
-import { ObjectId } from "mongodb";
 import type { Message } from "@/app/types";
 import { authGuard } from "@/app/lib/auth-guard";
+import { prisma } from "@/app/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
-    // 1️⃣ Authenticate request + parse body safely
     const { sessionEmail, body, errorResponse } = await authGuard(req);
     if (errorResponse) return errorResponse;
 
-    const { analysisId, chatId } = body;
-
+    const { analysisId, chatId } = body || {};
     if (!analysisId || !chatId) {
       return NextResponse.json(
         { error: "analysisId and chatId are required" },
@@ -21,18 +16,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const client = await clientPromise;
-    const db = client.db("rasphia");
-
-    // 2️⃣ Validate chat ownership
-    const chat = await db.collection("chats").findOne({
-      _id: new ObjectId(chatId),
-    });
-
+    const chat = await prisma.chat.findUnique({ where: { id: String(chatId) } });
     if (!chat) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
     }
-
     if (chat.userEmail !== sessionEmail) {
       return NextResponse.json(
         { error: "Forbidden: You do not own this chat" },
@@ -40,16 +27,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3️⃣ Validate analysis ownership
-    const analysis = await db.collection("analyses").findOne({ analysisId });
-
+    const analysis = await prisma.analysis.findFirst({
+      where: {
+        OR: [{ analysisId: String(analysisId) }, { id: String(analysisId) }],
+      },
+    });
     if (!analysis) {
-      return NextResponse.json(
-        { error: "Analysis not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Analysis not found" }, { status: 404 });
     }
-
     if (analysis.userEmail !== sessionEmail) {
       return NextResponse.json(
         { error: "Forbidden: You do not own this analysis" },
@@ -57,37 +42,55 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4️⃣ Build safe Message object
+    const payload =
+      analysis.payload && typeof analysis.payload === "object"
+        ? (analysis.payload as Record<string, unknown>)
+        : {};
+    const aiResult =
+      payload.aiResult && typeof payload.aiResult === "object"
+        ? (payload.aiResult as Record<string, unknown>)
+        : {};
+
     const newMessage: Message = {
       author: "ai",
       text:
-        `Attached analysis: ${analysis.title ?? analysis.tool}\n\n` +
-        `${analysis.aiResult?.text ?? analysis.prompt ?? ""}`,
+        `Attached analysis: ${String(payload.title || analysis.type || "Analysis")}\n\n` +
+        `${String(aiResult.summary || aiResult.text || "")}`,
       products: undefined,
       comparisonTable: undefined,
     };
 
-    // 5️⃣ Update chat
-    const result = await db.collection("chats").updateOne(
-      { _id: new ObjectId(chatId) },
-      {
-        $push: { messages: newMessage } as any,
-        $set: { updatedAt: new Date().toISOString() },
-      }
-    );
+    const existingMessages = Array.isArray(chat.messages)
+      ? (chat.messages as Message[])
+      : [];
+    await prisma.chat.update({
+      where: { id: String(chatId) },
+      data: {
+        messages: [...existingMessages, newMessage],
+        updatedAt: new Date(),
+      },
+    });
 
-    if (result.modifiedCount === 0) {
-      return NextResponse.json(
-        { error: "Failed to attach analysis to chat" },
-        { status: 500 }
-      );
-    }
+    const existingRefs = Array.isArray(payload.chatRefs)
+      ? (payload.chatRefs as string[])
+      : [];
+    const nextRefs = Array.from(new Set([...existingRefs, String(chatId)]));
+    await prisma.analysis.update({
+      where: { id: analysis.id },
+      data: {
+        payload: {
+          ...payload,
+          chatRefs: nextRefs,
+        },
+        updatedAt: new Date(),
+      },
+    });
 
     return NextResponse.json({ ok: true, message: newMessage });
-  } catch (err: any) {
+  } catch (err) {
     console.error("❌ attach-to-chat error:", err);
     return NextResponse.json(
-      { error: err?.message ?? "Unable to attach analysis to chat" },
+      { error: "Unable to attach analysis to chat" },
       { status: 500 }
     );
   }

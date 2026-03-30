@@ -1,15 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
+import { prisma } from "@/app/lib/prisma";
 
 export async function GET(req: NextRequest) {
+  const id = req.nextUrl.searchParams.get("id");
   const name = req.nextUrl.searchParams.get("name");
-  if (!name) {
-    return NextResponse.json({ error: "Missing name" }, { status: 400 });
+  if (!id && !name) {
+    return NextResponse.json({ error: "Missing id or name" }, { status: 400 });
   }
 
-  const client = await clientPromise;
-  const db = client.db("rasphia");
-  const product = await db.collection("products").findOne({ name });
+  const product = await prisma.product.findFirst({
+    where: id ? { id } : { name: name! },
+    include: {
+      merchant: {
+        select: {
+          slug: true,
+          name: true,
+        },
+      },
+    },
+  });
 
   if (!product) {
     return NextResponse.json({ error: "Product not found" }, { status: 404 });
@@ -17,6 +26,8 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     ...product,
-    _id: product._id.toString(),
+    _id: product.id,
+    merchantSlug: product.merchant?.slug || null,
+    merchantName: product.merchant?.name || null,
   });
 }

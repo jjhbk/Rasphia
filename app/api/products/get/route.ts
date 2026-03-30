@@ -1,33 +1,44 @@
 import { NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
+import { getManagementAccess } from "@/app/lib/auth";
+import { prisma } from "@/app/lib/prisma";
 
 export async function GET(req: Request) {
   try {
-    const client = await clientPromise;
-    const db = client.db("rasphia");
     const url = new URL(req.url);
 
     // Optional query params for pagination
     const limit = parseInt(url.searchParams.get("limit") || "50", 10);
     const skip = parseInt(url.searchParams.get("skip") || "0", 10);
+    const scope = url.searchParams.get("scope");
 
-    // 🧠 Base query — skip deleted products
-    const query = { isDeleted: { $ne: true } };
+    let where: Record<string, unknown> = {};
 
-    // ⚡ Projection: exclude large fields like embeddings
-    const projection = { embedding: 0 };
+    if (scope === "managed") {
+      const access = await getManagementAccess();
+      if (access.role === "merchant") {
+        where = {
+          merchantEmail: access.email,
+        };
+      }
+    }
 
-    const products = await db
-      .collection("products")
-      .find(query, { projection })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .toArray();
+    const products = await prisma.product.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+    });
 
-    return NextResponse.json(products);
+    return NextResponse.json(products.map((p) => ({ ...p, _id: p.id })));
   } catch (err) {
     console.error("❌ Error fetching products:", err);
+    if (
+      err instanceof Error &&
+      (err.message.startsWith("Unauthorized") ||
+        err.message.startsWith("Forbidden"))
+    ) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
     return NextResponse.json(
       { error: "Failed to fetch products" },
       { status: 500 }

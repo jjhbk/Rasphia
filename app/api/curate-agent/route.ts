@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { streamText } from "ai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { z } from "zod";
-import clientPromise from "@/app/lib/mongodb";
 import { embedQuery } from "@/app/lib/queryEmbeddings";
+import { searchProductEmbeddings } from "@/app/lib/product-vector-store";
 
 export const dynamic = "force-dynamic";
 
@@ -21,9 +21,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    type ChatMessage = { author?: string; text?: string };
     const userMsg =
-      [...chatHistory].reverse().find((m: any) => m.author === "user")?.text ??
-      "";
+      [...(chatHistory as ChatMessage[])]
+        .reverse()
+        .find((m) => m.author === "user")?.text ?? "";
 
     if (!userMsg.trim()) {
       return NextResponse.json(
@@ -63,36 +65,7 @@ export async function POST(req: NextRequest) {
 
         try {
           const embedding = await embedQuery(query);
-          const client = await clientPromise;
-          const db = client.db("rasphia");
-
-          const results = await db
-            .collection("products")
-            .aggregate([
-              {
-                $vectorSearch: {
-                  index: "products_index",
-                  path: "embedding",
-                  queryVector: embedding,
-                  numCandidates: 100,
-                  limit: 8,
-                  similarity: "cosine",
-                },
-              },
-              {
-                $project: {
-                  _id: 1,
-                  name: 1,
-                  brand: 1,
-                  category: 1,
-                  price: 1,
-                  description: 1,
-                  imageUrl: 1,
-                  score: { $meta: "vectorSearchScore" },
-                },
-              },
-            ])
-            .toArray();
+          const results = await searchProductEmbeddings(embedding, 8);
 
           console.log(`✅ Found ${results.length} products`);
           return results;
@@ -126,17 +99,19 @@ Always end your response with a graceful, open-ended question.
       toolChoice: "auto", // ✅ let Gemini decide when to call
       temperature: 0.7,
       maxOutputTokens: 512,
-      onError: (err) => console.error("⚠️ Stream error:", err),
+      onError: (err: unknown) => console.error("⚠️ Stream error:", err),
     });
 
     return result.toTextStreamResponse();
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Something went wrong while generating Rasphia's response.";
     console.error("❌ /api/curate route failed:", error);
     return NextResponse.json(
       {
-        error:
-          error?.message ||
-          "Something went wrong while generating Rasphia's response.",
+        error: message,
       },
       { status: 500 }
     );

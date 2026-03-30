@@ -18,10 +18,15 @@ interface ProfilePageProps {
 }
 
 const statusColors: Record<OrderStatus, string> = {
+  created: "bg-stone-100 text-stone-700 border-stone-200",
+  paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
   Processing: "bg-amber-100 text-amber-800 border-amber-200",
   Shipped: "bg-blue-50 text-blue-700 border-blue-200",
   Delivered: "bg-green-50 text-green-700 border-green-200",
   Paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  Cancelled: "bg-stone-100 text-stone-700 border-stone-200",
+  Refunded: "bg-red-50 text-red-700 border-red-200",
+  Replacement: "bg-indigo-50 text-indigo-700 border-indigo-200",
 };
 
 const OrderStatusBadge = ({ status }: { status: OrderStatus }) => (
@@ -68,7 +73,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
         const normalizedOrders: Order[] =
           (ordersData || []).map((o: any) => ({
             ...o,
-            id: o.id ?? o.order_id ?? o._id ?? o.orderId,
+            id: o.orderId ?? o.order_id ?? o.id ?? o._id,
             products: Array.isArray(o.products)
               ? o.products
               : o.product
@@ -102,6 +107,38 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
       setIsEditing(false);
     } catch (err) {
       console.error("Profile update failed:", err);
+    }
+  };
+
+  const handleServiceRequest = async (
+    orderId: string,
+    type: "refund" | "replacement"
+  ) => {
+    const reason = prompt(
+      `Please describe why you are requesting a ${type}:`
+    );
+    if (!reason || !reason.trim()) return;
+
+    try {
+      const res = await fetch("/api/orders/service-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          type,
+          reason: reason.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to submit request");
+      }
+      alert(
+        `${type === "refund" ? "Refund" : "Replacement"} request submitted.`
+      );
+    } catch (err) {
+      console.error("Service request error:", err);
+      alert("Could not submit your request.");
     }
   };
 
@@ -264,6 +301,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                      // Normalize items again for display loop
                      const items: Product[] = (order as any).products ?? ((order as any).product ? [(order as any).product] : []);
                      const firstProduct = items[0] || {};
+                     const trackingNumber = (order as any).trackingNumber as string | undefined;
+                     const trackingUrl = (order as any).trackingUrl as string | undefined;
+                     const shippingProvider = (order as any).shippingProvider as string | undefined;
+                     const estimatedDelivery = (order as any).estimatedDelivery as string | undefined;
                      
                      return (
                         <div key={order.id}
@@ -285,21 +326,88 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                <OrderStatusBadge status={order.status} />
                             </div>
                             <p className="text-[9px] sm:text-[10px] text-stone-400 font-mono">ID: {order.id}</p>
+                            {(trackingNumber || shippingProvider || estimatedDelivery) && (
+                              <div className="mt-2 text-[10px] sm:text-xs text-stone-600 space-y-1">
+                                {shippingProvider && (
+                                  <p>Carrier: {shippingProvider}</p>
+                                )}
+                                {trackingNumber && (
+                                  <p>
+                                    Tracking:{" "}
+                                    {trackingUrl ? (
+                                      <a
+                                        href={trackingUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-blue-700 underline"
+                                      >
+                                        {trackingNumber}
+                                      </a>
+                                    ) : (
+                                      trackingNumber
+                                    )}
+                                  </p>
+                                )}
+                                {estimatedDelivery && (
+                                  <p>
+                                    ETA:{" "}
+                                    {new Date(estimatedDelivery).toLocaleDateString(
+                                      "en-IN",
+                                      {
+                                        day: "2-digit",
+                                        month: "short",
+                                        year: "numeric",
+                                      }
+                                    )}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           <div className="w-full sm:w-auto text-right flex flex-row sm:flex-col justify-between sm:justify-center items-center sm:items-end gap-1">
                              <p className="font-semibold text-stone-900 text-base sm:text-xl mb-0.5 sm:mb-1">
                                {/* Calculate total if not present, or use product price */}
-                               {formatPrice(items.reduce((sum, p) => sum + (p.price || 0), 0))}
+                               {formatPrice(
+                                 items.reduce(
+                                   (sum, p) => sum + (p.price || 0) * (p.quantity || 1),
+                                   0
+                                 )
+                               )}
                              </p>
-                             {order.status === "Delivered" && !order.isReviewed && (
-                               <button
-                                 onClick={() => onStartReview(order)}
-                                 className="px-3 py-1 text-[9px] sm:text-[10px] font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-full transition-colors"
-                               >
-                                 Write Review
-                               </button>
-                             )}
+                             <div className="flex gap-1.5 flex-wrap justify-end">
+                               {order.status === "Delivered" && !order.isReviewed && (
+                                 <button
+                                   onClick={() => onStartReview(order)}
+                                   className="px-3 py-1 text-[9px] sm:text-[10px] font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-full transition-colors"
+                                 >
+                                   Write Review
+                                 </button>
+                               )}
+                               {order.status === "Delivered" && (
+                                 <>
+                                   <button
+                                     onClick={() =>
+                                       handleServiceRequest(order.id, "refund")
+                                     }
+                                     className="px-3 py-1 text-[9px] sm:text-[10px] font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-full transition-colors"
+                                   >
+                                     Request Refund
+                                   </button>
+                                   <button
+                                     onClick={() =>
+                                       handleServiceRequest(
+                                         order.id,
+                                         "replacement"
+                                       )
+                                     }
+                                     className="px-3 py-1 text-[9px] sm:text-[10px] font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-full transition-colors"
+                                   >
+                                     Request Replacement
+                                   </button>
+                                 </>
+                               )}
+                             </div>
                           </div>
                         </div>
                      );

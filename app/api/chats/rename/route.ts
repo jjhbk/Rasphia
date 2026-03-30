@@ -1,8 +1,7 @@
 // app/api/chats/rename/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
-import { ObjectId } from "mongodb";
 import { authGuard } from "@/app/lib/auth-guard";
+import { prisma } from "@/app/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,12 +15,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing chatId" }, { status: 400 });
     }
 
-    const client = await clientPromise;
-    const db = client.db("rasphia");
-    const coll = db.collection("chats");
-
-    // 2️⃣ Check chat existence & ownership
-    const chat = await coll.findOne({ _id: new ObjectId(chatId) });
+    const chat = await prisma.chat.findUnique({ where: { id: chatId } });
 
     if (!chat) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
@@ -38,10 +32,10 @@ export async function POST(req: NextRequest) {
 
     // 3️⃣ If title is provided → simple update
     if (title && typeof title === "string" && title.trim().length > 0) {
-      await coll.updateOne(
-        { _id: new ObjectId(chatId) },
-        { $set: { title: title.trim(), updatedAt: now } }
-      );
+      await prisma.chat.update({
+        where: { id: chatId },
+        data: { title: title.trim(), updatedAt: new Date(now) },
+      });
       return NextResponse.json(
         { ok: true, title: title.trim() },
         { status: 200 }
@@ -49,29 +43,30 @@ export async function POST(req: NextRequest) {
     }
 
     // 4️⃣ Auto-generate title if no title provided
-    const messages = chat.messages ?? [];
-    let candidate =
+    const messages = (chat.messages ?? []) as Array<{ author?: string; text?: string }>;
+    const candidate =
       messages
         .slice()
         .reverse()
-        .find((m: any) => m.author === "user")?.text ??
-      messages.find((m: any) => m.author === "user")?.text ??
+        .find((m) => m.author === "user")?.text ??
+      messages.find((m) => m.author === "user")?.text ??
       "Conversation";
 
     const generated = candidate.trim().slice(0, 60).replace(/\n/g, " ");
     const finalTitle = generated.length ? generated : "Conversation";
 
     // 5️⃣ Save generated title
-    await coll.updateOne(
-      { _id: new ObjectId(chatId) },
-      { $set: { title: finalTitle, updatedAt: now } }
-    );
+    await prisma.chat.update({
+      where: { id: chatId },
+      data: { title: finalTitle, updatedAt: new Date(now) },
+    });
 
     return NextResponse.json({ ok: true, title: finalTitle }, { status: 200 });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Server error";
     console.error("Chat rename error:", err);
     return NextResponse.json(
-      { error: err.message || "Server error" },
+      { error: message },
       { status: 500 }
     );
   }

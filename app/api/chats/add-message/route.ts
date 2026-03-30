@@ -1,9 +1,8 @@
 // app/api/chats/add-message/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
-import { ObjectId } from "mongodb";
 import { Message } from "@/app/types";
 import { authGuard } from "@/app/lib/auth-guard";
+import { prisma } from "@/app/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,14 +23,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3️⃣ Connect to DB
-    const client = await clientPromise;
-    const db = client.db("rasphia");
-
-    // 🔒 4. Verify chat ownership BEFORE updating
-    const chat = await db
-      .collection("chats")
-      .findOne({ _id: new ObjectId(chatId) });
+    const chat = await prisma.chat.findUnique({ where: { id: chatId } });
 
     if (!chat) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
@@ -49,24 +41,24 @@ export async function POST(req: NextRequest) {
     message.createdAt = message.createdAt ?? now;
 
     // 💾 6. Update chat
-    await db.collection("chats").updateOne(
-      { _id: new ObjectId(chatId) },
-      {
-        $push: { messages: message } as any,
-        $set: { updatedAt: now },
-      }
-    );
+    const existingMessages = Array.isArray(chat.messages)
+      ? (chat.messages as Message[])
+      : [];
 
-    // 🔍 7. Return updated chat
-    const updated = await db
-      .collection("chats")
-      .findOne({ _id: new ObjectId(chatId) });
+    const updated = await prisma.chat.update({
+      where: { id: chatId },
+      data: {
+        messages: [...existingMessages, message],
+        updatedAt: new Date(now),
+      },
+    });
 
-    return NextResponse.json(updated, { status: 200 });
-  } catch (err: any) {
+    return NextResponse.json({ ...updated, _id: updated.id }, { status: 200 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Server error";
     console.error("Add message error:", err);
     return NextResponse.json(
-      { error: err.message || "Server error" },
+      { error: message },
       { status: 500 }
     );
   }

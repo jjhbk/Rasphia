@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
-import { ObjectId } from "mongodb";
 import { authGuard } from "@/app/lib/auth-guard";
+import { prisma } from "@/app/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,12 +14,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
 
-    const client = await clientPromise;
-    const db = client.db("rasphia");
-    const coll = db.collection("chats");
-
-    // 2️⃣ Validate chat exists
-    const chat = await coll.findOne({ _id: new ObjectId(chatId) });
+    const chat = await prisma.chat.findUnique({ where: { id: chatId } });
     if (!chat) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
     }
@@ -37,24 +31,23 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const safeTitle = title.trim() || "Untitled";
 
-    await coll.updateOne(
-      { _id: new ObjectId(chatId) },
-      {
-        $set: {
-          title: safeTitle,
-          updatedAt: now,
-        },
-      }
-    );
+    await prisma.chat.update({
+      where: { id: chatId },
+      data: {
+        title: safeTitle,
+        updatedAt: new Date(now),
+      },
+    });
 
     return NextResponse.json(
       { success: true, title: safeTitle },
       { status: 200 }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Server error";
     console.error("Failed to update chat title:", err);
     return NextResponse.json(
-      { error: err.message || "Server error" },
+      { error: message },
       { status: 500 }
     );
   }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
 import { authGuard } from "@/app/lib/auth-guard";
+import { prisma } from "@/app/lib/prisma";
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,17 +11,22 @@ export async function GET(req: NextRequest) {
     // 2️⃣ ALWAYS ignore `?email=` from the client (untrusted!)
     const email = sessionEmail;
 
-    const client = await clientPromise;
-    const db = client.db("rasphia");
+    const orders = await prisma.order.findMany({
+      where: {
+        customer: {
+          path: ["email"],
+          equals: email,
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
-    // 3️⃣ Fetch orders ONLY belonging to the authenticated user
-    const orders = await db
-      .collection("orders")
-      .find({ "customer.email": email })
-      .sort({ createdAt: -1 })
-      .toArray();
+    const normalized = orders.map((o) => ({
+      ...o,
+      id: o.orderId,
+    }));
 
-    return NextResponse.json(orders, { status: 200 });
+    return NextResponse.json(normalized, { status: 200 });
   } catch (error) {
     console.error("Error fetching orders:", error);
     return NextResponse.json(

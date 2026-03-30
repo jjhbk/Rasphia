@@ -1,8 +1,8 @@
 import sharp from "sharp";
 import { v4 as uuid } from "uuid";
 import { put } from "@vercel/blob";
-import clientPromise from "@/app/lib/mongodb";
 import { GoogleGenAI } from "@google/genai";
+import { prisma } from "@/app/lib/prisma";
 import {
   BASE_RULES,
   SKIN_RULES,
@@ -12,7 +12,7 @@ import {
   OUTPUT_FORMATS,
 } from "@/utils/promptModules";
 
-const TOOL_RULE_MAP: any = {
+const TOOL_RULE_MAP: Record<string, string> = {
   skin: SKIN_RULES,
   hair: HAIR_RULES,
   body: BODY_RULES,
@@ -20,7 +20,7 @@ const TOOL_RULE_MAP: any = {
   default: "",
 };
 
-const TOOL_OUTPUT_MAP: any = {
+const TOOL_OUTPUT_MAP: Record<string, string> = {
   skin: OUTPUT_FORMATS.skin,
   hair: OUTPUT_FORMATS.hair,
   body: OUTPUT_FORMATS.body,
@@ -48,10 +48,7 @@ export async function processImageAnalysis(
   let buffer = Buffer.from(arrBuff);
 
   // sharp compress
-  buffer = (await sharp(buffer)
-    .rotate()
-    .jpeg({ quality: 85 })
-    .toBuffer()) as any;
+  buffer = await sharp(buffer).rotate().jpeg({ quality: 85 }).toBuffer();
 
   // blob upload
   const blobName = `analysis-${uuid()}.jpg`;
@@ -68,7 +65,7 @@ export async function processImageAnalysis(
   const prompt = buildPrompt(type);
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-  let output: any = {};
+  let output: Record<string, unknown> = {};
 
   try {
     const result = await ai.models.generateContent({
@@ -100,10 +97,6 @@ export async function processImageAnalysis(
     };
   }
 
-  // save to DB
-  const client = await clientPromise;
-  const db = client.db("rasphia");
-
   const doc = {
     analysisId: uuid(),
     userEmail,
@@ -114,7 +107,19 @@ export async function processImageAnalysis(
     updatedAt: new Date().toISOString(),
   };
 
-  await db.collection("analyses").insertOne(doc);
+  await prisma.analysis.create({
+    data: {
+      analysisId: doc.analysisId,
+      userEmail: doc.userEmail,
+      type: doc.type,
+      payload: {
+        fileUrl: doc.fileUrl,
+        aiResult: doc.aiResult,
+      },
+      createdAt: new Date(doc.createdAt),
+      updatedAt: new Date(doc.updatedAt),
+    },
+  });
 
   return doc;
 }

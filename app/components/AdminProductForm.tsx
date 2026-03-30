@@ -114,6 +114,8 @@ export default function AdminProductForm({
     category: product?.category || "",
     brand: product?.brand || "",
     price: product?.price || 0,
+    stockQuantity: product?.stockQuantity ?? 0,
+    isAvailable: (product?.stockQuantity ?? 0) > 0,
     story: product?.story || "",
     imageUrl: product?.imageUrl || "",
     affiliateLink: product?.affiliateLink || "",
@@ -144,6 +146,8 @@ export default function AdminProductForm({
     if (!formData.category.trim()) e.category = "Category is required";
     if (!formData.price || formData.price <= 0)
       e.price = "Valid price required";
+    if ((formData.stockQuantity ?? 0) < 0)
+      e.stockQuantity = "Stock must be 0 or more";
     if (!formData.imageUrl && !file) e.imageUrl = "Image is required";
 
     setErrors(e);
@@ -161,7 +165,8 @@ export default function AdminProductForm({
     const { name, value } = e.target;
     setFormData((p: any) => ({
       ...p,
-      [name]: name === "price" ? Number(value) : value,
+      [name]:
+        name === "price" || name === "stockQuantity" ? Number(value) : value,
     }));
   };
 
@@ -241,6 +246,7 @@ export default function AdminProductForm({
             value={formData.name}
             onChange={handleChange}
             className="w-full border px-3 py-2 rounded-md"
+            required
           />
           {errors.name && <p className="text-sm text-red-600">{errors.name}</p>}
         </div>
@@ -263,6 +269,7 @@ export default function AdminProductForm({
               value={formData.category}
               onChange={handleChange}
               className="w-full border px-3 py-2 rounded-md"
+              required
             />
             {errors.category && (
               <p className="text-sm text-red-600">{errors.category}</p>
@@ -277,9 +284,28 @@ export default function AdminProductForm({
               value={formData.price}
               onChange={handleChange}
               className="w-full border px-3 py-2 rounded-md"
+              min={1}
+              step="0.01"
+              required
             />
             {errors.price && (
               <p className="text-sm text-red-600">{errors.price}</p>
+            )}
+          </div>
+          <div>
+            <label className="text-sm">Available Stock</label>
+            <input
+              name="stockQuantity"
+              type="number"
+              value={formData.stockQuantity ?? 0}
+              onChange={handleChange}
+              className="w-full border px-3 py-2 rounded-md"
+              min={0}
+              step="1"
+              required
+            />
+            {errors.stockQuantity && (
+              <p className="text-sm text-red-600">{errors.stockQuantity}</p>
             )}
           </div>
         </div>
@@ -424,12 +450,16 @@ export default function AdminProductForm({
           <input
             type="file"
             accept="image/*"
+            required={!imagePreview}
             onChange={(e) => {
               const f = e.target.files?.[0] || null;
               setFile(f);
               f && setImagePreview(URL.createObjectURL(f));
             }}
           />
+          {errors.imageUrl && (
+            <p className="text-sm text-red-600">{errors.imageUrl}</p>
+          )}
 
           {imagePreview && (
             <img

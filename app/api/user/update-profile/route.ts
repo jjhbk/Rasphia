@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
 import { authGuard } from "@/app/lib/auth-guard";
+import { prisma } from "@/app/lib/prisma";
+
+type AddressBookEntry = {
+  name: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  address: string;
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,25 +20,54 @@ export async function POST(req: NextRequest) {
     if (errorResponse) return errorResponse;
 
     // Extract allowed fields
-    const { name, phone, address, wishlist } = body;
+    const { name, phone, address, wishlist, addressBook } = body;
 
-    const client = await clientPromise;
-    const db = client.db("rasphia");
+    const existing = await prisma.userProfile.findUnique({
+      where: { email: sessionEmail },
+      select: { addressBook: true },
+    });
+    const currentAddressBook: AddressBookEntry[] = Array.isArray(
+      existing?.addressBook
+    )
+      ? (existing?.addressBook as AddressBookEntry[])
+      : [];
 
-    // 2️⃣ Update only the logged-in user's profile
-    await db.collection("user_profiles").updateOne(
-      { email: sessionEmail },
-      {
-        $set: {
-          ...(name !== undefined && { name }),
-          ...(phone !== undefined && { phone }),
-          ...(address !== undefined && { address }),
-          ...(wishlist !== undefined && { wishlist }),
-          updatedAt: new Date(),
-        },
+    const incomingAddressBook: AddressBookEntry[] = Array.isArray(addressBook)
+      ? (addressBook as AddressBookEntry[])
+      : [];
+
+    const mergedAddressBook = [...currentAddressBook];
+    for (const entry of incomingAddressBook) {
+      if (
+        entry &&
+        typeof entry.address === "string" &&
+        entry.address.trim() &&
+        !mergedAddressBook.some((x) => x.address === entry.address)
+      ) {
+        mergedAddressBook.push(entry);
+      }
+    }
+
+    await prisma.userProfile.upsert({
+      where: { email: sessionEmail },
+      create: {
+        email: sessionEmail,
+        name: name ?? "",
+        phone: phone ?? "",
+        address: address ?? "",
+        wishlist: wishlist ?? [],
+        addressBook: mergedAddressBook,
+        credits: 0,
       },
-      { upsert: true }
-    );
+      update: {
+        ...(name !== undefined && { name }),
+        ...(phone !== undefined && { phone }),
+        ...(address !== undefined && { address }),
+        ...(wishlist !== undefined && { wishlist }),
+        ...(addressBook !== undefined && { addressBook: mergedAddressBook }),
+        updatedAt: new Date(),
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

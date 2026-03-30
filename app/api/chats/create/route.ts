@@ -1,8 +1,8 @@
 // app/api/chats/create/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
 import { ChatSession, Message } from "@/app/types";
 import { authGuard } from "@/app/lib/auth-guard";
+import { prisma } from "@/app/lib/prisma";
 
 // top of route:
 
@@ -30,18 +30,25 @@ export async function POST(req: NextRequest) {
       messages: [firstMessage],
     };
 
-    const client = await clientPromise;
-    const db = client.db("rasphia");
-    const res = await db.collection("chats").insertOne(newChat);
+    const res = await prisma.chat.create({
+      data: {
+        userEmail: newChat.userEmail,
+        title: newChat.title,
+        messages: newChat.messages,
+        createdAt: new Date(newChat.createdAt),
+        updatedAt: new Date(newChat.updatedAt),
+      },
+    });
 
     return NextResponse.json(
-      { ...newChat, _id: res.insertedId },
+      { ...newChat, _id: res.id },
       { status: 201 }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Server error";
     console.error(err);
     return NextResponse.json(
-      { error: err.message || "Server error" },
+      { error: message },
       { status: 500 }
     );
   }

@@ -2,11 +2,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
-import clientPromise from "@/app/lib/mongodb";
 import { embedQuery } from "@/app/lib/queryEmbeddings";
-import { ObjectId } from "mongodb";
 import { Product } from "@/app/types";
 import { authGuard } from "@/app/lib/auth-guard";
+import { searchProductEmbeddings } from "@/app/lib/product-vector-store";
+import { prisma } from "@/app/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -55,17 +55,12 @@ export async function POST(req: NextRequest) {
     // -------------------------------
     // DB CONNECTION
     // -------------------------------
-    const client = await clientPromise;
-    const db = client.db("rasphia");
-    const productsCollection = db.collection("products");
-    const chatsCollection = db.collection("chats");
-
     // -------------------------------
     // OWNERSHIP CHECK (if chatId provided)
     // -------------------------------
     if (chatId) {
-      const existingChat = await chatsCollection.findOne({
-        _id: new ObjectId(chatId),
+      const existingChat = await prisma.chat.findUnique({
+        where: { id: chatId },
       });
 
       if (!existingChat) {
@@ -98,32 +93,7 @@ export async function POST(req: NextRequest) {
     // -------------------------------
     const queryEmbedding = await embedQuery(userMsg);
 
-    const results = await productsCollection
-      .aggregate([
-        {
-          $vectorSearch: {
-            index: "products_index",
-            path: "embedding",
-            queryVector: queryEmbedding,
-            numCandidates: 100,
-            limit: 8,
-            similarity: "cosine",
-          },
-        },
-        {
-          $project: {
-            _id: 1,
-            name: 1,
-            brand: 1,
-            category: 1,
-            price: 1,
-            description: 1,
-            imageUrl: 1,
-            score: { $meta: "vectorSearchScore" },
-          },
-        },
-      ])
-      .toArray();
+    const results = await searchProductEmbeddings(queryEmbedding, 8);
     console.log("the results are :", results);
     if (!results.length) {
       return NextResponse.json({
@@ -279,7 +249,7 @@ Respond strictly in JSON using the schema.
     let jsonResponse;
     try {
       jsonResponse = JSON.parse(response.text as string);
-    } catch (err) {
+    } catch {
       console.error("Gemini parse error:", response.text);
       return NextResponse.json(
         {
@@ -322,19 +292,21 @@ Respond strictly in JSON using the schema.
         updatedAt: new Date(),
         messages: [...chatHistory, aiMessage],
       };
-      const result = await chatsCollection.insertOne(newChat);
-      chatDoc = { ...newChat, _id: result.insertedId };
+      const result = await prisma.chat.create({ data: newChat });
+      chatDoc = { ...newChat, _id: result.id };
     } else {
       // Update existing chat
-      await chatsCollection.updateOne(
-        { _id: new ObjectId(chatId) },
-        {
-          $push: { messages: aiMessage } as any,
-          $set: { updatedAt: new Date() },
-        }
-      );
-
-      chatDoc = await chatsCollection.findOne({ _id: new ObjectId(chatId) });
+      const existing = await prisma.chat.findUnique({ where: { id: chatId } });
+      const messages = Array.isArray(existing?.messages)
+        ? (existing?.messages as Array<Record<string, unknown>>)
+        : [];
+      chatDoc = await prisma.chat.update({
+        where: { id: chatId },
+        data: {
+          messages: [...messages, aiMessage as unknown as Record<string, unknown>],
+          updatedAt: new Date(),
+        },
+      });
     }
 
     console.log("Final message", JSON.stringify(aiMessage));
@@ -349,10 +321,12 @@ Respond strictly in JSON using the schema.
       },
       { status: 200 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "AI response failed.";
     console.error("❌ Curate route error:", error);
     return NextResponse.json(
-      { error: error?.message || "AI response failed." },
+      { error: message },
       { status: 500 }
     );
   }

@@ -49,11 +49,13 @@ const initialUser: UserProfile = {
   phone: "",
   address: "",
   wishlist: [],
+  addressBook: [],
 };
 
 const App: React.FC = () => {
   const { data: session, status } = useSession();
   const isAuthenticated = !!session?.user;
+  const [authCheckTimedOut, setAuthCheckTimedOut] = useState(false);
 
   const [messages, setMessages] = useState<Message[]>([initialMessage]);
   const [chatSessions, setChatSessions] = useState<any[]>([]);
@@ -122,6 +124,15 @@ const App: React.FC = () => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => {
+    if (status !== "loading") {
+      setAuthCheckTimedOut(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setAuthCheckTimedOut(true), 5000);
+    return () => window.clearTimeout(timer);
+  }, [status]);
+
   const handleOpenAnalysisDetails = (id: string) => {
     const found = recentAnalyses.find((a) => a.analysisId === id);
     if (found) {
@@ -173,6 +184,7 @@ const App: React.FC = () => {
           phone: profile?.phone || "",
           address: profile?.address || "",
           wishlist: profile?.wishlist || [],
+          addressBook: profile?.addressBook || [],
         });
 
         setOrders(userOrders || []);
@@ -368,7 +380,7 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
   const handleLogin = () => setIsSignInPopupOpen(true);
   const handleGoogleSignIn = async () => {
     setIsSignInPopupOpen(false);
-    await signIn("google");
+    await signIn("google", { callbackUrl: "/post-login" });
   };
   const handleLogout = async () => {
     await signOut({ callbackUrl: "/" });
@@ -380,6 +392,22 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
   };
 
   const handleAddToCart = (product: Product) => {
+    const inventoryTracked =
+      product.isAvailable !== undefined || product.stockQuantity !== undefined;
+    if (
+      inventoryTracked &&
+      (product.isAvailable === false || (product.stockQuantity ?? 0) <= 0)
+    ) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          author: "ai",
+          text: `Sorry, **${product.name}** is currently unavailable.`,
+        },
+      ]);
+      return;
+    }
+
     setCart((prev) => {
       const exists = prev.find((p) => p.name === product.name);
       if (exists) return prev;
@@ -426,12 +454,31 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
       const updatedOrders = await res.json();
       setOrders(updatedOrders);
 
+      const addressEntry = {
+        name: customer.name,
+        phone: customer.phone,
+        addressLine1: customer.addressLine1 || "",
+        addressLine2: customer.addressLine2 || "",
+        city: customer.city || "",
+        state: customer.state || "",
+        zipCode: customer.zipCode || "",
+        address: customer.address,
+      };
+      const nextAddressBook = (currentUser.addressBook || []).some(
+        (entry) => entry.address === addressEntry.address
+      )
+        ? (currentUser.addressBook || []).map((entry) =>
+            entry.address === addressEntry.address ? addressEntry : entry
+          )
+        : [addressEntry, ...(currentUser.addressBook || [])];
+
       setCurrentUser({
         ...currentUser,
         name: customer.name,
         email: customer.email,
         phone: customer.phone,
         address: customer.address,
+        addressBook: nextAddressBook,
       });
 
       setCheckoutProducts(null);
@@ -479,7 +526,8 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
   const handleAddReview = async (
     orderId: string,
     rating: number,
-    comment: string
+    comment: string,
+    imageUrls: string[]
   ) => {
     const orderToReview = orders.find((o) => o.id === orderId);
     if (!orderToReview) return;
@@ -493,6 +541,7 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
           productNames: orderToReview.products.map((p) => p.name),
           rating,
           comment,
+          imageUrls,
           authorEmail: currentUser.email,
           authorName: currentUser.name,
         }),
@@ -508,10 +557,15 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
     handleCloseReview();
   };
 
-  if (status === "loading")
+  if (status === "loading" && !authCheckTimedOut)
     return (
-      <div className="flex h-screen items-center justify-center text-stone-500">
-        Loading...
+      <div className="flex h-screen items-center justify-center bg-brand-cream">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 rounded-full bg-brand-charcoal flex items-center justify-center">
+            <span className="font-heading text-xl text-brand-cream">R</span>
+          </div>
+          <p className="text-sm text-brand-stone">Loading your store...</p>
+        </div>
       </div>
     );
 
@@ -552,28 +606,31 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
     );
 
   return (
-    <div className="relative h-screen w-full bg-[#F8F4EF] text-stone-900 font-sans overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-[#FFF4E1] via-[#F8F1EA] to-[#F1E3D3] -z-20" />
+    <div className="relative h-screen w-full bg-brand-cream text-brand-charcoal font-body overflow-hidden">
+      {/* Subtle warm ambient background */}
+      <div className="absolute inset-0 bg-brand-hero -z-20" />
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-20 -left-20 h-96 w-96 rounded-full bg-[#F8DCC0] opacity-40 blur-3xl" />
-        <div className="absolute top-1/2 right-0 h-[500px] w-[500px] rounded-full bg-[#F0B9A3] opacity-30 blur-[100px]" />
-        <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-[#E5D0C5] opacity-40 blur-3xl" />
+        <div className="absolute -top-32 -left-32 h-[500px] w-[500px] rounded-full bg-brand-sand/30 blur-[120px]" />
+        <div className="absolute top-1/2 right-[-10%] h-[400px] w-[400px] rounded-full bg-brand-clay/15 blur-[100px]" />
+        <div className="absolute bottom-[-10%] left-1/3 h-[300px] w-[300px] rounded-full bg-brand-sage/10 blur-[80px]" />
       </div>
 
-      <div className="flex h-full w-full p-2 lg:p-4 gap-2 lg:gap-4 relative">
+      <div className="flex h-full w-full p-2 lg:p-3 gap-2 lg:gap-3 relative">
+        {/* Mobile overlay */}
         {isLeftSidebarOpen && isMobile && (
           <div
-            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
+            className="fixed inset-0 bg-brand-warm-black/20 backdrop-blur-sm z-40 lg:hidden"
             onClick={() => setIsLeftSidebarOpen(false)}
           />
         )}
 
+        {/* LEFT SIDEBAR */}
         <div
           className={`${
             isLeftSidebarOpen ? "flex" : "hidden"
-          } fixed inset-y-2 left-2 z-50 w-[280px] h-[calc(100%-16px)] flex-col
-          lg:static lg:h-full lg:w-[280px]
-          rounded-[32px] bg-white/60 backdrop-blur-xl border border-white/50 shadow-2xl lg:shadow-[0_8px_32px_rgba(0,0,0,0.04)] overflow-hidden transition-all duration-300`}
+          } fixed inset-y-2 left-2 z-50 w-[272px] h-[calc(100%-16px)] flex-col
+          lg:static lg:h-full lg:w-[272px]
+          rounded-3xl bg-white/70 backdrop-blur-xl border border-brand-sand/40 shadow-soft-lg lg:shadow-soft overflow-hidden transition-all duration-300`}
         >
           <ChatSidebar
             userEmail={currentUser.email}
@@ -585,74 +642,88 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
         </div>
 
         {/* CENTER PANEL */}
-        <main className="flex-1 flex flex-col min-w-0 relative rounded-[32px] bg-white/80 backdrop-blur-xl border border-white/60 shadow-[0_20px_40px_rgba(0,0,0,0.06)] overflow-hidden">
-          <header className="flex-shrink-0 h-16 px-4 lg:px-6 flex items-center justify-between border-b border-stone-100/50 bg-white/50 backdrop-blur-md z-10">
+        <main className="flex-1 flex flex-col min-w-0 relative rounded-3xl bg-white/85 backdrop-blur-xl border border-brand-sand/30 shadow-soft-md overflow-hidden">
+          {/* App Header */}
+          <header className="flex-shrink-0 h-14 px-4 lg:px-5 flex items-center justify-between border-b border-brand-sand/30 bg-white/60 backdrop-blur-md z-10">
             <div className="flex items-center gap-2 sm:gap-3">
               <button
                 onClick={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
-                className="p-2 rounded-full hover:bg-stone-200/50 text-stone-500 hover:text-stone-800 transition-colors"
+                className="p-2 rounded-xl hover:bg-brand-parchment text-brand-stone hover:text-brand-charcoal transition-colors"
                 title={isLeftSidebarOpen ? "Close sidebar" : "Open sidebar"}
               >
                 {isLeftSidebarOpen ? (
-                  <PanelLeftClose className="h-5 w-5" />
+                  <PanelLeftClose className="h-4.5 w-4.5" />
                 ) : (
-                  <PanelLeftOpen className="h-5 w-5" />
+                  <PanelLeftOpen className="h-4.5 w-4.5" />
                 )}
               </button>
-              <div className="hidden sm:flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-amber-600 to-amber-700 text-white text-sm font-serif font-bold shadow-md shadow-amber-200">
+              <div className="hidden sm:flex h-8 w-8 items-center justify-center rounded-full bg-brand-charcoal text-brand-cream text-sm font-heading font-bold">
                 R
               </div>
               <div className="flex flex-col">
-                <span className="text-sm font-semibold text-stone-900 tracking-tight">
-                  Rasphia <span className="hidden sm:inline">Concierge</span>
+                <span className="text-sm font-semibold text-brand-charcoal tracking-tight font-heading">
+                  Rasphia
                 </span>
-                <span className="text-[10px] uppercase tracking-wider text-stone-500 font-medium hidden sm:block">
+                <span className="text-[10px] text-brand-stone hidden sm:block">
                   {currentUser.name
-                    ? `Session for ${currentUser.name}`
-                    : "Guest Session"}
+                    ? `${currentUser.name}'s store`
+                    : "Your personal store"}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <a
+                href="/storefronts"
+                className="hidden md:inline-flex px-3 py-1.5 rounded-full text-xs font-medium text-brand-charcoal bg-white border border-brand-sand/60 hover:bg-brand-parchment transition-colors"
+              >
+                Explore Stores
+              </a>
+              <a
+                href="/merchant/onboarding"
+                className="hidden md:inline-flex px-3 py-1.5 rounded-full text-xs font-medium text-brand-terracotta bg-brand-parchment border border-brand-sand/50 hover:bg-brand-sand/50 transition-colors"
+              >
+                For Merchants
+              </a>
               <button
                 onClick={() => setIsCartOpen(true)}
-                className="h-10 w-10 relative flex items-center justify-center rounded-full bg-white border border-stone-200 text-stone-700 shadow-sm hover:scale-105 transition-all"
+                className="h-9 w-9 relative flex items-center justify-center rounded-xl bg-white border border-brand-sand/50 text-brand-stone shadow-soft hover:shadow-soft-md hover:text-brand-charcoal transition-all"
                 aria-label="View cart"
               >
-                <ShoppingCart className="h-5 w-5" />
+                <ShoppingCart className="h-4 w-4" />
                 {cart.length > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-5 px-1 rounded-full bg-amber-600 text-white text-[10px] font-semibold flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-brand-coral text-white text-[9px] font-semibold flex items-center justify-center">
                     {cart.length}
                   </span>
                 )}
               </button>
               <button
                 onClick={handleLogout}
-                className="hidden sm:block px-4 py-1.5 rounded-full text-xs font-medium text-stone-500 hover:bg-stone-100 hover:text-stone-900 transition-colors"
+                className="hidden sm:block px-3 py-1.5 rounded-xl text-xs font-medium text-brand-stone hover:bg-brand-parchment hover:text-brand-charcoal transition-colors"
               >
                 Sign out
               </button>
               <button
                 onClick={handleShowProfile}
-                className="h-10 w-10 flex items-center justify-center rounded-full bg-white border border-stone-200 text-stone-700 shadow-sm hover:scale-105 transition-all"
+                className="h-9 w-9 flex items-center justify-center rounded-xl bg-white border border-brand-sand/50 text-brand-stone shadow-soft hover:shadow-soft-md hover:text-brand-charcoal transition-all"
               >
                 <ProfileIcon />
               </button>
               <button
                 onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
-                className="p-2 ml-0 sm:ml-1 rounded-full hover:bg-stone-200/50 text-stone-500 hover:text-stone-800 transition-colors"
+                className="p-2 rounded-xl hover:bg-brand-parchment text-brand-stone hover:text-brand-charcoal transition-colors"
                 title={isRightSidebarOpen ? "Close tools" : "Open tools"}
               >
                 {isRightSidebarOpen ? (
-                  <PanelRightClose className="h-5 w-5" />
+                  <PanelRightClose className="h-4.5 w-4.5" />
                 ) : (
-                  <PanelRightOpen className="h-5 w-5" />
+                  <PanelRightOpen className="h-4.5 w-4.5" />
                 )}
               </button>
             </div>
           </header>
 
+          {/* Chat Area */}
           <div className="flex-1 flex flex-col relative overflow-hidden">
             <ChatWindow
               messages={messages}
@@ -663,7 +734,7 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
               products={products}
             />
 
-            <div className="flex-shrink-0 px-6 pb-6 pt-4 bg-gradient-to-t from-white via-white/80 to-transparent">
+            <div className="flex-shrink-0 px-5 pb-5 pt-3 bg-gradient-to-t from-white via-white/90 to-transparent">
               <div className="max-w-3xl mx-auto">
                 <ChatInput
                   onSendMessage={handleSendMessage}
@@ -671,9 +742,9 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
                   value={draft}
                   onChange={setDraft}
                 />
-                <div className="mt-3 text-center">
-                  <p className="text-[10px] text-stone-400 font-medium">
-                    Rasphia AI can make mistakes. Please verify product details.
+                <div className="mt-2.5 text-center">
+                  <p className="text-[10px] text-brand-stone/50">
+                    Rasphia can make mistakes. Verify product details before purchasing.
                   </p>
                 </div>
               </div>
@@ -681,29 +752,31 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
           </div>
         </main>
 
+        {/* Mobile right overlay */}
         {isRightSidebarOpen && isMobile && (
           <div
-            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
+            className="fixed inset-0 bg-brand-warm-black/20 backdrop-blur-sm z-40 lg:hidden"
             onClick={() => setIsRightSidebarOpen(false)}
           />
         )}
 
+        {/* RIGHT SIDEBAR */}
         <div
           className={`${
             isRightSidebarOpen ? "flex" : "hidden"
-          } fixed inset-y-2 right-2 z-50 w-[320px] h-[calc(100%-16px)] flex-col
-  xl:static xl:h-full xl:w-[320px]
-  rounded-[32px] bg-white/60 backdrop-blur-xl border border-white/50 shadow-2xl xl:shadow-[0_8px_32px_rgba(0,0,0,0.04)] overflow-hidden transition-all duration-300`}
+          } fixed inset-y-2 right-2 z-50 w-[300px] h-[calc(100%-16px)] flex-col
+  xl:static xl:h-full xl:w-[300px]
+  rounded-3xl bg-white/70 backdrop-blur-xl border border-brand-sand/40 shadow-soft-lg xl:shadow-soft overflow-hidden transition-all duration-300`}
         >
-          {/* TOP: PERSONA */}
-          <div className="flex-none border-b border-white/40">
+          {/* Persona */}
+          <div className="flex-none border-b border-brand-sand/30">
             <PersonaSidebar
               persona={persona}
               onOpenFlow={handleOpenPersonaFlow}
             />
           </div>
 
-          {/* BOTTOM: EXISTING ANALYSIS UI */}
+          {/* Analysis Tools */}
           <div className="flex-1 overflow-y-auto">
             <AnalysisSidebar
               onOpenAnalysis={handleOpenAnalysis}

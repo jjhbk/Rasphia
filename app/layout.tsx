@@ -1,24 +1,32 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { DM_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
-import AuthSessionProvider from "./providers/SessionProvider"; // <-- our wrapper client provider
+import AuthSessionProvider from "./providers/SessionProvider";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const dmSans = DM_Sans({
+  variable: "--font-body",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const fraunces = localFont({
+  src: [
+    {
+      path: "../public/fonts/Fraunces-Variable.ttf",
+      style: "normal",
+    },
+  ],
+  variable: "--font-heading",
+  fallback: ["Georgia", "serif"],
 });
 
 export const metadata: Metadata = {
-  title: "Rasphia",
-  description: "AI-powered shopping concierge",
+  title: "Rasphia — Shop the Vibe",
+  description:
+    "Shopping that knows you. Persona-driven discovery for the things that fit your life.",
 };
 
-// 👇 this is essential to avoid AsyncStorage bug
 export const dynamic = "force-dynamic";
 
 export default function RootLayout({
@@ -29,9 +37,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${dmSans.variable} ${fraunces.variable} font-body antialiased`}
       >
-        {/* ✅ wrap everything inside the client-side provider */}
         <AuthSessionProvider>{children}</AuthSessionProvider>
       </body>
     </html>

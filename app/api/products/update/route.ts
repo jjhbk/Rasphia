@@ -1,26 +1,22 @@
 import { NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
-import clientPromise from "@/app/lib/mongodb";
-import { requireAdmin } from "@/app/lib/auth";
+import { getManagementAccess } from "@/app/lib/auth";
 import { generateProductEmbedding } from "@/app/lib/generateEmbeddings";
+import { prisma } from "@/app/lib/prisma";
 
 export async function PUT(req: Request) {
   try {
-    // 🔒 Ensure only admins can access
-    await requireAdmin();
+    const access = await getManagementAccess();
 
     const body = await req.json();
 
     // 🆔 Normalize product ID (accept id or _id)
     const rawId: string | undefined = body.id || body._id;
-    if (!rawId || !ObjectId.isValid(rawId)) {
+    if (!rawId) {
       return NextResponse.json(
         { error: "Valid product ID (_id or id) required." },
         { status: 400 }
       );
     }
-
-    const id = new ObjectId(rawId);
 
     const {
       name,
@@ -29,20 +25,33 @@ export async function PUT(req: Request) {
       price,
       imageUrl,
       category,
+      stockQuantity,
       tags,
       occasion,
       recipient,
       story,
       affiliateLink,
-      reviews,
     } = body;
 
-    const client = await clientPromise;
-    const db = client.db("rasphia");
-    const products = db.collection("products");
+    const existingProduct = await prisma.product.findUnique({
+      where: { id: rawId },
+    });
+    if (!existingProduct) {
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+
+    if (
+      access.role === "merchant" &&
+      existingProduct.merchantEmail !== access.email
+    ) {
+      return NextResponse.json(
+        { error: "Forbidden: You can only update your own products" },
+        { status: 403 }
+      );
+    }
 
     // ✅ Build $set object only with defined fields
-    const updatedFields: Record<string, any> = { updatedAt: new Date() };
+    const updatedFields: Record<string, unknown> = { updatedAt: new Date() };
 
     if (name !== undefined) updatedFields.name = name;
     if (brand !== undefined) updatedFields.brand = brand;
@@ -50,13 +59,17 @@ export async function PUT(req: Request) {
     if (price !== undefined) updatedFields.price = Number(price);
     if (imageUrl !== undefined) updatedFields.imageUrl = imageUrl;
     if (category !== undefined) updatedFields.category = category;
+    if (stockQuantity !== undefined) {
+      const normalizedStock = Math.max(0, Number(stockQuantity));
+      updatedFields.stockQuantity = normalizedStock;
+      updatedFields.isAvailable = normalizedStock > 0;
+    }
     if (tags !== undefined) updatedFields.tags = tags;
     if (occasion !== undefined) updatedFields.occasion = occasion;
     if (recipient !== undefined) updatedFields.recipient = recipient;
     if (story !== undefined) updatedFields.story = story;
     if (affiliateLink !== undefined)
       updatedFields.affiliateLink = affiliateLink;
-    if (reviews !== undefined) updatedFields.reviews = reviews;
 
     // 🧠 Detect if any descriptive field changed
     const reembedTriggered =
@@ -71,14 +84,10 @@ export async function PUT(req: Request) {
     }
 
     // ✅ Perform update in MongoDB
-    const result = await products.updateOne(
-      { _id: id },
-      { $set: updatedFields }
-    );
-
-    if (result.matchedCount === 0) {
-      return NextResponse.json({ error: "Product not found" }, { status: 404 });
-    }
+    await prisma.product.update({
+      where: { id: rawId },
+      data: updatedFields,
+    });
 
     console.log(`📝 Updated product: ${name || rawId}`);
     if (reembedTriggered) {
@@ -89,7 +98,9 @@ export async function PUT(req: Request) {
     }
 
     // ✅ Fetch updated product for return
-    const updatedProduct = await products.findOne({ _id: id });
+    const updatedProduct = await prisma.product.findUnique({
+      where: { id: rawId },
+    });
     if (!updatedProduct) {
       return NextResponse.json(
         { error: "Updated product not found after save" },
@@ -97,21 +108,23 @@ export async function PUT(req: Request) {
       );
     }
 
-    // ✅ Clean response: convert ObjectId to string
+    // ✅ Clean response
     const cleanProduct = {
       ...updatedProduct,
-      _id: updatedProduct._id.toString(),
+      _id: updatedProduct.id,
     };
 
     return NextResponse.json(cleanProduct, { status: 200 });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("❌ Error updating product:", err);
+    const message =
+      err instanceof Error ? err.message : "Failed to update product.";
 
     if (
-      err.message?.startsWith("Unauthorized") ||
-      err.message?.startsWith("Forbidden")
+      message.startsWith("Unauthorized") ||
+      message.startsWith("Forbidden")
     ) {
-      return NextResponse.json({ error: err.message }, { status: 403 });
+      return NextResponse.json({ error: message }, { status: 403 });
     }
 
     return NextResponse.json(

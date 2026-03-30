@@ -1,0 +1,382 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ProductEmbedding {
+  id             String   @id @default(cuid())
+  productId      String   @unique @map("product_id")
+  merchantId     String?  @map("merchant_id")
+  name           String
+  brand          String?
+  category       String?
+  price          Float?
+  description    String?
+  imageUrl       String?  @map("image_url")
+  embedding      Unsupported("vector(1536)")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  merchant       Merchant? @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+
+  @@index([category])
+  @@index([merchantId])
+  @@index([updatedAt])
+  @@map("product_embeddings")
+}
+
+model Product {
+  id            String    @id @default(cuid())
+  merchantId    String?   @map("merchant_id")
+  merchantEmail String?   @map("merchant_email")
+  name          String
+  brand         String?
+  description   String?
+  category      String?
+  price         Float?
+  imageUrl      String?   @map("image_url")
+  tags          Json?
+  occasion      Json?
+  recipient     String?
+  story         String?
+  affiliateLink String?   @map("affiliate_link")
+  attributes    Json?
+  styleTags     Json?     @map("style_tags")
+  colorPalette  Json?     @map("color_palette")
+  materials     Json?
+  stockQuantity Int       @default(0) @map("stock_quantity")
+  isAvailable   Boolean   @default(false) @map("is_available")
+  embedding     Json?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  merchant      Merchant? @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  reviewItems   Review[]
+
+  @@index([merchantId])
+  @@index([merchantEmail])
+  @@index([isAvailable])
+  @@index([name])
+  @@index([updatedAt])
+  @@map("products")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  image     String?
+  emailVerified DateTime? @map("email_verified")
+  phone     String?
+  address   String?
+  persona   Json?
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  accounts  Account[]
+  sessions  Session[]
+
+  @@index([updatedAt])
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @map("refresh_token")
+  access_token      String? @map("access_token")
+  expires_at        Int?    @map("expires_at")
+  token_type        String? @map("token_type")
+  scope             String?
+  id_token          String? @map("id_token")
+  session_state     String? @map("session_state")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model UserProfile {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  phone     String?
+  address   String?
+  role      String?
+  credits   Int      @default(0)
+  wishlist  Json?
+  addressBook Json?  @map("address_book")
+  metadata  Json?
+  personaRecord UserPersona?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([role])
+  @@index([updatedAt])
+  @@map("user_profiles")
+}
+
+model UserPersona {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  data      Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  userProfile UserProfile @relation(fields: [email], references: [email], onDelete: Cascade)
+
+  @@index([updatedAt])
+  @@map("user_personas")
+}
+
+model Review {
+  id               String   @id @default(cuid())
+  productId        String   @map("product_id")
+  userEmail        String   @map("user_email")
+  orderId          String?  @map("order_id")
+  rating           Int
+  comment          String?
+  imageUrls        Json?    @map("image_urls")
+  verifiedPurchase Boolean  @default(false) @map("verified_purchase")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([userEmail])
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("reviews")
+}
+
+model Order {
+  id            String    @id @default(cuid())
+  orderId       String    @unique @map("order_id")
+  paymentId     String?   @map("payment_id")
+  amount        Float
+  currency      String
+  receipt       String?
+  status        String
+  mode          String?
+  credits       Int?
+  products      Json?
+  customer      Json
+  shippingProvider String? @map("shipping_provider")
+  trackingNumber String?  @map("tracking_number")
+  trackingUrl   String?   @map("tracking_url")
+  shippingDetails Json?   @map("shipping_details")
+  estimatedDelivery DateTime? @map("estimated_delivery")
+  shippedAt     DateTime? @map("shipped_at")
+  deliveredAt   DateTime? @map("delivered_at")
+  statusHistory Json?     @map("status_history")
+  isReviewed    Boolean   @default(false) @map("is_reviewed")
+  verifiedAt    DateTime? @map("verified_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  serviceRequests OrderServiceRequest[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderServiceRequest {
+  id              String   @id @default(cuid())
+  requestId       String   @unique @map("request_id")
+  orderId         String   @map("order_id")
+  type            String
+  status          String   @default("requested")
+  reason          String
+  details         String?
+  requestedByEmail String  @map("requested_by_email")
+  reviewedByEmail String?  @map("reviewed_by_email")
+  merchantEmail   String?  @map("merchant_email")
+  adminNote       String?  @map("admin_note")
+  resolutionNote  String?  @map("resolution_note")
+  timeline        Json?
+  resolvedAt      DateTime? @map("resolved_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([requestedByEmail])
+  @@index([merchantEmail])
+  @@index([status])
+  @@index([type])
+  @@map("order_service_requests")
+}
+
+model Chat {
+  id        String   @id @default(cuid())
+  userEmail String   @map("user_email")
+  title     String?
+  messages  Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userEmail])
+  @@index([updatedAt])
+  @@map("chats")
+}
+
+model Analysis {
+  id         String   @id @default(cuid())
+  analysisId String?  @unique @map("analysis_id")
+  userEmail  String?  @map("user_email")
+  chatId     String?  @map("chat_id")
+  type       String?
+  payload    Json
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([userEmail])
+  @@index([createdAt])
+  @@map("analyses")
+}
+
+model WhatsappSession {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  data      Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("whatsapp_sessions")
+}
+
+model ExtensionToken {
+  id        String    @id @default(cuid())
+  email     String
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([email])
+  @@index([expiresAt])
+  @@map("extension_tokens")
+}
+
+model CreditLedger {
+  id               String   @id @default(cuid())
+  email            String
+  type             String
+  amount           Int
+  rupees           Float?
+  reason           String?
+  razorpayOrderId  String?  @map("razorpay_order_id")
+  razorpayPaymentId String? @map("razorpay_payment_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([email])
+  @@index([createdAt])
+  @@map("credit_ledger")
+}
+
+model TryOn {
+  id        String   @id @default(cuid())
+  email     String?
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([email])
+  @@map("tryons")
+}
+
+model ReimaginedProduct {
+  id        String   @id @default(cuid())
+  email     String?
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([email])
+  @@map("reimagined_products")
+}
+
+model ProductInsight {
+  id        String   @id @default(cuid())
+  email     String?
+  payload   Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([email])
+  @@map("product_insights")
+}
+
+model Submission {
+  id        String   @id @default(cuid())
+  name      String?
+  email     String?
+  phone     String?
+  message   String?
+  payload   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("submissions")
+}
+
+model Merchant {
+  id           String             @id @default(cuid())
+  slug         String             @unique
+  name         String
+  phone        String
+  email        String             @unique
+  address      String
+  addressLine1 String             @map("address_line_1")
+  addressLine2 String             @map("address_line_2")
+  city         String
+  state        String
+  zipCode      String             @map("zip_code")
+  locationLink String             @map("location_link")
+  logoUrl      String?            @map("logo_url")
+  coverImageUrl String?           @map("cover_image_url")
+  storefrontDescription String?   @map("storefront_description")
+  chatbotWelcomeMessage String?   @map("chatbot_welcome_message")
+  status       String             @default("pending")
+  approvedAt   DateTime?          @map("approved_at")
+  approvedBy   String?            @map("approved_by")
+  metadata     Json?
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+  products     ProductEmbedding[]
+  catalog      Product[]
+
+  @@index([name])
+  @@index([slug])
+  @@index([phone])
+  @@index([status])
+  @@index([updatedAt])
+  @@map("merchants")
+}

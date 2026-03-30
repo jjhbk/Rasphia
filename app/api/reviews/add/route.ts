@@ -1,116 +1,117 @@
 import { NextRequest, NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
 import { authGuard } from "@/app/lib/auth-guard";
-
-interface Review {
-  authorEmail: string;
-  authorName: string;
-  rating: number;
-  comment: string;
-  date: Date;
-}
+import { prisma } from "@/app/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
-    // 1️⃣ Authenticate user
     const { sessionEmail, body, errorResponse } = await authGuard(req);
     if (errorResponse) return errorResponse;
 
-    const {
-      orderId,
-      productNames,
-      rating,
-      comment,
-      authorName, // allowed, but cannot override email
-    } = body;
+    const { orderId, productNames, rating, comment, imageUrls } = body || {};
 
-    if (!orderId) {
-      return NextResponse.json({ error: "orderId required" }, { status: 400 });
-    }
-
-    if (!Array.isArray(productNames) || productNames.length === 0) {
+    if (!orderId || !Array.isArray(productNames) || !productNames.length) {
       return NextResponse.json(
-        { error: "productNames must be a non-empty array" },
+        { error: "orderId and productNames are required" },
         { status: 400 }
       );
     }
 
-    if (typeof rating !== "number" || rating < 1 || rating > 5) {
+    const safeRating = Number(rating);
+    if (!Number.isFinite(safeRating) || safeRating < 1 || safeRating > 5) {
       return NextResponse.json(
         { error: "rating must be between 1 and 5" },
         { status: 400 }
       );
     }
 
-    const client = await clientPromise;
-    const db = client.db("rasphia");
-    const productsCol = db.collection("products");
-    const ordersCol = db.collection("orders");
-
-    // 2️⃣ Fetch the order securely
-    const order = await ordersCol.findOne({ order_id: orderId });
+    const order = await prisma.order.findFirst({
+      where: {
+        orderId: String(orderId),
+        customer: {
+          path: ["email"],
+          equals: sessionEmail,
+        },
+      },
+    });
 
     if (!order) {
-      return NextResponse.json({ error: "Order not found" }, { status: 404 });
-    }
-
-    // 3️⃣ Ensure user owns this order
-    if (order.customer.email !== sessionEmail) {
       return NextResponse.json(
-        { error: "Forbidden: You do not own this order." },
-        { status: 403 }
+        { error: "Order not found for this user" },
+        { status: 404 }
       );
     }
 
-    // 4️⃣ Ensure user is reviewing actual products purchased
-    const purchasedNames = order.products.map((p: any) => p.name);
+    const orderedProducts = Array.isArray(order.products)
+      ? (order.products as Array<{ name?: string }>)
+      : [];
+    const orderedNames = new Set(
+      orderedProducts
+        .map((p) => p?.name)
+        .filter((n): n is string => typeof n === "string")
+    );
 
-    for (const name of productNames) {
-      if (!purchasedNames.includes(name)) {
-        return NextResponse.json(
-          {
-            error: `Invalid review: Product '${name}' was not purchased in this order.`,
-          },
-          { status: 400 }
-        );
-      }
+    const cleanedImageUrls = Array.isArray(imageUrls)
+      ? imageUrls
+          .filter((u) => typeof u === "string")
+          .map((u) => u.trim())
+          .filter(Boolean)
+      : [];
+
+    const createdReviews = [];
+
+    for (const rawName of productNames) {
+      if (typeof rawName !== "string") continue;
+      const name = rawName.trim();
+      if (!name || !orderedNames.has(name)) continue;
+
+      const product = await prisma.product.findFirst({ where: { name } });
+      if (!product) continue;
+
+      const existing = await prisma.review.findFirst({
+        where: {
+          productId: product.id,
+          userEmail: sessionEmail,
+          orderId: String(orderId),
+        },
+      });
+      if (existing) continue;
+
+      const review = await prisma.review.create({
+        data: {
+          productId: product.id,
+          userEmail: sessionEmail,
+          orderId: String(orderId),
+          rating: safeRating,
+          comment: typeof comment === "string" ? comment.trim() : null,
+          imageUrls: cleanedImageUrls,
+          verifiedPurchase: true,
+        },
+      });
+
+      createdReviews.push(review);
     }
 
-    // 5️⃣ Prevent duplicate review submission
-    if (order.isReviewed) {
+    if (!createdReviews.length) {
       return NextResponse.json(
-        { error: "Order already reviewed" },
+        {
+          error:
+            "No valid reviews were created. Check purchased products or duplicates.",
+        },
         { status: 400 }
       );
     }
 
-    // 6️⃣ Prepare secure review object
-    const newReview: Review = {
-      authorEmail: sessionEmail, // secure identity
-      authorName: authorName ?? sessionEmail.split("@")[0],
-      rating,
-      comment,
-      date: new Date(),
-    };
+    await prisma.order.updateMany({
+      where: { orderId: String(orderId) },
+      data: { isReviewed: true, updatedAt: new Date() },
+    });
 
-    // 7️⃣ Add review to ALL purchased products being reviewed
-    await productsCol.updateMany(
-      { name: { $in: productNames } },
-      { $push: { reviews: newReview as any } }
-    );
-
-    // 8️⃣ Mark order as reviewed
-    await ordersCol.updateOne(
-      { order_id: orderId },
-      { $set: { isReviewed: true } }
-    );
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("❌ Error adding review:", error);
     return NextResponse.json(
-      { error: "Failed to add review" },
-      { status: 500 }
+      { success: true, reviews: createdReviews },
+      { status: 200 }
     );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to add review";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -1,9 +1,8 @@
 // app/api/chats/get/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import clientPromise from "@/app/lib/mongodb";
-import { ObjectId } from "mongodb";
 import { ChatSession } from "@/app/types";
 import { authGuard } from "@/app/lib/auth-guard";
+import { prisma } from "@/app/lib/prisma";
 
 export async function GET(req: NextRequest) {
   try {
@@ -17,14 +16,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing id" }, { status: 400 });
     }
 
-    // 3️⃣ Database connection
-    const client = await clientPromise;
-    const db = client.db("rasphia");
-
-    // 4️⃣ Look up the chat
-    const chat = await db
-      .collection<ChatSession>("chats")
-      .findOne({ _id: new ObjectId(id) });
+    const chat = await prisma.chat.findUnique({ where: { id } });
 
     if (!chat) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
@@ -39,11 +31,15 @@ export async function GET(req: NextRequest) {
     }
 
     // 6️⃣ Success — return chat
-    return NextResponse.json(chat, { status: 200 });
-  } catch (err: any) {
+    return NextResponse.json(
+      { ...chat, _id: chat.id } as ChatSession,
+      { status: 200 }
+    );
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Server error";
     console.error("Chat fetch error:", err);
     return NextResponse.json(
-      { error: err.message || "Server error" },
+      { error: message },
       { status: 500 }
     );
   }
