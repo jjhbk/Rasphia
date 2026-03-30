@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import type { Order } from "../types";
 import StarIcon from "./icons/StarIcon";
+import { X } from "lucide-react";
 
 interface ReviewModalProps {
   order: Order;
@@ -13,11 +14,7 @@ interface ReviewModalProps {
   ) => void;
 }
 
-const ReviewModal: React.FC<ReviewModalProps> = ({
-  order,
-  onClose,
-  onSubmit,
-}) => {
+const ReviewModal: React.FC<ReviewModalProps> = ({ order, onClose, onSubmit }) => {
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState("");
@@ -25,51 +22,47 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (rating === 0) {
-      alert("Please select a star rating.");
-      return;
-    }
-    const imageUrls = imageUrlInput
-      .split("\n")
-      .map((v) => v.trim())
-      .filter(Boolean);
+    if (rating === 0) return;
+    const imageUrls = imageUrlInput.split("\n").map((v) => v.trim()).filter(Boolean);
     onSubmit(order.id, rating, comment, imageUrls);
   };
 
-  // 🟢 Convert product list → "A, B, C"
   const productNames = (order.products || []).map((p) => p.name).join(", ");
+  const activeRating = hoverRating || rating;
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={onClose}
     >
+      <div className="absolute inset-0 bg-brand-warm-black/25 backdrop-blur-sm" />
       <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8"
+        className="relative w-full max-w-md rounded-3xl bg-white border border-brand-sand/40 shadow-soft-xl p-7"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-start mb-4">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-serif text-amber-900">
-              Leave a Review
+            <h2 className="font-heading text-2xl text-brand-charcoal">
+              Leave a review
             </h2>
-            <p className="text-stone-600">for {productNames}</p>
+            <p className="text-sm text-brand-stone mt-0.5">{productNames}</p>
           </div>
           <button
             onClick={onClose}
-            className="text-stone-400 hover:text-stone-600 transition-colors rounded-full p-2"
+            className="h-8 w-8 flex items-center justify-center rounded-xl border border-brand-sand/40 text-brand-stone hover:bg-brand-parchment transition-colors"
           >
-            &times;
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          {/* ⭐ Rating */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-stone-600 mb-2">
-              Your Rating
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Star rating */}
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wider text-brand-stone/60 mb-3">
+              Rating
             </label>
-            <div className="flex items-center space-x-1">
+            <div className="flex items-center gap-1">
               {[1, 2, 3, 4, 5].map((star) => (
                 <button
                   type="button"
@@ -77,63 +70,64 @@ const ReviewModal: React.FC<ReviewModalProps> = ({
                   onMouseEnter={() => setHoverRating(star)}
                   onMouseLeave={() => setHoverRating(0)}
                   onClick={() => setRating(star)}
-                  className="text-yellow-400 focus:outline-none"
-                  aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
+                  className="transition-transform hover:scale-110"
                 >
                   <StarIcon
-                    className="w-8 h-8 transition-colors"
-                    filled={(hoverRating || rating) >= star}
+                    className={`w-8 h-8 transition-colors ${
+                      activeRating >= star
+                        ? "text-brand-mustard"
+                        : "text-brand-sand"
+                    }`}
+                    filled={activeRating >= star}
                   />
                 </button>
               ))}
             </div>
           </div>
 
-          {/* 📝 Comment */}
-          <div className="mb-6">
+          {/* Comment */}
+          <div>
             <label
-              htmlFor="comment"
-              className="block text-sm font-medium text-stone-600 mb-2"
+              htmlFor="review-comment"
+              className="block text-xs font-medium uppercase tracking-wider text-brand-stone/60 mb-2"
             >
-              Your Review
+              Your experience
             </label>
             <textarea
-              id="comment"
+              id="review-comment"
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              rows={4}
-              placeholder="What did you like or dislike? How did you use these products?"
-              className="w-full p-3 bg-white border border-stone-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500"
+              rows={3}
+              placeholder="What did you love? What could be better?"
+              className="w-full px-4 py-3 rounded-xl bg-brand-parchment/50 border border-brand-sand/40 text-sm text-brand-charcoal placeholder-brand-stone/40 focus:outline-none focus:border-brand-terracotta/40 focus:ring-2 focus:ring-brand-terracotta/10 resize-none"
             />
           </div>
 
-          <div className="mb-6">
+          {/* Image URLs */}
+          <div>
             <label
-              htmlFor="imageUrls"
-              className="block text-sm font-medium text-stone-600 mb-2"
+              htmlFor="review-images"
+              className="block text-xs font-medium uppercase tracking-wider text-brand-stone/60 mb-2"
             >
-              Review Image URLs (optional, one per line)
+              Photo URLs <span className="normal-case text-brand-stone/40">(optional, one per line)</span>
             </label>
             <textarea
-              id="imageUrls"
+              id="review-images"
               value={imageUrlInput}
               onChange={(e) => setImageUrlInput(e.target.value)}
-              rows={3}
-              placeholder="https://...jpg"
-              className="w-full p-3 bg-white border border-stone-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500"
+              rows={2}
+              placeholder="https://..."
+              className="w-full px-4 py-3 rounded-xl bg-brand-parchment/50 border border-brand-sand/40 text-sm text-brand-charcoal placeholder-brand-stone/40 focus:outline-none focus:border-brand-terracotta/40 focus:ring-2 focus:ring-brand-terracotta/10 resize-none"
             />
           </div>
 
-          {/* Submit */}
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              className="w-full sm:w-auto px-6 py-3 bg-stone-800 text-white font-medium rounded-full hover:bg-stone-900 transition-colors disabled:bg-stone-400"
-              disabled={rating === 0}
-            >
-              Submit Review
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={rating === 0}
+            className="w-full py-3 rounded-xl bg-brand-charcoal text-brand-cream text-sm font-medium hover:bg-brand-warm-black transition-colors shadow-soft disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Submit review
+          </button>
         </form>
       </div>
     </div>

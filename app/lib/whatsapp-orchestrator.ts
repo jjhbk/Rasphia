@@ -3,6 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/app/lib/prisma";
 import { ensureUniqueMerchantSlug } from "@/app/lib/merchantSlug";
 import { generateProductEmbedding } from "@/app/lib/generateEmbeddings";
+import { embedQuery } from "@/app/lib/queryEmbeddings";
+import { searchProductEmbeddings } from "@/app/lib/product-vector-store";
 import { Prisma } from "@prisma/client";
 import { uploadWhatsAppMediaToBlob } from "@/app/lib/whatsapp";
 
@@ -15,7 +17,9 @@ export const WA_INTENTS = [
   "user_persona_update",
   "user_discover_products",
   "user_discover_merchants",
+  "user_order_query",
   "user_wishlist_add",
+  "user_wishlist_remove",
   "user_wishlist_view",
   "merchant_register",
   "product_upload",
@@ -111,7 +115,9 @@ const REQUIRED_BY_INTENT: Record<WaIntent, string[]> = {
   user_persona_update: ["personaText"],
   user_discover_products: [],
   user_discover_merchants: [],
+  user_order_query: [],
   user_wishlist_add: ["productName"],
+  user_wishlist_remove: ["productName"],
   user_wishlist_view: [],
   merchant_register: [
     "businessName",
@@ -137,6 +143,7 @@ const REQUIRED_BY_INTENT: Record<WaIntent, string[]> = {
 const OPTIONAL_BY_INTENT: Partial<Record<WaIntent, string[]>> = {
   user_discover_products: ["query", "category", "maxPrice", "tag"],
   user_discover_merchants: ["query", "city"],
+  user_order_query: ["orderId"],
   user_persona_update: ["personaTags"],
   product_upload: ["brand", "description", "imageUrl"],
   product_update: ["price", "stockQuantity", "category", "brand", "description", "imageUrl"],
@@ -232,8 +239,12 @@ function buildUnclearIntentTemplate(merchantStatus?: string) {
     "Example: discover products query=gift for mom category=home maxPrice=2000",
     "4) Discover merchants",
     "Example: discover merchants city=Hyderabad query=wallpapers",
-    "5) Wishlist",
+    "5) Query my orders",
+    "Example: my orders",
+    "Example: track order orderId=ORD123",
+    "6) Wishlist",
     "Example: add wishlist productName=Guts Wallpaper",
+    "Example: remove wishlist productName=Guts Wallpaper",
     "Example: view wishlist",
     "",
     "MERCHANT FLOW",
@@ -456,8 +467,17 @@ function fallbackIntent(message: string): IntentParse {
   if (text.includes("persona")) {
     return { intent: "user_persona_update", fields: {} };
   }
+  if (
+    (text.includes("my order") || text.includes("track order") || text.includes("order status")) &&
+    !text.includes("update")
+  ) {
+    return { intent: "user_order_query", fields: {} };
+  }
   if (text.includes("wishlist") && (text.includes("view") || text.includes("show"))) {
     return { intent: "user_wishlist_view", fields: {} };
+  }
+  if (text.includes("wishlist") && (text.includes("remove") || text.includes("delete"))) {
+    return { intent: "user_wishlist_remove", fields: {} };
   }
   if (text.includes("wishlist")) {
     return { intent: "user_wishlist_add", fields: {} };
@@ -774,32 +794,55 @@ async function handleUserDiscoverProducts(draft: Record<string, unknown>) {
   const maxPrice = safeNumber(draft.maxPrice);
   const tag = String(draft.tag || "").trim().toLowerCase();
 
+  if (!query) {
+    const checklist = buildIntentChecklist("user_discover_products", draft);
+    return {
+      done: false,
+      reply: `Please share what you want to discover (for example: \"gift for mom under 1500\").${checklist}`,
+      nextIntent: "user_discover_products" as WaIntent,
+      nextDraft: draft,
+    };
+  }
+
+  // Reuse the same curation pipeline foundation as /api/curate:
+  // query embedding -> vector retrieval -> filtered product projection.
+  const queryEmbedding = await embedQuery(query);
+  const vectorHits = await searchProductEmbeddings(queryEmbedding, 20);
+  const rankedIds = vectorHits.map((hit) => hit._id);
+
+  if (!rankedIds.length) {
+    return {
+      done: true,
+      reply: "I could not find matching products from the curated catalog. Try rephrasing your need.",
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
   const products = await prisma.product.findMany({
     where: {
+      id: { in: rankedIds },
       isAvailable: true,
       ...(category ? { category: { contains: category, mode: "insensitive" } } : {}),
       ...(maxPrice !== null ? { price: { lte: maxPrice } } : {}),
-      ...(query
-        ? {
-            OR: [
-              { name: { contains: query, mode: "insensitive" } },
-              { description: { contains: query, mode: "insensitive" } },
-            ],
-          }
-        : {}),
     },
-    orderBy: { updatedAt: "desc" },
-    take: 8,
   });
 
+  const byId = new Map(products.map((product) => [product.id, product] as const));
+  const rankedProducts = rankedIds
+    .map((id) => byId.get(id))
+    .filter((product): product is (typeof products)[number] => Boolean(product));
+
   const filtered = tag
-    ? products.filter((p) => parseStringArray(p.tags).map((t) => t.toLowerCase()).includes(tag))
-    : products;
+    ? rankedProducts.filter((p) =>
+        parseStringArray(p.tags).map((t) => t.toLowerCase()).includes(tag)
+      )
+    : rankedProducts;
 
   if (!filtered.length) {
     return {
       done: true,
-      reply: "I could not find matching available products. Try broader query/category or higher maxPrice.",
+      reply: "I found related products but none matched your filters. Try broader category/tag or a higher max price.",
       nextIntent: undefined,
       nextDraft: {},
     };
@@ -949,6 +992,105 @@ async function handleUserWishlistView(user: {
   return {
     done: true,
     reply: `Your wishlist:\n${lines.join("\n")}`,
+    nextIntent: undefined,
+    nextDraft: {},
+  };
+}
+
+async function handleUserWishlistRemove(
+  user: { email: string; wishlist: Prisma.JsonValue | null },
+  draft: Record<string, unknown>
+) {
+  const missing = missingRequired("user_wishlist_remove", draft);
+  if (missing.length) {
+    const checklist = buildIntentChecklist("user_wishlist_remove", draft);
+    return {
+      done: false,
+      reply: `${FIELD_PROMPTS[missing[0]] || "Please share the product name to remove."}${checklist}`,
+      nextIntent: "user_wishlist_remove" as WaIntent,
+      nextDraft: draft,
+    };
+  }
+
+  const productName = String(draft.productName || draft.name || "").trim().toLowerCase();
+  const existing = Array.isArray(user.wishlist)
+    ? (user.wishlist as Array<Record<string, unknown>>)
+    : [];
+
+  const nextWishlist = existing.filter((item) => {
+    const itemName = String(item.name || "").trim().toLowerCase();
+    return !itemName.includes(productName);
+  });
+
+  if (nextWishlist.length === existing.length) {
+    return {
+      done: true,
+      reply: `I could not find "${String(draft.productName || draft.name || "").trim()}" in your wishlist.`,
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  await prisma.userProfile.update({
+    where: { email: user.email },
+    data: {
+      wishlist: nextWishlist as Prisma.InputJsonValue,
+      updatedAt: new Date(),
+    },
+  });
+
+  return {
+    done: true,
+    reply: "Wishlist updated. Item removed successfully.",
+    nextIntent: undefined,
+    nextDraft: {},
+  };
+}
+
+function customerEmailFromOrderCustomer(customer: Prisma.JsonValue) {
+  if (!customer || typeof customer !== "object" || Array.isArray(customer)) {
+    return "";
+  }
+  const obj = customer as Record<string, unknown>;
+  return String(obj.email || "").trim().toLowerCase();
+}
+
+async function handleUserOrderQuery(
+  user: { email: string },
+  draft: Record<string, unknown>
+) {
+  const inputOrderId = String(draft.orderId || "").trim().toLowerCase();
+  const orders = await prisma.order.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 150,
+  });
+
+  const userOrders = orders.filter((order) => {
+    const email = customerEmailFromOrderCustomer(order.customer);
+    if (email !== user.email.toLowerCase()) return false;
+    if (!inputOrderId) return true;
+    return String(order.orderId || "").toLowerCase().includes(inputOrderId);
+  });
+
+  if (!userOrders.length) {
+    return {
+      done: true,
+      reply: inputOrderId
+        ? `No orders found for order ID "${draft.orderId}".`
+        : "No orders found for your account yet.",
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  const lines = userOrders.slice(0, 10).map((order) => {
+    const tracking = order.trackingNumber ? ` | tracking ${order.trackingNumber}` : "";
+    return `• ${order.orderId} | ${order.status} | ₹${order.amount}${tracking}`;
+  });
+
+  return {
+    done: true,
+    reply: `Your orders:\n${lines.join("\n")}`,
     nextIntent: undefined,
     nextDraft: {},
   };
@@ -1866,7 +2008,9 @@ export async function processMerchantWhatsAppMessage(input: {
     "user_persona_update",
     "user_discover_products",
     "user_discover_merchants",
+    "user_order_query",
     "user_wishlist_add",
+    "user_wishlist_remove",
     "user_wishlist_view",
   ]);
 
@@ -1874,13 +2018,16 @@ export async function processMerchantWhatsAppMessage(input: {
   const asksMerchantRole =
     /\bmerchant\b/.test(lowerInbound) ||
     /\bstock\b/.test(lowerInbound) ||
-    /\border\b/.test(lowerInbound) ||
+    /\border\s+update\b/.test(lowerInbound) ||
+    /\bactive orders\b/.test(lowerInbound) ||
     /\bupload\b/.test(lowerInbound);
   const asksUserRole =
     /\buser\b/.test(lowerInbound) ||
     /\bwishlist\b/.test(lowerInbound) ||
     /\bpersona\b/.test(lowerInbound) ||
-    /\bdiscover\b/.test(lowerInbound);
+    /\bdiscover\b/.test(lowerInbound) ||
+    /\bmy order\b/.test(lowerInbound) ||
+    /\btrack order\b/.test(lowerInbound);
 
   let intent: WaIntent =
     session.activeIntent && parsed.intent === "unknown"
@@ -1972,6 +2119,17 @@ export async function processMerchantWhatsAppMessage(input: {
     result = await handleUserDiscoverProducts(draft);
   } else if (intent === "user_discover_merchants") {
     result = await handleUserDiscoverMerchants(draft);
+  } else if (intent === "user_order_query") {
+    if (!userProfile) {
+      result = {
+        done: false,
+        reply: "Please register as user first. Share: userName and userEmail.",
+        nextIntent: "user_register",
+        nextDraft: draft,
+      };
+    } else {
+      result = await handleUserOrderQuery({ email: userProfile.email }, draft);
+    }
   } else if (intent === "user_wishlist_add") {
     if (!userProfile) {
       result = {
@@ -1982,6 +2140,20 @@ export async function processMerchantWhatsAppMessage(input: {
       };
     } else {
       result = await handleUserWishlistAdd(
+        { email: userProfile.email, wishlist: userProfile.wishlist || null },
+        draft
+      );
+    }
+  } else if (intent === "user_wishlist_remove") {
+    if (!userProfile) {
+      result = {
+        done: false,
+        reply: "Please register as user first. Share: userName and userEmail.",
+        nextIntent: "user_register",
+        nextDraft: draft,
+      };
+    } else {
+      result = await handleUserWishlistRemove(
         { email: userProfile.email, wishlist: userProfile.wishlist || null },
         draft
       );

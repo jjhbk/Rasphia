@@ -113,23 +113,23 @@ export default function HairFlow({
         />
       )}
 
-      <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl w-full max-w-md shadow-xl p-6">
+      <div className="fixed inset-0 bg-brand-warm-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl w-full max-w-md shadow-soft-xl border border-brand-sand/30 p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Hair Profile</h2>
+            <h2 className="text-lg font-heading font-semibold text-brand-charcoal">Hair Profile</h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-full hover:bg-stone-100"
+              className="h-8 w-8 flex items-center justify-center rounded-xl border border-brand-sand/40 text-brand-stone hover:bg-brand-parchment transition-colors"
             >
-              <X />
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
 
           {/* STEP 1 — Upload */}
           {step === "upload" && (
             <div className="text-center">
-              <p className="text-sm text-stone-600 mb-4">
+              <p className="text-sm text-brand-stone mb-4">
                 Take a clear photo of your hair & scalp. Natural light
                 preferred.
               </p>
@@ -137,18 +137,18 @@ export default function HairFlow({
               <div className="flex gap-3">
                 <button
                   onClick={() => filePicker.current?.click()}
-                  className="flex-1 rounded-xl border border-dashed p-4 bg-stone-50"
+                  className="flex-1 rounded-xl border border-dashed border-brand-sand p-4 bg-brand-parchment/40 text-brand-stone hover:bg-brand-parchment transition-colors"
                 >
-                  <UploadCloud className="mx-auto mb-1" />
-                  Upload
+                  <UploadCloud className="mx-auto mb-1 h-5 w-5" />
+                  <span className="text-sm">Upload</span>
                 </button>
 
                 <button
                   onClick={() => setOpenCamera(true)}
-                  className="flex-1 rounded-xl border border-dashed p-4 bg-stone-50"
+                  className="flex-1 rounded-xl border border-dashed border-brand-sand p-4 bg-brand-parchment/40 text-brand-stone hover:bg-brand-parchment transition-colors"
                 >
-                  <Camera className="mx-auto mb-1" />
-                  Camera
+                  <Camera className="mx-auto mb-1 h-5 w-5" />
+                  <span className="text-sm">Camera</span>
                 </button>
               </div>
 
@@ -165,7 +165,7 @@ export default function HairFlow({
                   <img
                     src={preview}
                     alt="Hair preview"
-                    className="h-40 w-40 object-cover rounded-xl border"
+                    className="h-40 w-40 object-cover rounded-xl border border-brand-sand/30"
                   />
                 </div>
               )}
@@ -173,7 +173,7 @@ export default function HairFlow({
               <button
                 disabled={!file}
                 onClick={analyze}
-                className="mt-6 w-full py-3 rounded-full bg-amber-600 text-white disabled:opacity-40"
+                className="mt-6 w-full py-3 rounded-xl bg-brand-charcoal text-brand-cream text-sm font-medium hover:bg-brand-warm-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Analyze hair
               </button>
@@ -183,21 +183,21 @@ export default function HairFlow({
           {/* STEP 2 — Analyzing */}
           {step === "analyzing" && (
             <div className="py-16 text-center">
-              <Loader2 className="h-10 w-10 animate-spin mx-auto text-amber-600" />
-              <p className="mt-4 text-sm text-stone-600">
+              <Loader2 className="h-10 w-10 animate-spin mx-auto text-brand-terracotta" />
+              <p className="mt-4 text-sm text-brand-stone">
                 Understanding scalp condition, texture & density…
               </p>
             </div>
           )}
 
-          {/* STEP 3 — Confirm (Guaranteed signal only) */}
+          {/* STEP 3 — Confirm */}
           {step === "confirm" && (
             <>
-              <p className="text-sm text-stone-600 mb-4">
+              <p className="text-sm text-brand-stone mb-4">
                 Here’s what we can clearly see:
               </p>
 
-              <div className="space-y-2 text-sm">
+              <div className="space-y-2 text-sm text-brand-charcoal">
                 {analysis?.hairTypeGuess && (
                   <div>
                     <strong>Hair type:</strong> {analysis.hairTypeGuess}
@@ -224,16 +224,16 @@ export default function HairFlow({
                   </div>
                 )}
 
-                <div className="text-xs text-stone-500">
+                <div className="text-xs text-brand-stone/60">
                   Confidence: {(analysis?.confidence * 100).toFixed(0)}%
                 </div>
               </div>
 
               <button
                 onClick={handleConfirm}
-                className="mt-6 w-full py-3 rounded-full bg-amber-600 text-white"
+                className="mt-6 w-full py-3 rounded-xl bg-brand-charcoal text-brand-cream text-sm font-medium hover:bg-brand-warm-black transition-colors"
               >
-                ✅ Looks good — continue
+                Looks good — continue
               </button>
             </>
           )}

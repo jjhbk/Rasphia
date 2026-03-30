@@ -50,7 +50,7 @@ export default function ExtensionAuthPage() {
           }
           body {
             font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #faf8f6;
+            background: #FAF7F2;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -61,15 +61,16 @@ export default function ExtensionAuthPage() {
             text-align: center;
             background: white;
             padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-radius: 20px;
+            box-shadow: 0 4px 16px rgba(44,36,32,0.08);
+            border: 1px solid #E8DFD3;
             max-width: 400px;
           }
           .spinner {
-            width: 48px;
-            height: 48px;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #2c1a13;
+            width: 44px;
+            height: 44px;
+            border: 3px solid #E8DFD3;
+            border-top: 3px solid #2C2420;
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin: 0 auto 20px;
@@ -79,13 +80,14 @@ export default function ExtensionAuthPage() {
             100% { transform: rotate(360deg); }
           }
           h1 {
-            color: #2c1a13;
-            font-size: 24px;
+            color: #2C2420;
+            font-size: 22px;
             margin-bottom: 10px;
+            font-weight: 600;
           }
           p {
-            color: #666;
-            font-size: 16px;
+            color: #A39B93;
+            font-size: 14px;
           }
         `}</style>
       </head>

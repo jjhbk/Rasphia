@@ -1,25 +1,25 @@
-
-import React from 'react';
-import StarIcon from './icons/StarIcon';
+import React from "react";
+import StarIcon from "./icons/StarIcon";
 
 interface StarRatingDisplayProps {
   rating: number;
   maxStars?: number;
 }
 
-const StarRatingDisplay: React.FC<StarRatingDisplayProps> = ({ rating, maxStars = 5 }) => {
+const StarRatingDisplay: React.FC<StarRatingDisplayProps> = ({
+  rating,
+  maxStars = 5,
+}) => {
   const fullStars = Math.floor(rating);
-  const hasHalfStar = rating % 1 !== 0;
-  const emptyStars = maxStars - fullStars - (hasHalfStar ? 1 : 0);
+  const emptyStars = maxStars - fullStars;
 
   return (
-    <div className="flex items-center">
+    <div className="flex items-center gap-0.5">
       {[...Array(fullStars)].map((_, i) => (
-        <StarIcon key={`full-${i}`} className="w-4 h-4 text-yellow-400" filled={true} />
+        <StarIcon key={`full-${i}`} className="w-3.5 h-3.5 text-brand-mustard" filled={true} />
       ))}
-      {/* Note: Half-star logic can be added here if a half-star icon is available */}
       {[...Array(emptyStars)].map((_, i) => (
-        <StarIcon key={`empty-${i}`} className="w-4 h-4 text-stone-300" filled={false} />
+        <StarIcon key={`empty-${i}`} className="w-3.5 h-3.5 text-brand-sand" filled={false} />
       ))}
     </div>
   );

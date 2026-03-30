@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import Image from "next/image";
 import {
   ArrowLeft,
   Camera,
@@ -14,7 +13,6 @@ import {
   Home,
 } from "lucide-react";
 
-// ICON MAP FOR SECTIONS
 const ICONS: Record<string, any> = {
   home: Home,
   skin: Camera,
@@ -42,51 +40,58 @@ export default function PersonaPage() {
 
   if (!persona)
     return (
-      <div className="min-h-screen flex items-center justify-center text-stone-600">
-        Loading your persona...
+      <div className="min-h-screen flex items-center justify-center bg-brand-cream">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-10 w-10 rounded-full bg-brand-charcoal flex items-center justify-center">
+            <span className="font-heading text-lg text-brand-cream">R</span>
+          </div>
+          <p className="text-sm text-brand-stone font-body">Loading your taste graph…</p>
+        </div>
       </div>
     );
 
   return (
-    <div className="min-h-screen bg-[#F8F4EF]">
+    <div className="min-h-screen bg-brand-cream font-body">
       {/* HEADER */}
-      <div className="p-4 flex items-center gap-2">
-        <a
-          href="/"
-          className="flex items-center gap-2 text-stone-600 hover:text-stone-900 transition"
-        >
-          <ArrowLeft className="h-5 w-5" />
-          <span className="text-sm font-medium">Back Home</span>
-        </a>
+      <div className="sticky top-0 z-10 bg-brand-cream/80 backdrop-blur-md border-b border-brand-sand/30">
+        <div className="mx-auto max-w-3xl px-4 h-14 flex items-center gap-3">
+          <a
+            href="/"
+            className="p-2 rounded-xl hover:bg-brand-parchment text-brand-stone hover:text-brand-charcoal transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </a>
+          <span className="text-sm font-semibold text-brand-charcoal font-heading">
+            Taste Graph
+          </span>
+        </div>
       </div>
 
       {/* HERO SECTION */}
-      <div className="mx-auto max-w-3xl px-4">
-        <div className="relative rounded-3xl overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-amber-100/60 to-stone-200/40 backdrop-blur-xl" />
+      <div className="mx-auto max-w-3xl px-4 pt-8">
+        <div className="relative rounded-3xl overflow-hidden bg-brand-parchment border border-brand-sand/40">
+          <div className="absolute inset-0 bg-gradient-to-br from-brand-parchment via-brand-cream to-brand-sand/30 pointer-events-none" />
           <div className="relative p-8 flex flex-col items-center text-center">
             <img
               src={session?.user?.image || ""}
-              className="h-24 w-24 rounded-full object-cover border-4 border-white shadow-lg"
+              className="h-20 w-20 rounded-full object-cover border-4 border-white shadow-soft-md"
+              alt={session?.user?.name || "Profile"}
             />
-
-            <h1 className="text-2xl font-semibold mt-4 text-stone-900">
+            <h1 className="text-2xl font-semibold mt-4 text-brand-charcoal font-heading">
               {session?.user?.name}
             </h1>
-            <p className="text-stone-600 mt-2">
+            <p className="text-brand-stone mt-2 text-sm max-w-sm leading-relaxed">
               Your personalized identity across skin, style, body and lifestyle.
             </p>
-
-            <p className="mt-4 text-sm text-stone-500 italic">
-              “This is the most authentic version of you — decoded.”
+            <p className="mt-4 text-xs text-brand-stone/60 italic font-heading">
+              "This is the most authentic version of you — decoded."
             </p>
           </div>
         </div>
       </div>
 
       {/* CONTENT */}
-      <div className="mx-auto max-w-3xl p-4 space-y-10 mt-8">
-        {/* Render each section dynamically */}
+      <div className="mx-auto max-w-3xl px-4 py-8 space-y-6">
         {Object.entries(persona || {}).map(([key, data]) => (
           <PersonaSection key={key} title={capitalize(key)} icon={ICONS[key]}>
             <PersonaContent data={data} />
@@ -96,10 +101,6 @@ export default function PersonaPage() {
     </div>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/*                                    UI                                      */
-/* -------------------------------------------------------------------------- */
 
 function PersonaSection({
   title,
@@ -111,19 +112,16 @@ function PersonaSection({
   children: any;
 }) {
   return (
-    <div className="bg-white rounded-3xl p-6 shadow-sm border border-stone-200 relative overflow-hidden">
-      {/* subtle gradient accent */}
-      <div className="absolute inset-0 bg-gradient-to-br from-amber-50/40 to-white pointer-events-none" />
-
+    <div className="bg-white/70 rounded-2xl p-6 shadow-soft border border-brand-sand/30 relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-brand-parchment/20 to-white pointer-events-none" />
       <div className="relative">
         <div className="flex items-center gap-3 mb-5">
-          <div className="p-3 rounded-2xl bg-amber-100 text-amber-700 shadow-sm">
-            <Icon className="h-5 w-5" />
+          <div className="h-9 w-9 flex items-center justify-center rounded-xl bg-brand-parchment text-brand-terracotta flex-shrink-0">
+            {Icon && <Icon className="h-4 w-4" />}
           </div>
-          <h2 className="text-lg font-semibold text-stone-800">{title}</h2>
+          <h2 className="text-base font-semibold text-brand-charcoal font-heading">{title}</h2>
         </div>
-
-        <div className="space-y-6">{children}</div>
+        <div className="space-y-5">{children}</div>
       </div>
     </div>
   );
@@ -131,22 +129,20 @@ function PersonaSection({
 
 function PersonaContent({ data }: { data: any }) {
   return (
-    <div className="space-y-6">
-      {/* PHOTO GALLERY */}
+    <div className="space-y-5">
       {data.photoUrls?.length > 0 && (
-        <div className="flex gap-4 overflow-x-auto py-2">
+        <div className="flex gap-3 overflow-x-auto py-1">
           {data.photoUrls.map((url: string, idx: number) => (
             <div
               key={idx}
-              className="flex-shrink-0 w-28 h-28 rounded-xl overflow-hidden shadow-md border border-stone-200 rotate-[-2deg]"
+              className="flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden border border-brand-sand/40 rotate-[-1deg] shadow-soft"
             >
-              <img src={url} className="w-full h-full object-cover" />
+              <img src={url} className="w-full h-full object-cover" alt="persona photo" />
             </div>
           ))}
         </div>
       )}
 
-      {/* FIELDS */}
       {Object.entries(data)
         .filter(([key]) => key !== "photoUrls")
         .filter(([key]) => key !== "analysisSummaries")
@@ -157,21 +153,19 @@ function PersonaContent({ data }: { data: any }) {
   );
 }
 
-/* FIELD RENDERER (auto-detect array, text, etc.) */
 function Field({ label, value }: { label: string; value: any }) {
   if (!value) return null;
 
-  // ARRAY → pill list
   if (Array.isArray(value)) {
     if (value.length === 0) return null;
     return (
       <div>
-        <div className="text-xs text-stone-500 mb-1">{label}</div>
+        <div className="text-[10px] uppercase tracking-widest font-medium text-brand-stone/60 mb-2">{label}</div>
         <div className="flex flex-wrap gap-2">
           {value.map((v, i) => (
             <span
               key={i}
-              className="px-3 py-1 text-xs rounded-full bg-amber-50 text-amber-700 border border-amber-200 shadow-sm"
+              className="px-3 py-1 text-xs rounded-full bg-brand-parchment text-brand-terracotta border border-brand-sand/50"
             >
               {v}
             </span>
@@ -181,18 +175,13 @@ function Field({ label, value }: { label: string; value: any }) {
     );
   }
 
-  // STRING → text
   return (
-    <div className="flex justify-between text-sm border-b border-stone-100 pb-2">
-      <span className="text-stone-500">{label}</span>
-      <span className="font-medium text-stone-800">{value}</span>
+    <div className="flex justify-between items-center text-sm border-b border-brand-sand/30 pb-2.5">
+      <span className="text-brand-stone/70">{label}</span>
+      <span className="font-medium text-brand-charcoal">{value}</span>
     </div>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/*                                   HELPERS                                  */
-/* -------------------------------------------------------------------------- */
 
 function pretty(s: string) {
   return s

@@ -39,12 +39,12 @@ export default function PersonaFlowModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl relative">
+    <div className="fixed inset-0 z-50 bg-brand-warm-black/30 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-soft-xl border border-brand-sand/30 relative">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-full hover:bg-stone-100"
+          className="absolute top-4 right-4 h-8 w-8 flex items-center justify-center rounded-xl border border-brand-sand/40 text-brand-stone hover:bg-brand-parchment transition-colors text-sm"
         >
           ✕
         </button>

@@ -79,9 +79,7 @@ export default function ManagementDashboard() {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<ManagementOrder[]>([]);
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
-  const [pendingMerchants, setPendingMerchants] = useState<PendingMerchant[]>(
-    []
-  );
+  const [pendingMerchants, setPendingMerchants] = useState<PendingMerchant[]>([]);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
@@ -145,8 +143,7 @@ export default function ManagementDashboard() {
         trackingNumber: o.trackingNumber ?? o.tracking_number ?? null,
         shippingProvider: o.shippingProvider ?? o.shipping_provider ?? null,
         trackingUrl: o.trackingUrl ?? o.tracking_url ?? null,
-        estimatedDelivery:
-          o.estimatedDelivery ?? o.estimated_delivery ?? null,
+        estimatedDelivery: o.estimatedDelivery ?? o.estimated_delivery ?? null,
         shippingDetails: o.shippingDetails ?? o.shipping_details ?? null,
         customer: o.customer || {},
         createdAt: o.createdAt,
@@ -202,23 +199,16 @@ export default function ManagementDashboard() {
       const isEdit = Boolean(product._id);
       const method = isEdit ? "PUT" : "POST";
       const url = isEdit ? "/api/products/update" : "/api/products/add";
-
-      const payload = {
-        ...product,
-        ...(isEdit ? { id: String(product._id) } : {}),
-      };
-
+      const payload = { ...product, ...(isEdit ? { id: String(product._id) } : {}) };
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || "Failed to save product");
       }
-
       setEditingProduct(null);
       setIsAdding(false);
       await loadProducts();
@@ -275,13 +265,7 @@ export default function ManagementDashboard() {
       if (!res.ok) throw new Error("Failed to update order status");
       setOrders((prev) =>
         prev.map((o) =>
-          o.id === orderId
-            ? {
-                ...o,
-                status,
-                ...(extra as Partial<ManagementOrder>),
-              }
-            : o
+          o.id === orderId ? { ...o, status, ...(extra as Partial<ManagementOrder>) } : o
         )
       );
     } catch (e) {
@@ -290,12 +274,8 @@ export default function ManagementDashboard() {
     }
   };
 
-  const handleUpdateServiceRequest = async (
-    requestId: string,
-    status: string
-  ) => {
-    const resolutionNote =
-      prompt("Optional resolution note (visible in pipeline):") || "";
+  const handleUpdateServiceRequest = async (requestId: string, status: string) => {
+    const resolutionNote = prompt("Optional resolution note (visible in pipeline):") || "";
     try {
       const res = await fetch("/api/management/service-requests", {
         method: "PATCH",
@@ -310,34 +290,47 @@ export default function ManagementDashboard() {
     }
   };
 
-  if (sessionStatus === "loading" || !access) return <p className="p-6">Loading...</p>;
+  const inputClass = "border border-brand-sand/50 rounded-lg px-2 py-1 text-xs bg-white text-brand-charcoal focus:outline-none focus:border-brand-terracotta/40";
+
+  if (sessionStatus === "loading" || !access)
+    return (
+      <div className="min-h-screen bg-brand-cream flex items-center justify-center font-body">
+        <p className="text-sm text-brand-stone">Loading…</p>
+      </div>
+    );
 
   if (!access.authenticated) {
-    return <p className="p-6">Please sign in to continue.</p>;
+    return (
+      <div className="min-h-screen bg-brand-cream flex items-center justify-center font-body">
+        <p className="text-brand-stone">Please sign in to continue.</p>
+      </div>
+    );
   }
 
   if (access.access === "none") {
     return (
-      <div className="p-6 space-y-3">
-        <p className="text-stone-700">
-          You do not have management access yet.
-        </p>
-        <Link href="/merchant/onboarding" className="underline text-blue-700">
-          Apply as Merchant
-        </Link>
+      <div className="min-h-screen bg-brand-cream flex items-center justify-center font-body">
+        <div className="text-center space-y-3">
+          <p className="text-brand-stone">You do not have management access yet.</p>
+          <Link href="/merchant/onboarding" className="text-brand-terracotta underline text-sm">
+            Apply as Merchant
+          </Link>
+        </div>
       </div>
     );
   }
 
   if (access.access === "merchant_pending") {
     return (
-      <div className="p-6 space-y-3">
-        <p className="text-amber-700 font-medium">
-          Your merchant account is pending admin approval.
-        </p>
-        <Link href="/merchant/onboarding" className="underline text-blue-700">
-          View / Update Application
-        </Link>
+      <div className="min-h-screen bg-brand-cream flex items-center justify-center font-body">
+        <div className="text-center space-y-3">
+          <p className="text-brand-terracotta font-medium">
+            Your merchant account is pending admin approval.
+          </p>
+          <Link href="/merchant/onboarding" className="text-brand-terracotta underline text-sm">
+            View / Update Application
+          </Link>
+        </div>
       </div>
     );
   }
@@ -345,27 +338,28 @@ export default function ManagementDashboard() {
   const isAdmin = access.access === "admin";
 
   return (
-    <div className="min-h-screen bg-stone-100 p-6">
-      <div className="max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-6">
-        <h1 className="text-3xl font-serif text-amber-900 mb-2 text-center">
-          {isAdmin ? "Admin Dashboard" : "Merchant Dashboard"}
-        </h1>
-        <p className="text-center text-stone-500 mb-6">
-          Manage products and orders.
-        </p>
+    <div className="min-h-screen bg-brand-cream p-6 font-body">
+      <div className="max-w-7xl mx-auto bg-white/80 backdrop-blur-xl rounded-3xl border border-brand-sand/30 shadow-soft-md p-6 md:p-8">
+        <div className="text-center mb-8">
+          <h1 className="font-heading text-3xl text-brand-charcoal mb-1">
+            {isAdmin ? "Admin Dashboard" : "Merchant Dashboard"}
+          </h1>
+          <p className="text-brand-stone text-sm">Manage products and orders.</p>
+        </div>
+
         {!isAdmin && (
-          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="mb-6 rounded-2xl border border-brand-sand/40 bg-brand-parchment/50 p-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm text-amber-900 font-medium">
+              <p className="text-sm text-brand-charcoal font-medium">
                 Build your public merchant storefront
               </p>
-              <p className="text-xs text-amber-800">
+              <p className="text-xs text-brand-stone mt-0.5">
                 Add logo, cover image, description, and merchant chatbot welcome.
               </p>
             </div>
             <Link
               href="/merchant/storefront"
-              className="px-4 py-2 rounded-full bg-amber-700 text-white text-sm hover:bg-amber-800"
+              className="px-4 py-2 rounded-xl bg-brand-charcoal text-brand-cream text-sm hover:bg-brand-warm-black transition-colors"
             >
               Storefront Settings
             </Link>
@@ -373,38 +367,38 @@ export default function ManagementDashboard() {
         )}
 
         {error && (
-          <p className="text-red-600 text-center mb-4 font-medium">{error}</p>
+          <p className="text-red-600 text-center mb-4 text-sm font-medium">{error}</p>
         )}
 
         {isAdmin && (
-          <section className="mb-8 border rounded-lg p-4 bg-amber-50">
-            <h2 className="text-xl font-semibold text-stone-800 mb-3">
+          <section className="mb-8 border border-brand-sand/30 rounded-2xl p-5 bg-brand-parchment/30">
+            <h2 className="font-heading text-lg text-brand-charcoal mb-4">
               Pending Merchant Approvals
             </h2>
             {pendingMerchants.length === 0 ? (
-              <p className="text-stone-600 text-sm">No pending applications.</p>
+              <p className="text-brand-stone text-sm">No pending applications.</p>
             ) : (
               <div className="space-y-3">
                 {pendingMerchants.map((m) => (
                   <div
                     key={m.id}
-                    className="bg-white border rounded-md p-3 flex flex-wrap items-center justify-between gap-3"
+                    className="bg-white border border-brand-sand/30 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3"
                   >
                     <div className="text-sm">
-                      <p className="font-medium text-stone-800">{m.name}</p>
-                      <p className="text-stone-600">{m.email}</p>
-                      <p className="text-stone-600">{m.phone}</p>
+                      <p className="font-medium text-brand-charcoal">{m.name}</p>
+                      <p className="text-brand-stone">{m.email}</p>
+                      <p className="text-brand-stone">{m.phone}</p>
                     </div>
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleMerchantAction(m.id, "approve")}
-                        className="px-3 py-1 rounded bg-green-100 text-green-800 text-sm"
+                        className="px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-xs border border-green-200 hover:bg-green-100 transition-colors"
                       >
                         Approve
                       </button>
                       <button
                         onClick={() => handleMerchantAction(m.id, "reject")}
-                        className="px-3 py-1 rounded bg-red-100 text-red-800 text-sm"
+                        className="px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs border border-red-200 hover:bg-red-100 transition-colors"
                       >
                         Reject
                       </button>
@@ -419,7 +413,7 @@ export default function ManagementDashboard() {
         {!isAdding && !editingProduct && (
           <button
             onClick={() => setIsAdding(true)}
-            className="bg-stone-800 text-white px-4 py-2 rounded-md mb-6 hover:bg-stone-700"
+            className="bg-brand-charcoal text-brand-cream px-4 py-2 rounded-xl text-sm font-medium mb-6 hover:bg-brand-warm-black transition-colors shadow-soft"
           >
             Add Product
           </button>
@@ -437,40 +431,38 @@ export default function ManagementDashboard() {
         )}
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold text-stone-800 mb-3">
-            Managed Products
-          </h2>
+          <h2 className="font-heading text-lg text-brand-charcoal mb-4">Managed Products</h2>
           {isLoadingProducts ? (
-            <p className="text-stone-500">Loading products...</p>
+            <p className="text-brand-stone text-sm">Loading products…</p>
           ) : products.length === 0 ? (
-            <p className="text-stone-500">No products found.</p>
+            <p className="text-brand-stone text-sm">No products found.</p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {products.map((p) => (
                 <div
                   key={p._id}
-                  className="border border-stone-300 rounded-lg p-4 flex flex-col gap-2 bg-white shadow-sm"
+                  className="border border-brand-sand/30 rounded-2xl p-4 flex flex-col gap-2 bg-white shadow-soft"
                 >
                   <img
                     src={p.imageUrl}
                     alt={p.name}
-                    className="w-full h-40 object-cover rounded-md"
+                    className="w-full h-40 object-cover rounded-xl"
                   />
-                  <h3 className="text-lg font-medium text-stone-800">{p.name}</h3>
-                  <p className="text-sm text-stone-500">{p.brand}</p>
-                  <p className="text-amber-900 font-semibold">
+                  <h3 className="text-sm font-semibold text-brand-charcoal">{p.name}</h3>
+                  <p className="text-xs text-brand-stone">{p.brand}</p>
+                  <p className="text-brand-terracotta font-semibold text-sm">
                     ₹{(p.price as number).toFixed(2)}
                   </p>
-                  <div className="flex justify-between mt-3">
+                  <div className="flex justify-between mt-2">
                     <button
                       onClick={() => setEditingProduct(p)}
-                      className="px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded-md"
+                      className="px-3 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleDelete(p._id!)}
-                      className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded-md"
+                      className="px-3 py-1 text-xs bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
                     >
                       Delete
                     </button>
@@ -482,101 +474,95 @@ export default function ManagementDashboard() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-stone-800 mb-3">Managed Orders</h2>
+          <h2 className="font-heading text-lg text-brand-charcoal mb-4">Managed Orders</h2>
           {isLoadingOrders ? (
-            <p className="text-stone-500">Loading orders...</p>
+            <p className="text-brand-stone text-sm">Loading orders…</p>
           ) : orders.length === 0 ? (
-            <p className="text-stone-500">No orders found.</p>
+            <p className="text-brand-stone text-sm">No orders found.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full border border-stone-200 text-sm">
-                <thead className="bg-stone-50">
+              <table className="min-w-full border border-brand-sand/30 text-sm rounded-xl overflow-hidden">
+                <thead className="bg-brand-parchment/50">
                   <tr>
-                    <th className="text-left px-3 py-2 border-b">Order ID</th>
-                    <th className="text-left px-3 py-2 border-b">Customer</th>
-                    <th className="text-left px-3 py-2 border-b">Amount</th>
-                    <th className="text-left px-3 py-2 border-b">Status</th>
-                    <th className="text-left px-3 py-2 border-b">Shipping</th>
+                    {["Order ID", "Customer", "Amount", "Status", "Shipping"].map((h) => (
+                      <th key={h} className="text-left px-3 py-2.5 border-b border-brand-sand/30 text-xs uppercase tracking-widest font-medium text-brand-stone/70">
+                        {h}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {orders.map((o) => (
-                    <tr key={o.id}>
-                      <td className="px-3 py-2 border-b">{o.id}</td>
-                      <td className="px-3 py-2 border-b">
-                        {o.customer?.name || "-"} ({o.customer?.email || "-"})
+                    <tr key={o.id} className="border-b border-brand-sand/20 hover:bg-brand-cream/40 transition-colors">
+                      <td className="px-3 py-2.5 font-mono text-xs text-brand-stone/70">{o.id}</td>
+                      <td className="px-3 py-2.5 text-brand-charcoal">
+                        {o.customer?.name || "-"}
+                        <br />
+                        <span className="text-xs text-brand-stone">{o.customer?.email || "-"}</span>
                       </td>
-                      <td className="px-3 py-2 border-b">₹{o.amount ?? 0}</td>
-                      <td className="px-3 py-2 border-b">
+                      <td className="px-3 py-2.5 text-brand-charcoal">₹{o.amount ?? 0}</td>
+                      <td className="px-3 py-2.5">
                         <select
                           value={o.status}
-                          onChange={(e) =>
-                            handleUpdateOrderStatus(o.id, e.target.value)
-                          }
-                          className="border rounded px-2 py-1"
+                          onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
+                          className={inputClass}
                         >
                           {ORDER_STATUSES.map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
+                            <option key={s} value={s}>{s}</option>
                           ))}
                         </select>
                       </td>
-                      <td className="px-3 py-2 border-b">
-                        <input
-                          value={o.shippingProvider || ""}
-                          onChange={(e) =>
-                            setOrders((prev) =>
-                              prev.map((row) =>
-                                row.id === o.id
-                                  ? { ...row, shippingProvider: e.target.value }
-                                  : row
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-wrap gap-1.5 items-center">
+                          <input
+                            value={o.shippingProvider || ""}
+                            onChange={(e) =>
+                              setOrders((prev) =>
+                                prev.map((row) =>
+                                  row.id === o.id ? { ...row, shippingProvider: e.target.value } : row
+                                )
                               )
-                            )
-                          }
-                          placeholder="Carrier"
-                          className="w-28 border rounded px-2 py-1 text-xs"
-                        />
-                        <input
-                          value={o.trackingNumber || ""}
-                          onChange={(e) =>
-                            setOrders((prev) =>
-                              prev.map((row) =>
-                                row.id === o.id
-                                  ? { ...row, trackingNumber: e.target.value }
-                                  : row
+                            }
+                            placeholder="Carrier"
+                            className={`${inputClass} w-24`}
+                          />
+                          <input
+                            value={o.trackingNumber || ""}
+                            onChange={(e) =>
+                              setOrders((prev) =>
+                                prev.map((row) =>
+                                  row.id === o.id ? { ...row, trackingNumber: e.target.value } : row
+                                )
                               )
-                            )
-                          }
-                          placeholder="Tracking #"
-                          className="w-32 border rounded px-2 py-1 text-xs ml-2"
-                        />
-                        <input
-                          value={o.trackingUrl || ""}
-                          onChange={(e) =>
-                            setOrders((prev) =>
-                              prev.map((row) =>
-                                row.id === o.id
-                                  ? { ...row, trackingUrl: e.target.value }
-                                  : row
+                            }
+                            placeholder="Tracking #"
+                            className={`${inputClass} w-28`}
+                          />
+                          <input
+                            value={o.trackingUrl || ""}
+                            onChange={(e) =>
+                              setOrders((prev) =>
+                                prev.map((row) =>
+                                  row.id === o.id ? { ...row, trackingUrl: e.target.value } : row
+                                )
                               )
-                            )
-                          }
-                          placeholder="Tracking URL"
-                          className="w-40 border rounded px-2 py-1 text-xs ml-2"
-                        />
-                        <button
-                          onClick={() =>
-                            handleUpdateOrderStatus(o.id, o.status, {
-                              shippingProvider: o.shippingProvider,
-                              trackingNumber: o.trackingNumber,
-                              trackingUrl: o.trackingUrl,
-                            })
-                          }
-                          className="ml-2 px-2 py-1 rounded bg-stone-100 text-stone-700 text-xs"
-                        >
-                          Save
-                        </button>
+                            }
+                            placeholder="Tracking URL"
+                            className={`${inputClass} w-36`}
+                          />
+                          <button
+                            onClick={() =>
+                              handleUpdateOrderStatus(o.id, o.status, {
+                                shippingProvider: o.shippingProvider,
+                                trackingNumber: o.trackingNumber,
+                                trackingUrl: o.trackingUrl,
+                              })
+                            }
+                            className="px-2 py-1 rounded-lg bg-brand-parchment text-brand-charcoal text-xs border border-brand-sand/40 hover:bg-brand-sand/30 transition-colors"
+                          >
+                            Save
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -587,46 +573,41 @@ export default function ManagementDashboard() {
         </section>
 
         <section className="mt-8">
-          <h2 className="text-xl font-semibold text-stone-800 mb-3">
+          <h2 className="font-heading text-lg text-brand-charcoal mb-4">
             Refund / Replacement Requests
           </h2>
           {isLoadingServiceRequests ? (
-            <p className="text-stone-500">Loading service requests...</p>
+            <p className="text-brand-stone text-sm">Loading service requests…</p>
           ) : serviceRequests.length === 0 ? (
-            <p className="text-stone-500">No requests yet.</p>
+            <p className="text-brand-stone text-sm">No requests yet.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full border border-stone-200 text-sm">
-                <thead className="bg-stone-50">
+              <table className="min-w-full border border-brand-sand/30 text-sm rounded-xl overflow-hidden">
+                <thead className="bg-brand-parchment/50">
                   <tr>
-                    <th className="text-left px-3 py-2 border-b">Request ID</th>
-                    <th className="text-left px-3 py-2 border-b">Order</th>
-                    <th className="text-left px-3 py-2 border-b">Type</th>
-                    <th className="text-left px-3 py-2 border-b">Reason</th>
-                    <th className="text-left px-3 py-2 border-b">Requested By</th>
-                    <th className="text-left px-3 py-2 border-b">Status</th>
+                    {["Request ID", "Order", "Type", "Reason", "Requested By", "Status"].map((h) => (
+                      <th key={h} className="text-left px-3 py-2.5 border-b border-brand-sand/30 text-xs uppercase tracking-widest font-medium text-brand-stone/70">
+                        {h}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {serviceRequests.map((r) => (
-                    <tr key={r.requestId}>
-                      <td className="px-3 py-2 border-b">{r.requestId}</td>
-                      <td className="px-3 py-2 border-b">{r.orderId}</td>
-                      <td className="px-3 py-2 border-b uppercase">{r.type}</td>
-                      <td className="px-3 py-2 border-b">{r.reason}</td>
-                      <td className="px-3 py-2 border-b">{r.requestedByEmail}</td>
-                      <td className="px-3 py-2 border-b">
+                    <tr key={r.requestId} className="border-b border-brand-sand/20 hover:bg-brand-cream/40 transition-colors">
+                      <td className="px-3 py-2.5 font-mono text-xs text-brand-stone/70">{r.requestId}</td>
+                      <td className="px-3 py-2.5 text-brand-charcoal">{r.orderId}</td>
+                      <td className="px-3 py-2.5 uppercase text-xs text-brand-stone">{r.type}</td>
+                      <td className="px-3 py-2.5 text-brand-stone max-w-[160px] truncate">{r.reason}</td>
+                      <td className="px-3 py-2.5 text-brand-stone">{r.requestedByEmail}</td>
+                      <td className="px-3 py-2.5">
                         <select
                           value={r.status}
-                          onChange={(e) =>
-                            handleUpdateServiceRequest(r.requestId, e.target.value)
-                          }
-                          className="border rounded px-2 py-1"
+                          onChange={(e) => handleUpdateServiceRequest(r.requestId, e.target.value)}
+                          className={inputClass}
                         >
                           {SERVICE_REQUEST_STATUSES.map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
+                            <option key={s} value={s}>{s}</option>
                           ))}
                         </select>
                       </td>

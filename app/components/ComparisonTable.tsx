@@ -2,44 +2,46 @@ import React from "react";
 import type { ComparisonTableData } from "../types";
 
 interface ComparisonTableProps {
-  tableData?: ComparisonTableData | null; // <-- allow undefined/null
+  tableData?: ComparisonTableData | null;
 }
 
 const ComparisonTable: React.FC<ComparisonTableProps> = ({ tableData }) => {
-  // Prevent runtime crashes
   if (
     !tableData ||
     !Array.isArray(tableData.headers) ||
     !Array.isArray(tableData.rows)
   ) {
-    return null; // Don't render anything if malformed
+    return null;
   }
 
   return (
-    <div className="w-full overflow-x-auto rounded-lg border border-stone-200 bg-white">
+    <div className="w-full overflow-x-auto">
       <table className="min-w-full">
-        <thead className="bg-stone-50">
-          <tr>
-            {tableData.headers.map((header, index) => (
+        <thead>
+          <tr className="border-b border-brand-sand/40">
+            {tableData.headers.map((header, i) => (
               <th
-                key={index}
-                className="px-4 py-3 text-left text-sm font-semibold text-stone-600 tracking-wider border-b border-stone-200"
+                key={i}
+                className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-brand-stone/60 bg-brand-parchment/50"
               >
                 {header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-stone-200">
+        <tbody>
           {tableData.rows.map((row, rowIndex) => (
-            <tr key={rowIndex}>
+            <tr
+              key={rowIndex}
+              className="border-b border-brand-sand/20 last:border-0 hover:bg-brand-parchment/30 transition-colors"
+            >
               {row.map((cell, cellIndex) => (
                 <td
                   key={cellIndex}
-                  className={`px-4 py-3 text-sm ${
+                  className={`px-5 py-3 text-sm ${
                     cellIndex === 0
-                      ? "font-medium text-stone-800"
-                      : "text-stone-600"
+                      ? "font-medium text-brand-charcoal"
+                      : "text-brand-stone"
                   }`}
                 >
                   {cell}

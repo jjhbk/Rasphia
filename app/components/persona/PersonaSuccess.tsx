@@ -3,18 +3,20 @@
 
 export default function PersonaSuccess() {
   return (
-    <div className="min-h-[60vh] flex items-center justify-center px-6">
+    <div className="min-h-[60vh] flex items-center justify-center px-6 bg-brand-cream font-body">
       <div className="text-center max-w-md">
-        <div className="text-5xl mb-4">🎉</div>
+        <div className="h-16 w-16 rounded-full bg-brand-parchment flex items-center justify-center mx-auto mb-6">
+          <span className="text-brand-terracotta text-3xl">✓</span>
+        </div>
 
-        <h1 className="text-2xl font-bold text-stone-900">Persona Complete!</h1>
+        <h1 className="font-heading text-2xl text-brand-charcoal">Taste Graph Complete</h1>
 
-        <p className="mt-3 text-sm text-stone-600 leading-relaxed">
+        <p className="mt-3 text-sm text-brand-stone leading-relaxed">
           Reopen the extension to start using <strong>Rasphia</strong>.
         </p>
 
-        <p className="mt-6 text-xs text-stone-400">
-          You can edit your persona anytime from settings.
+        <p className="mt-6 text-xs text-brand-stone/50">
+          You can edit your taste graph anytime from settings.
         </p>
       </div>
     </div>

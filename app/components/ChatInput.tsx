@@ -1,12 +1,10 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Send } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 
 interface ChatInputProps {
   onSendMessage: (text: string) => void;
   isLoading: boolean;
-
-  /** optional controlled mode */
   value?: string;
   onChange?: (v: string) => void;
 }
@@ -21,16 +19,12 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [internal, setInternal] = useState("");
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
-  // sync internal value when controlled value changes
   useEffect(() => {
-    if (isControlled) {
-      setInternal(value ?? "");
-    }
+    if (isControlled) setInternal(value ?? "");
   }, [value, isControlled]);
 
   const text = isControlled ? value ?? "" : internal;
 
-  // Auto-resize logic
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -52,33 +46,39 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
+  const canSend = text.trim().length > 0 && !isLoading;
+
   return (
-    <form onSubmit={handleSubmit} className="w-full relative">
-        <div className="relative flex items-end gap-2 p-1.5 rounded-[26px] bg-white shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-stone-200 transition-all duration-200 ease-in-out min-h-[52px]">
-           <textarea
-             ref={textareaRef}
-             value={text}
-             onChange={(e) => handleChange(e.target.value)}
-             rows={1}
-             placeholder="Ask Rasphia..."
-             className="flex-1 resize-none bg-transparent border-none pl-6 pr-10 py-3 text-sm leading-5 text-stone-800 placeholder-stone-400 focus:ring-0 focus:outline-none max-h-[136px] overflow-y-auto rounded-[26px] custom-scrollbar h-full"
-             disabled={isLoading}
-             style={{ minHeight: "44px" }}
-             onKeyDown={(e) => {
-               if (e.key === 'Enter' && !e.shiftKey) {
-                 e.preventDefault();
-                 handleSubmit(e);
-               }
-             }}
-           />
-           <button
-             type="submit"
-             disabled={isLoading || !text.trim()}
-             className="flex-shrink-0 h-11 w-11 flex items-center justify-center rounded-full bg-amber-600 text-white hover:bg-amber-700 disabled:bg-stone-200 disabled:cursor-not-allowed transition-all mr-1 shadow-md hover:shadow-lg"
-           >
-             <Send className="h-4 w-4" />
-           </button>
-        </div>
+    <form onSubmit={handleSubmit} className="w-full">
+      <div className="relative flex items-end gap-2 px-4 py-3 rounded-2xl bg-white border border-brand-sand/60 shadow-soft-md transition-all focus-within:border-brand-terracotta/30 focus-within:shadow-soft-lg">
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={(e) => handleChange(e.target.value)}
+          rows={1}
+          placeholder="What's your vibe today?"
+          className="flex-1 resize-none bg-transparent border-none p-0 text-sm leading-relaxed text-brand-charcoal placeholder-brand-stone/40 focus:ring-0 focus:outline-none max-h-[120px] overflow-y-auto custom-scrollbar"
+          disabled={isLoading}
+          style={{ minHeight: "24px" }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSubmit(e);
+            }
+          }}
+        />
+        <button
+          type="submit"
+          disabled={!canSend}
+          className={`flex-shrink-0 h-8 w-8 flex items-center justify-center rounded-xl transition-all ${
+            canSend
+              ? "bg-brand-charcoal text-brand-cream hover:bg-brand-warm-black shadow-soft"
+              : "bg-brand-sand/40 text-brand-stone/30 cursor-not-allowed"
+          }`}
+        >
+          <ArrowUp className="h-4 w-4" />
+        </button>
+      </div>
     </form>
   );
 };

@@ -1,60 +1,83 @@
-// /app/privacy/page.tsx
 export default function PrivacyPolicyPage() {
   return (
-    <div className="min-h-screen bg-[#F8F4EF] text-stone-900">
-      <div className="relative isolate overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#FFF4E1] via-[#F8F1EA] to-[#F1E3D3]" />
-        <div className="relative mx-auto max-w-5xl px-6 py-20 lg:px-8">
-          <h1 className="font-serif text-5xl text-stone-900">Privacy Policy</h1>
-          <p className="mt-6 text-lg text-stone-700">
+    <div className="min-h-screen bg-brand-cream text-brand-charcoal font-body">
+      {/* Hero */}
+      <div className="relative overflow-hidden bg-brand-parchment border-b border-brand-sand/40">
+        <div className="absolute inset-0 bg-gradient-to-br from-brand-parchment via-brand-cream to-brand-sand/20 pointer-events-none" />
+        <div className="relative mx-auto max-w-4xl px-6 py-20 lg:px-8">
+          <div className="inline-flex items-center px-3 py-1 rounded-full bg-brand-sand/50 border border-brand-sand text-xs text-brand-stone uppercase tracking-widest mb-6">
+            Legal
+          </div>
+          <h1 className="font-heading text-5xl text-brand-charcoal">Privacy Policy</h1>
+          <p className="mt-4 text-brand-stone">
             Your privacy matters deeply to us. This policy explains how Rasphia
             collects, uses, and protects your information.
           </p>
+        </div>
+      </div>
 
-          <h2 className="mt-10 text-2xl font-semibold text-stone-900">
-            1. Information We Collect
-          </h2>
-          <ul className="mt-4 list-disc pl-6 text-stone-700">
-            <li>Messages and prompts you send to the AI concierge</li>
-            <li>Preferences, browsing interactions, and selection patterns</li>
-            <li>Device metadata and essential analytics</li>
-            <li>Order-related information when placing an order</li>
-          </ul>
+      {/* Content */}
+      <div className="mx-auto max-w-4xl px-6 py-16 lg:px-8 space-y-10">
+        {[
+          {
+            title: "1. Information We Collect",
+            items: [
+              "Messages and prompts you send to the AI concierge",
+              "Preferences, browsing interactions, and selection patterns",
+              "Device metadata and essential analytics",
+              "Order-related information when placing an order",
+            ],
+          },
+          {
+            title: "2. How We Use Your Information",
+            items: [
+              "To curate personalized product picks",
+              "To improve recommendations and user experience",
+              "To process orders and manage customer support",
+              "To protect platform integrity and enhance performance",
+            ],
+          },
+          {
+            title: "4. Your Rights",
+            items: [
+              "Request deletion of your stored data",
+              "Request a copy of your information",
+              "Opt-out of non-essential analytics",
+            ],
+          },
+        ].map((section) => (
+          <div key={section.title} className="bg-white/60 border border-brand-sand/30 rounded-2xl p-8 shadow-soft">
+            <h2 className="font-heading text-xl text-brand-charcoal mb-4">{section.title}</h2>
+            <ul className="space-y-2">
+              {section.items.map((item, i) => (
+                <li key={i} className="flex items-start gap-3 text-brand-stone text-sm">
+                  <span className="mt-1 h-1.5 w-1.5 rounded-full bg-brand-terracotta flex-shrink-0" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
 
-          <h2 className="mt-10 text-2xl font-semibold text-stone-900">
-            2. How We Use Your Information
-          </h2>
-          <ul className="mt-4 list-disc pl-6 text-stone-700">
-            <li>To curate personalized product picks</li>
-            <li>To improve recommendations and user experience</li>
-            <li>To process orders and manage customer support</li>
-            <li>To protect platform integrity and enhance performance</li>
-          </ul>
-
-          <h2 className="mt-10 text-2xl font-semibold text-stone-900">
-            3. Data Sharing
-          </h2>
-          <p className="mt-4 text-stone-700">
+        <div className="bg-white/60 border border-brand-sand/30 rounded-2xl p-8 shadow-soft">
+          <h2 className="font-heading text-xl text-brand-charcoal mb-4">3. Data Sharing</h2>
+          <p className="text-brand-stone text-sm leading-relaxed">
             We never sell personal information. Limited data may be shared with
-            trusted partners strictly for secure payments, logistics, or
-            operational purposes.
+            trusted partners strictly for secure payments, logistics, or operational
+            purposes.
           </p>
+        </div>
 
-          <h2 className="mt-10 text-2xl font-semibold text-stone-900">
-            4. Your Rights
-          </h2>
-          <ul className="mt-4 list-disc pl-6 text-stone-700">
-            <li>Request deletion of your stored data</li>
-            <li>Request a copy of your information</li>
-            <li>Opt-out of non-essential analytics</li>
-          </ul>
-
-          <h2 className="mt-10 text-2xl font-semibold text-stone-900">
-            5. Contact Us
-          </h2>
-          <p className="mt-4 text-stone-700">
-            For any privacy concerns, reach us at:
-            <br /> <strong>support@rasphia.com</strong>
+        <div className="bg-white/60 border border-brand-sand/30 rounded-2xl p-8 shadow-soft">
+          <h2 className="font-heading text-xl text-brand-charcoal mb-4">5. Contact Us</h2>
+          <p className="text-brand-stone text-sm">
+            For any privacy concerns, reach us at{" "}
+            <a
+              href="mailto:support@rasphia.com"
+              className="text-brand-terracotta hover:underline font-medium"
+            >
+              support@rasphia.com
+            </a>
           </p>
         </div>
       </div>

@@ -1,7 +1,8 @@
 "use client";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Sparkles, Shield, ArrowRight, LogIn } from "lucide-react";
+import { X, ArrowRight } from "lucide-react";
 import React from "react";
+import GoogleIcon from "./icons/GoogleIcon";
 
 interface SignInPopupProps {
   isOpen: boolean;
@@ -14,92 +15,83 @@ const SignInPopup: React.FC<SignInPopupProps> = ({
   onClose,
   onGoogleSignIn,
 }) => {
-  const highlights = [
-    {
-      icon: Sparkles,
-      title: "Continue the brief",
-      copy: "We remember scents, wishlists, and carted rituals across devices.",
-    },
-    {
-      icon: Shield,
-      title: "Private & secure",
-      copy: "Protected by NextAuth + Google. No passwords to juggle.",
-    },
-  ];
-
   return (
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,236,220,0.9),_rgba(32,24,18,0.9))] opacity-90" />
+          {/* Backdrop */}
           <motion.div
-            className="relative w-[90%] max-w-lg"
-            initial={{ scale: 0.9, opacity: 0, y: 40 }}
+            className="absolute inset-0 bg-brand-warm-black/30 backdrop-blur-sm"
+            onClick={onClose}
+          />
+
+          <motion.div
+            className="relative w-full max-w-sm"
+            initial={{ scale: 0.96, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 40 }}
-            transition={{ type: "spring", stiffness: 120 }}
+            exit={{ scale: 0.96, opacity: 0, y: 20 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
           >
-            <div className="pointer-events-none absolute -top-10 right-2 h-36 w-36 rounded-full bg-gradient-to-br from-amber-200 via-rose-100 to-white blur-2xl opacity-80" />
-            <div className="pointer-events-none absolute bottom-[-40px] left-[-20px] h-40 w-40 rounded-full bg-gradient-to-br from-[#2F1A19] via-[#613629] to-[#AD6F52] blur-[90px] opacity-70" />
-            <div className="relative overflow-hidden rounded-3xl border border-white/30 bg-white/95 p-8 shadow-2xl backdrop-blur">
+            <div className="relative overflow-hidden rounded-3xl bg-white border border-brand-sand/40 shadow-soft-xl p-8">
+              {/* Warm accent blob */}
+              <div className="pointer-events-none absolute -top-16 -right-16 h-40 w-40 rounded-full bg-brand-clay/20 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-12 -left-12 h-32 w-32 rounded-full bg-brand-sage/15 blur-2xl" />
+
+              {/* Close */}
               <button
                 onClick={onClose}
-                className="absolute right-5 top-5 rounded-full border border-stone-200 bg-white/70 p-2 text-stone-500 transition hover:bg-white"
+                className="absolute right-5 top-5 h-8 w-8 flex items-center justify-center rounded-xl border border-brand-sand/40 text-brand-stone hover:bg-brand-parchment transition-colors"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
               </button>
 
-              <div className="flex flex-col gap-2 text-left">
-                <p className="inline-flex w-fit items-center gap-2 rounded-full bg-amber-50 px-4 py-1 text-xs font-semibold uppercase tracking-[0.4em] text-amber-800">
-                  Sign in
-                </p>
-                <h2 className="text-3xl font-serif text-stone-900">
-                  Pick up where your concierge left off.
-                </h2>
-                <p className="text-sm text-stone-500">
-                  Save conversations, wishlists, and checkout progress with a single tap.
-                </p>
+              {/* Logo mark */}
+              <div className="h-12 w-12 rounded-2xl bg-brand-charcoal flex items-center justify-center mb-6">
+                <span className="font-heading text-xl text-brand-cream">R</span>
               </div>
 
-              <div className="mt-6 grid gap-4">
-                {highlights.map((highlight) => (
-                  <div
-                    key={highlight.title}
-                    className="flex items-start gap-3 rounded-2xl border border-stone-100 bg-stone-50/70 px-4 py-3"
-                  >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-800">
-                      <highlight.icon className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-stone-900">{highlight.title}</p>
-                      <p className="text-xs text-stone-500">{highlight.copy}</p>
-                    </div>
+              <h2 className="font-heading text-3xl text-brand-charcoal leading-tight">
+                Your personal
+                <br />
+                store awaits.
+              </h2>
+              <p className="mt-3 text-sm text-brand-stone leading-relaxed">
+                Sign in to save your taste profile, wishlist, and chat history.
+                Takes five seconds.
+              </p>
+
+              {/* Benefits */}
+              <div className="mt-6 space-y-2.5">
+                {[
+                  "Your taste graph, remembered",
+                  "Wishlist & orders synced",
+                  "Picks that get sharper over time",
+                ].map((item) => (
+                  <div key={item} className="flex items-center gap-3">
+                    <div className="h-1.5 w-1.5 rounded-full bg-brand-terracotta flex-shrink-0" />
+                    <p className="text-sm text-brand-charcoal">{item}</p>
                   </div>
                 ))}
               </div>
 
+              {/* CTA */}
               <button
                 onClick={onGoogleSignIn}
-                className="mt-6 inline-flex w-full items-center justify-center gap-3 rounded-full bg-stone-900 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-stone-400/40 transition hover:-translate-y-0.5 hover:bg-stone-800"
-                style={{ borderRadius: "999px" }}
+                className="mt-8 w-full flex items-center justify-center gap-3 rounded-xl bg-brand-charcoal px-6 py-3.5 text-sm font-medium text-brand-cream shadow-soft hover:bg-brand-warm-black transition-all hover:-translate-y-0.5"
               >
-                <LogIn className="h-4 w-4" />
+                <GoogleIcon />
                 Continue with Google
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="h-4 w-4 ml-auto" />
               </button>
 
-              <p className="mt-4 text-center text-xs text-stone-400">
+              <p className="mt-4 text-center text-[11px] text-brand-stone/50">
                 By continuing you agree to our{" "}
-                <a href="#" className="underline decoration-amber-300 underline-offset-4 hover:text-stone-600">
-                  Terms
-                </a>{" "}
-                &{" "}
-                <a href="#" className="underline decoration-amber-300 underline-offset-4 hover:text-stone-600">
+                <a href="/privacy" className="underline decoration-brand-sand underline-offset-2 hover:text-brand-charcoal">
                   Privacy Policy
                 </a>
                 .

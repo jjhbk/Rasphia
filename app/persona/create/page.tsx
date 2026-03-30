@@ -16,8 +16,8 @@ function PersonaProgress({ persona }: any) {
         return (
           <div
             key={step}
-            className={`h-2 w-8 rounded-full ${
-              done ? "bg-amber-600" : "bg-stone-300"
+            className={`h-1.5 w-8 rounded-full transition-colors ${
+              done ? "bg-brand-terracotta" : "bg-brand-sand"
             }`}
           />
         );
@@ -33,13 +33,15 @@ const initialUser: UserProfile = {
   address: "",
   wishlist: [],
 };
+
 export default function PersonaWizard() {
   const [persona, setPersona] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeStep, setActiveStep] = useState<PersonaStep | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile>(initialUser);
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
+
   useEffect(() => {
     const userEmail = session?.user?.email ?? "";
     const userName = session?.user?.name ?? "";
@@ -50,13 +52,8 @@ export default function PersonaWizard() {
         const [profileRes] = await Promise.all([
           fetch(`/api/user/get-profile?email=${encodeURIComponent(userEmail)}`),
         ]);
-
-        if (!profileRes.ok) {
-          throw new Error("Failed to fetch user data or orders or chats");
-        }
-
+        if (!profileRes.ok) throw new Error("Failed to fetch user data");
         const profile = await profileRes.json();
-
         setCurrentUser({
           name: profile?.name || userName,
           email: profile?.email || userEmail,
@@ -71,9 +68,7 @@ export default function PersonaWizard() {
 
     loadUserData();
   }, [session]);
-  // -----------------------------
-  // Fetch persona (SSOT)
-  // -----------------------------
+
   const fetchPersona = useCallback(async () => {
     setLoading(true);
     const res = await fetch(`/api/persona/get`);
@@ -98,43 +93,42 @@ export default function PersonaWizard() {
     }
   }, [loading, persona]);
 
-  // -----------------------------
-  // Start / Continue wizard
-  // -----------------------------
   function startWizard() {
     const next = getNextIncompleteStep(persona);
     setActiveStep(next);
     setModalOpen(true);
   }
 
-  // -----------------------------
-  // When a flow saves data
-  // -----------------------------
   async function handleFlowSave(payload: any) {
-    // 1. Save patch
     await fetch("/api/persona/update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
-    // 2. Fetch fresh persona (SSOT)
     const updatedPersona = await fetchPersona();
-
-    // 3. Decide next step
     const next = getNextIncompleteStep(updatedPersona);
 
     if (next) {
       setActiveStep(next);
       setModalOpen(true);
     } else {
-      // Wizard complete
       setActiveStep(null);
       setModalOpen(false);
     }
   }
+
   if (loading) {
-    return <div className="text-sm text-stone-500">Loading persona…</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-brand-cream font-body">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-10 w-10 rounded-full bg-brand-charcoal flex items-center justify-center">
+            <span className="font-heading text-lg text-brand-cream">R</span>
+          </div>
+          <p className="text-sm text-brand-stone">Loading persona…</p>
+        </div>
+      </div>
+    );
   }
 
   if (isPersonaComplete(persona)) {
@@ -143,27 +137,29 @@ export default function PersonaWizard() {
 
   return (
     <>
-      {/* ENTRY POINT */}
-      <div className="text-center mt-12">
-        <h1 className="text-3xl font-bold text-stone-900">
-          Let Rasphia Understand You
-        </h1>
+      <div className="min-h-screen bg-brand-cream flex items-center justify-center p-6 font-body">
+        <div className="text-center max-w-sm">
+          <div className="h-14 w-14 rounded-full bg-brand-charcoal flex items-center justify-center mx-auto mb-6">
+            <span className="font-heading text-xl text-brand-cream">R</span>
+          </div>
+          <h1 className="font-heading text-3xl text-brand-charcoal">
+            Let Rasphia Understand You
+          </h1>
+          <p className="mt-3 text-sm text-brand-stone leading-relaxed">
+            A few quick steps. Mostly photos. We do the thinking.
+          </p>
 
-        <p className="mt-2 text-sm text-stone-600">
-          A few quick steps. Mostly photos. We do the thinking.
-        </p>
+          <button
+            onClick={startWizard}
+            className="mt-8 px-8 py-3.5 rounded-2xl bg-brand-charcoal text-brand-cream text-sm font-medium hover:bg-brand-warm-black transition-colors shadow-soft-md"
+          >
+            Build My Taste Graph
+          </button>
 
-        <button
-          onClick={startWizard}
-          className="mt-8 px-8 py-4 rounded-full bg-amber-600 text-white font-medium shadow-lg"
-        >
-          ✨ Build My Persona
-        </button>
-
-        <PersonaProgress persona={persona} />
+          <PersonaProgress persona={persona} />
+        </div>
       </div>
 
-      {/* MODAL */}
       <PersonaFlowModal
         isOpen={modalOpen}
         type={activeStep}

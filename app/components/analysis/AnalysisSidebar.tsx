@@ -1,14 +1,6 @@
 "use client";
 import React from "react";
-import {
-  ScanFace,
-  Scissors,
-  Dumbbell,
-  Package,
-  ChevronRight,
-  Sparkles,
-  ArrowUpRight,
-} from "lucide-react";
+import { ArrowUpRight, Clock } from "lucide-react";
 
 interface AnalysisSidebarProps {
   onOpenAnalysis: (tool: string) => void;
@@ -18,6 +10,13 @@ interface AnalysisSidebarProps {
   onOpenAnalysisList: () => void;
 }
 
+const TOOLS = [
+  { key: "skin",    label: "Skin",          imageSrc: "/Skin.png" },
+  { key: "hair",    label: "Hair",          imageSrc: "/Hair.png" },
+  { key: "body",    label: "Body Fit",      imageSrc: "/Body.png" },
+  { key: "similar", label: "Visual Match",  imageSrc: "/Match.png" },
+];
+
 export default function AnalysisSidebar({
   onOpenAnalysis,
   onAttachToChat,
@@ -26,128 +25,102 @@ export default function AnalysisSidebar({
   onOpenAnalysisList,
 }: AnalysisSidebarProps) {
   return (
-    <aside className="flex flex-col h-full bg-transparent">
-      {/* HEADER */}
-      <div className="p-5 border-b border-stone-200/50">
-        <h2 className="text-sm font-semibold text-stone-800 tracking-wide flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-amber-600" />
+    <aside className="flex flex-col h-full">
+      {/* Header */}
+      <div className="px-4 pt-4 pb-3">
+        <h3 className="text-xs font-medium uppercase tracking-[0.25em] text-brand-stone/60">
           Concierge Tools
-        </h2>
+        </h3>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
-        {/* TOOLS GRID */}
-        <div className="grid grid-cols-2 gap-3 mb-8">
-          <ToolCard
-            label="Skin Analysis"
-            imageSrc="/Skin.png"
-            onClick={() => onOpenAnalysis("skin")}
-          />
-          <ToolCard
-            label="Hair Care"
-            imageSrc="/Hair.png"
-            onClick={() => onOpenAnalysis("hair")}
-          />
-          <ToolCard
-            label="Body Fit"
-            imageSrc="/Body.png"
-            onClick={() => onOpenAnalysis("body")}
-          />
-          <ToolCard
-            label="Visual Match"
-            imageSrc="/Match.png"
-            onClick={() => onOpenAnalysis("similar")}
-          />
+      <div className="flex-1 overflow-y-auto px-4 pb-4 custom-scrollbar">
+        {/* Tools grid */}
+        <div className="grid grid-cols-2 gap-2 mb-6">
+          {TOOLS.map((tool) => (
+            <button
+              key={tool.key}
+              onClick={() => onOpenAnalysis(tool.key)}
+              className="group flex flex-col overflow-hidden rounded-2xl border border-brand-sand/40 bg-white shadow-soft hover:shadow-soft-md hover:-translate-y-0.5 transition-all"
+            >
+              <div className="h-16 overflow-hidden">
+                <img
+                  src={tool.imageSrc}
+                  alt={tool.label}
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.05]"
+                />
+              </div>
+              <div className="px-3 py-2">
+                <span className="text-[11px] font-medium text-brand-charcoal">
+                  {tool.label}
+                </span>
+              </div>
+            </button>
+          ))}
         </div>
 
-        {/* RECENT ANALYSES */}
+        {/* Recent analyses */}
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-500">
-              Recent Analysis
-            </h3>
-            <button
-              onClick={onOpenAnalysisList}
-              className="text-xs text-amber-700 hover:text-amber-800 font-medium px-2 py-1 rounded-full hover:bg-amber-50/50 transition-colors bg-transparent border-none"
-            >
-              View All
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            {recentAnalyses.length === 0 ? (
-               <div className="p-6 text-center rounded-2xl bg-white/40 border border-stone-200/50 border-dashed">
-                  <p className="text-xs text-stone-400">No analyses yet.</p>
-               </div>
-            ) : (
-                recentAnalyses.slice(0, 5).map((a) => (
-                  <div
-                    key={a.analysisId}
-                    className="group bg-white/60 border border-stone-200/50 rounded-2xl p-3 hover:shadow-md hover:bg-white hover:border-amber-200 transition-all cursor-pointer backdrop-blur-sm"
-                    onClick={() => onOpenAnalysisDetails(a.analysisId)}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="h-10 w-10 rounded-xl bg-stone-100 overflow-hidden flex-shrink-0">
-                        <img
-                          src={a.fileUrl}
-                          className="h-full w-full object-cover"
-                          alt="Thumbnail"
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-stone-900 truncate">
-                          {a.title || a.type}
-                        </p>
-                        <p className="text-[10px] text-stone-500">
-                          {new Date(a.createdAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-3 flex items-center justify-end border-t border-stone-100 pt-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                       <button
-                          onClick={(e) => {
-                             e.stopPropagation();
-                             onAttachToChat(a.analysisId);
-                          }}
-                          className="text-[10px] flex items-center gap-1 text-stone-600 hover:text-amber-700 font-medium px-2 py-1 rounded-full hover:bg-stone-50 transition-colors"
-                       >
-                          Insert to chat <ArrowUpRight className="h-3 w-3" />
-                       </button>
-                    </div>
-                  </div>
-                ))
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-[11px] font-medium uppercase tracking-wider text-brand-stone/50">
+              Recent
+            </h4>
+            {recentAnalyses.length > 0 && (
+              <button
+                onClick={onOpenAnalysisList}
+                className="text-[11px] text-brand-terracotta hover:text-brand-coral font-medium transition-colors"
+              >
+                View all
+              </button>
             )}
           </div>
+
+          {recentAnalyses.length === 0 ? (
+            <div className="py-8 text-center rounded-2xl border border-dashed border-brand-sand/40">
+              <Clock className="h-6 w-6 text-brand-sand mx-auto mb-2" />
+              <p className="text-xs text-brand-stone/50">No analyses yet</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {recentAnalyses.slice(0, 5).map((a) => (
+                <div
+                  key={a.analysisId}
+                  onClick={() => onOpenAnalysisDetails(a.analysisId)}
+                  className="group flex items-center gap-3 p-3 rounded-xl border border-brand-sand/30 bg-white cursor-pointer hover:border-brand-sand hover:shadow-soft transition-all"
+                >
+                  <div className="h-10 w-10 rounded-xl overflow-hidden flex-shrink-0 border border-brand-sand/20">
+                    <img
+                      src={a.fileUrl}
+                      alt="Thumbnail"
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-brand-charcoal truncate">
+                      {a.title || a.type}
+                    </p>
+                    <p className="text-[10px] text-brand-stone/50 mt-0.5">
+                      {new Date(a.createdAt).toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </p>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAttachToChat(a.analysisId);
+                    }}
+                    className="flex-shrink-0 h-7 w-7 flex items-center justify-center rounded-lg text-brand-stone/40 hover:text-brand-terracotta hover:bg-brand-parchment transition-colors opacity-0 group-hover:opacity-100"
+                    title="Insert to chat"
+                  >
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </aside>
-  );
-}
-
-// SIMPLIFIED TOOL CARD
-function ToolCard({
-  label,
-  imageSrc,
-  onClick,
-}: {
-  label: string;
-  imageSrc: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex flex-col items-center gap-2 p-2 group rounded-2xl transition-all h-32 hover:scale-105 active:scale-95"
-    >
-      <img 
-        src={imageSrc} 
-        alt={label}
-        className="h-[67px] w-24 object-cover rounded-2xl shadow-md border border-stone-100 group-hover:border-amber-200 transition-all"
-      />
-      <span className="text-xs font-semibold text-stone-700 bg-stone-100 px-3 py-1 rounded-full group-hover:bg-amber-100 transition-colors">
-        {label}
-      </span>
-    </button>
   );
 }

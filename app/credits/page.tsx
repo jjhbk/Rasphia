@@ -9,10 +9,8 @@ declare global {
   }
 }
 
-// Credit pricing
 const CREDITS_PER_INR = 1;
 
-// Safe Razorpay loader
 const loadRazorpay = () =>
   new Promise<void>((resolve, reject) => {
     if (window.Razorpay) return resolve();
@@ -85,12 +83,7 @@ const CreditsCheckout = () => {
   };
 
   const handlePayment = async () => {
-    if (
-      !customer.name ||
-      !customer.email ||
-      !customer.phone ||
-      !customer.address
-    ) {
+    if (!customer.name || !customer.email || !customer.phone || !customer.address) {
       setPaymentError("Please fill in all required fields.");
       return;
     }
@@ -108,10 +101,7 @@ const CreditsCheckout = () => {
       const res = await fetch("/api/extension/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          credits: selectedCredits,
-          customer,
-        }),
+        body: JSON.stringify({ credits: selectedCredits, customer }),
       });
 
       if (!res.ok) throw new Error("Failed to create order");
@@ -135,17 +125,14 @@ const CreditsCheckout = () => {
           credits: selectedCredits.toString(),
           address: customer.address,
         },
-        theme: { color: "#4E443C" },
+        theme: { color: "#2C2420" },
 
         handler: async (response: any) => {
           try {
             const verifyRes = await fetch("/api/extension/verify-payment", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                ...response,
-                credits: selectedCredits,
-              }),
+              body: JSON.stringify({ ...response, credits: selectedCredits }),
             });
 
             const verify = await verifyRes.json();
@@ -173,30 +160,33 @@ const CreditsCheckout = () => {
     }
   };
 
-  /* ---------------- SUCCESS SCREEN ---------------- */
+  const inputClass =
+    "w-full px-4 py-2.5 bg-brand-parchment/50 border border-brand-sand/50 rounded-xl text-sm text-brand-charcoal placeholder:text-brand-stone/50 focus:outline-none focus:border-brand-terracotta/40 focus:ring-2 focus:ring-brand-terracotta/10 transition-all";
+
+  /* SUCCESS */
   if (paymentSuccess) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-        <div className="bg-white rounded-[32px] shadow-2xl max-w-md w-full p-8 text-center">
-          <div className="text-green-600 text-4xl mb-3">✓</div>
-          <h2 className="text-2xl font-serif text-amber-900 mb-2">
-            Credits Reloaded Successfully
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-charcoal/50 backdrop-blur-sm p-4 font-body">
+        <div className="bg-white rounded-3xl shadow-soft-xl max-w-md w-full p-8 text-center border border-brand-sand/30">
+          <div className="h-14 w-14 rounded-full bg-brand-parchment flex items-center justify-center mx-auto mb-4">
+            <span className="text-brand-terracotta text-2xl">✓</span>
+          </div>
+          <h2 className="font-heading text-2xl text-brand-charcoal mb-2">
+            Credits Added
           </h2>
-
-          <div className="bg-stone-50 rounded-xl p-4 text-sm space-y-2 text-left">
+          <div className="bg-brand-parchment/50 rounded-2xl p-4 text-sm space-y-2 text-left border border-brand-sand/30 my-4">
             <div className="flex justify-between">
-              <span className="text-stone-500">Credits Added</span>
-              <span className="font-semibold">{creditedCredits}</span>
+              <span className="text-brand-stone">Credits added</span>
+              <span className="font-semibold text-brand-charcoal">{creditedCredits}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-stone-500">Payment ID</span>
-              <span className="font-mono text-xs">{paymentId}</span>
+              <span className="text-brand-stone">Payment ID</span>
+              <span className="font-mono text-xs text-brand-stone/70">{paymentId}</span>
             </div>
           </div>
-
           <button
             onClick={() => window.close()}
-            className="mt-6 w-full py-3 rounded-full bg-stone-900 text-white hover:bg-black transition"
+            className="mt-2 w-full py-3 rounded-xl bg-brand-charcoal text-brand-cream text-sm font-medium hover:bg-brand-warm-black transition-colors"
           >
             Close
           </button>
@@ -205,20 +195,19 @@ const CreditsCheckout = () => {
     );
   }
 
-  /* ---------------- FAILURE SCREEN ---------------- */
+  /* ERROR */
   if (paymentError) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-        <div className="bg-white rounded-[32px] shadow-2xl max-w-md w-full p-8 text-center">
-          <div className="text-red-500 text-4xl mb-3">⚠</div>
-          <h2 className="text-2xl font-serif text-amber-900 mb-2">
-            Payment Failed
-          </h2>
-          <p className="text-stone-600 mb-6">{paymentError}</p>
-
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-charcoal/50 backdrop-blur-sm p-4 font-body">
+        <div className="bg-white rounded-3xl shadow-soft-xl max-w-md w-full p-8 text-center border border-brand-sand/30">
+          <div className="h-14 w-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
+            <span className="text-red-500 text-2xl">⚠</span>
+          </div>
+          <h2 className="font-heading text-2xl text-brand-charcoal mb-2">Payment Failed</h2>
+          <p className="text-brand-stone text-sm mb-6">{paymentError}</p>
           <button
             onClick={resetForRetry}
-            className="w-full py-3 rounded-full bg-stone-900 text-white hover:bg-black transition"
+            className="w-full py-3 rounded-xl bg-brand-charcoal text-brand-cream text-sm font-medium hover:bg-brand-warm-black transition-colors"
           >
             Try Again
           </button>
@@ -227,21 +216,19 @@ const CreditsCheckout = () => {
     );
   }
 
-  /* ---------------- ORIGINAL STYLED CHECKOUT ---------------- */
+  /* CHECKOUT */
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 font-body">
+      <div className="absolute inset-0 bg-brand-charcoal/50 backdrop-blur-sm" />
 
-      <div className="relative w-full max-w-4xl bg-white/95 backdrop-blur-xl rounded-[32px] shadow-2xl grid grid-cols-1 md:grid-cols-2 overflow-hidden border border-white/50 animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-4xl bg-white/95 backdrop-blur-xl rounded-3xl shadow-soft-xl grid grid-cols-1 md:grid-cols-2 overflow-hidden border border-brand-sand/30">
         {/* LEFT */}
-        <div className="p-8 bg-stone-50/50 flex flex-col relative h-full max-h-[90vh] overflow-y-auto">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-200 via-amber-400 to-amber-600" />
+        <div className="p-8 bg-brand-parchment/40 flex flex-col relative h-full max-h-[90vh] overflow-y-auto">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-brand-clay via-brand-terracotta to-brand-coral" />
 
-          <h2 className="text-2xl font-serif text-amber-900 mb-2">
-            Add Credits
-          </h2>
-          <p className="text-stone-500 mb-6 text-sm">
-            Choose how many credits you want to purchase
+          <h2 className="font-heading text-2xl text-brand-charcoal mb-1">Add Credits</h2>
+          <p className="text-brand-stone text-sm mb-6">
+            Choose how many credits to purchase
           </p>
 
           <div className="grid grid-cols-3 gap-3 mb-6">
@@ -249,14 +236,14 @@ const CreditsCheckout = () => {
               <button
                 key={credits}
                 onClick={() => handlePresetSelect(credits)}
-                className={`p-4 rounded-xl border-2 transition-all ${
+                className={`p-4 rounded-xl border-2 transition-all text-center ${
                   selectedCredits === credits && !customCredits
-                    ? "border-amber-500 bg-amber-50 shadow-md"
-                    : "border-stone-200 bg-white hover:border-amber-300"
+                    ? "border-brand-terracotta bg-brand-parchment shadow-soft"
+                    : "border-brand-sand/50 bg-white hover:border-brand-clay/50"
                 }`}
               >
-                <div className="text-lg font-bold">{credits}</div>
-                <div className="text-xs text-stone-500">credits</div>
+                <div className="text-lg font-bold text-brand-charcoal">{credits}</div>
+                <div className="text-xs text-brand-stone">credits</div>
               </button>
             ))}
           </div>
@@ -267,28 +254,23 @@ const CreditsCheckout = () => {
             step={10}
             value={customCredits}
             onChange={handleCustomInput}
-            placeholder="Custom credits"
-            className="w-full px-4 py-3 border-2 border-stone-200 rounded-xl mb-6"
+            placeholder="Custom amount"
+            className={inputClass}
           />
 
-          <div className="mt-auto border-t pt-4 flex justify-between text-lg font-semibold">
+          <div className="mt-auto border-t border-brand-sand/40 pt-4 flex justify-between text-sm font-semibold text-brand-charcoal mt-6">
             <span>Total</span>
             <span>{formatPrice(amountInInr)}</span>
           </div>
         </div>
 
         {/* RIGHT */}
-        <div className="p-8 bg-white/40">
-          <h2 className="text-2xl font-serif text-amber-900 mb-6">
-            Payment Details
-          </h2>
+        <div className="p-8 bg-white/60">
+          <h2 className="font-heading text-2xl text-brand-charcoal mb-6">Payment Details</h2>
 
           <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handlePayment();
-            }}
-            className="space-y-5"
+            onSubmit={(e) => { e.preventDefault(); handlePayment(); }}
+            className="space-y-4"
           >
             {["name", "email", "phone"].map((field) => (
               <input
@@ -296,8 +278,8 @@ const CreditsCheckout = () => {
                 name={field}
                 value={(customer as any)[field]}
                 onChange={handleInputChange}
-                placeholder={field.toUpperCase()}
-                className="w-full px-4 py-2.5 border rounded-xl"
+                placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
+                className={inputClass}
                 required
               />
             ))}
@@ -308,18 +290,16 @@ const CreditsCheckout = () => {
               onChange={handleInputChange}
               rows={3}
               placeholder="Billing address"
-              className="w-full px-4 py-2.5 border rounded-xl"
+              className={`${inputClass} resize-none`}
               required
             />
 
             <button
               disabled={isProcessing}
               type="submit"
-              className="w-full py-3.5 bg-stone-900 text-white rounded-full hover:bg-black disabled:bg-stone-400"
+              className="w-full py-3 bg-brand-charcoal text-brand-cream rounded-xl text-sm font-medium hover:bg-brand-warm-black disabled:bg-brand-stone/50 transition-colors shadow-soft"
             >
-              {isProcessing
-                ? "Processing..."
-                : `Pay ${formatPrice(amountInInr)}`}
+              {isProcessing ? "Processing…" : `Pay ${formatPrice(amountInInr)}`}
             </button>
           </form>
         </div>

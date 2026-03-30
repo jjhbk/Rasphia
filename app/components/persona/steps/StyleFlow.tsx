@@ -147,21 +147,21 @@ export default function StyleFlow({
   // UI
   // -------------------------
   return (
-    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex justify-center items-center z-[200] p-4">
-      <div className="bg-white w-full max-w-xl rounded-3xl shadow-xl p-5 max-h-[90vh] overflow-auto">
+    <div className="fixed inset-0 bg-brand-warm-black/20 backdrop-blur-sm flex justify-center items-center z-[200] p-4">
+      <div className="bg-white w-full max-w-xl rounded-3xl shadow-soft-xl border border-brand-sand/30 p-5 max-h-[90vh] overflow-auto custom-scrollbar">
         {/* HEADER */}
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">Style</h2>
+          <h2 className="text-lg font-heading font-semibold text-brand-charcoal">Style</h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-full hover:bg-stone-100"
+            className="h-8 w-8 flex items-center justify-center rounded-xl border border-brand-sand/40 text-brand-stone hover:bg-brand-parchment transition-colors"
           >
-            <X />
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
 
         {/* VISUAL PRESETS */}
-        <p className="text-sm text-stone-600 mb-3">
+        <p className="text-sm text-brand-stone mb-3">
           Pick the style that feels most like you
         </p>
 
@@ -172,12 +172,12 @@ export default function StyleFlow({
               onClick={() => applyPreset(preset)}
               className={`rounded-2xl border p-4 text-left transition ${
                 selectedPreset === preset.id
-                  ? "border-amber-600 ring-2 ring-amber-600"
-                  : "border-stone-200"
+                  ? "border-brand-terracotta ring-2 ring-brand-terracotta/30"
+                  : "border-brand-sand/50 hover:border-brand-sand"
               }`}
             >
               <div className="text-2xl mb-2">{preset.emoji}</div>
-              <div className="font-medium text-sm">{preset.label}</div>
+              <div className="font-medium text-sm text-brand-charcoal">{preset.label}</div>
             </button>
           ))}
         </div>
@@ -185,7 +185,7 @@ export default function StyleFlow({
         {/* ADVANCED TOGGLE */}
         <button
           onClick={() => setAdvancedOpen((v) => !v)}
-          className="mt-5 text-xs text-stone-500 underline"
+          className="mt-5 text-xs text-brand-stone/60 underline"
         >
           Refine style details
         </button>
@@ -195,7 +195,7 @@ export default function StyleFlow({
           <div className="mt-4 space-y-4">
             {/* ARCHETYPES */}
             <div>
-              <label className="text-xs text-stone-600">Style Archetypes</label>
+              <label className="text-xs text-brand-stone/60">Style Archetypes</label>
               <div className="flex flex-wrap gap-2 mt-2">
                 {[
                   "minimalist",
@@ -212,8 +212,8 @@ export default function StyleFlow({
                     onClick={() => toggle(item, setArchetypes)}
                     className={`${pill} ${
                       archetypes.includes(item)
-                        ? "bg-amber-600 text-white border-amber-600"
-                        : "bg-white text-stone-600 border-stone-300"
+                        ? "bg-brand-terracotta text-brand-cream border-brand-terracotta"
+                        : "bg-white text-brand-stone border-brand-sand"
                     }`}
                   >
                     {item}
@@ -224,11 +224,11 @@ export default function StyleFlow({
 
             {/* NOTES */}
             <div>
-              <label className="text-xs text-stone-600">Notes</label>
+              <label className="text-xs text-brand-stone/60">Notes</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full p-3 bg-stone-50 rounded-xl"
+                className="w-full p-3 bg-brand-parchment/50 border border-brand-sand/50 rounded-xl text-sm text-brand-charcoal focus:outline-none resize-none"
               />
             </div>
           </div>
@@ -237,7 +237,7 @@ export default function StyleFlow({
         {/* SAVE */}
         <button
           onClick={handleSave}
-          className="w-full py-3 rounded-full bg-amber-600 text-white mt-6"
+          className="w-full py-3 rounded-xl bg-brand-charcoal text-brand-cream text-sm font-medium hover:bg-brand-warm-black transition-colors mt-6"
         >
           Save Style
         </button>

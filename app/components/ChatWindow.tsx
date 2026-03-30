@@ -24,19 +24,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
-         top: scrollRef.current.scrollHeight,
-         behavior: "smooth"
+        top: scrollRef.current.scrollHeight,
+        behavior: "smooth",
       });
     }
   }, [messages, isLoading]);
 
   return (
     <div className="flex-1 min-h-0 relative">
-      <div 
+      <div
         ref={scrollRef}
-        className="relative flex-1 min-h-0 overflow-y-auto px-4 md:px-10 py-6 scroll-smooth custom-scrollbar h-full"
+        className="h-full overflow-y-auto px-4 md:px-8 py-8 custom-scrollbar"
       >
-        <div className="max-w-3xl mx-auto flex flex-col gap-6 pb-32">
+        <div className="max-w-3xl mx-auto flex flex-col gap-5 pb-6">
           {messages.map((msg, index) => (
             <Message
               key={index}
@@ -59,7 +59,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           )}
         </div>
       </div>
-
     </div>
   );
 };

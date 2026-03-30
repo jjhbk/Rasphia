@@ -177,16 +177,16 @@ export default function HairFlow({
         />
       )}
 
-      <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl w-full max-w-xl shadow-xl p-5 max-h-[90vh] overflow-auto">
+      <div className="fixed inset-0 bg-brand-warm-black/20 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl w-full max-w-xl shadow-soft-xl border border-brand-sand/30 p-5 max-h-[90vh] overflow-auto">
           {/* HEADER */}
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Hair Analysis</h2>
+            <h2 className="text-lg font-semibold font-heading text-brand-charcoal">Hair Analysis</h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-full hover:bg-stone-100"
+              className="h-8 w-8 flex items-center justify-center rounded-xl border border-brand-sand/40 text-brand-stone hover:bg-brand-parchment transition-colors"
             >
-              <X />
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
 
@@ -194,7 +194,7 @@ export default function HairFlow({
           <div className="flex gap-3 mb-4">
             <button
               onClick={() => filePicker.current?.click()}
-              className="flex-1 rounded-xl border border-dashed p-4 text-center text-sm bg-stone-50"
+              className="flex-1 rounded-xl border border-dashed border-brand-sand p-4 bg-brand-parchment/40 text-brand-stone hover:bg-brand-parchment transition-colors text-center text-sm"
             >
               <UploadCloud className="h-5 w-5 mx-auto mb-1" />
               Upload Hair Photos
@@ -202,7 +202,7 @@ export default function HairFlow({
 
             <button
               onClick={() => setOpenCamera(true)}
-              className="flex-1 rounded-xl border border-dashed p-4 text-center text-sm bg-stone-50"
+              className="flex-1 rounded-xl border border-dashed border-brand-sand p-4 bg-brand-parchment/40 text-brand-stone hover:bg-brand-parchment transition-colors text-center text-sm"
             >
               <Camera className="h-5 w-5 mx-auto mb-1" />
               Use Camera
@@ -220,14 +220,14 @@ export default function HairFlow({
 
           {/* PREVIEWS */}
           {previews.map((src, i) => (
-            <div key={i} className="mb-3 p-3 border rounded-xl bg-stone-50">
+            <div key={i} className="mb-3 p-3 border border-brand-sand/50 rounded-xl bg-brand-parchment/50">
               <div className="flex gap-3">
                 <img src={src} className="w-20 h-20 rounded-lg object-cover" />
 
                 <div className="flex-1">
-                  <div className="text-xs text-stone-500 mb-1">
+                  <div className="text-xs text-brand-stone/60 mb-1">
                     Status:{" "}
-                    <span className="font-medium text-stone-800">
+                    <span className="font-medium text-brand-charcoal">
                       {statuses[i]}
                     </span>
                   </div>
@@ -248,7 +248,7 @@ export default function HairFlow({
             <button
               disabled={isProcessingAll}
               onClick={analyzeAll}
-              className="w-full py-3 mt-2 rounded-full bg-amber-600 text-white disabled:opacity-50"
+              className="w-full py-3 mt-2 rounded-xl bg-brand-terracotta text-brand-cream disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isProcessingAll ? (
                 <Loader2 className="h-4 w-4 animate-spin mx-auto" />
@@ -261,7 +261,7 @@ export default function HairFlow({
           {/* PERSONA FORM */}
           {
             <div className="mt-6 space-y-4">
-              <h3 className="font-semibold">Refine Hair Profile</h3>
+              <h3 className="font-semibold font-heading text-brand-charcoal">Refine Hair Profile</h3>
 
               {/* HAIR TYPE */}
               <div>

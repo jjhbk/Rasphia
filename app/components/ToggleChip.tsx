@@ -14,8 +14,8 @@ export function ToggleChip({
       className={`px-3 py-1 rounded-full text-xs border transition
         ${
           active
-            ? "bg-amber-600 text-white border-amber-600"
-            : "bg-white text-stone-600 border-stone-300"
+            ? "bg-brand-terracotta text-brand-cream border-brand-terracotta"
+            : "bg-white text-brand-stone border-brand-sand"
         }`}
     >
       {label}
