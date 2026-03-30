@@ -5,9 +5,18 @@ import { put } from "@vercel/blob";
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN!;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID!;
 
+async function parseErrorBody(res: { json: () => Promise<unknown>; text: () => Promise<string> }) {
+  try {
+    const data = (await res.json()) as Record<string, unknown>;
+    return JSON.stringify(data);
+  } catch {
+    return await res.text();
+  }
+}
+
 export async function sendText(to: string, text: string) {
   const url = `https://graph.facebook.com/v17.0/${PHONE_NUMBER_ID}/messages`;
-  await fetch(url, {
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${WHATSAPP_TOKEN}`,
@@ -19,6 +28,10 @@ export async function sendText(to: string, text: string) {
       text: { body: text },
     }),
   });
+  if (!res.ok) {
+    const body = await parseErrorBody(res);
+    throw new Error(`WhatsApp sendText failed (${res.status}): ${body}`);
+  }
 }
 
 // Send an interactive list of product options (max 10 per list)

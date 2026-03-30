@@ -42,6 +42,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const debug =
+      req.nextUrl.searchParams.get("debug") === "1" ||
+      process.env.WHATSAPP_WEBHOOK_DEBUG === "1";
     const body = (await req.json()) as WhatsAppInbound;
 
     const messages =
@@ -50,9 +53,20 @@ export async function POST(req: NextRequest) {
           entry.changes?.flatMap((c) => c.value?.messages || []) || []
       ) || [];
 
+    let processed = 0;
+    let skipped = 0;
+    const diagnostics: Array<Record<string, string>> = [];
+
     for (const message of messages) {
       const from = String(message.from || "").trim();
-      if (!from) continue;
+      if (!from) {
+        skipped += 1;
+        diagnostics.push({
+          messageId: String(message.id || ""),
+          reason: "missing_from",
+        });
+        continue;
+      }
 
       const text = String(
         message.text?.body ||
@@ -67,16 +81,52 @@ export async function POST(req: NextRequest) {
           ? String(message.image?.caption || "").trim()
           : "";
 
-      if (!text && !mediaId && !mediaCaption) continue;
+      if (!text && !mediaId && !mediaCaption) {
+        skipped += 1;
+        diagnostics.push({
+          messageId: String(message.id || ""),
+          from,
+          reason: "empty_payload",
+          type: String(message.type || ""),
+        });
+        continue;
+      }
 
-      const reply = await processMerchantWhatsAppMessage({
-        fromPhone: from,
-        text,
-        messageId: message.id,
-        mediaId: mediaId || undefined,
-        mediaCaption: mediaCaption || undefined,
-      });
-      await sendText(from, reply);
+      try {
+        const reply = await processMerchantWhatsAppMessage({
+          fromPhone: from,
+          text,
+          messageId: message.id,
+          mediaId: mediaId || undefined,
+          mediaCaption: mediaCaption || undefined,
+        });
+        await sendText(from, reply);
+        processed += 1;
+        diagnostics.push({
+          messageId: String(message.id || ""),
+          from,
+          status: "processed",
+          type: String(message.type || ""),
+        });
+      } catch (err: unknown) {
+        const reason = err instanceof Error ? err.message : "unknown_error";
+        diagnostics.push({
+          messageId: String(message.id || ""),
+          from,
+          status: "error",
+          reason,
+        });
+        if (!debug) {
+          throw err;
+        }
+      }
+    }
+
+    if (debug) {
+      return NextResponse.json(
+        { ok: true, received: messages.length, processed, skipped, diagnostics },
+        { status: 200 }
+      );
     }
 
     return NextResponse.json({ ok: true }, { status: 200 });
