@@ -5,18 +5,22 @@ import type { NextRequest } from "next/server";
 export function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
 
+  const publicApiPrefixes = [
+    "/api/auth",
+    "/api/extension",
+    "/api/whatsapp",
+    "/api/whatsapp/send-otp",
+    "/api/whatsapp/verify-otp",
+    "/api/razorpay-webhook",
+    "/api/contact",
+  ];
+
+  if (publicApiPrefixes.some((prefix) => path.startsWith(prefix))) {
+    return NextResponse.next();
+  }
+
   // 1️⃣ Always allow NextAuth
-  if (path.startsWith("/api/auth")) {
-    return NextResponse.next();
-  }
-
-  // 2️⃣ Allow ALL extension routes
-  // Extension auth is handled inside route handlers
-  if (path.startsWith("/api/extension")) {
-    return NextResponse.next();
-  }
-
-  // 3️⃣ Protect all other API routes with NextAuth cookies
+  // 2️⃣ Protect all other API routes with NextAuth cookies
   if (path.startsWith("/api/")) {
     const sessionToken =
       req.cookies.get("next-auth.session-token")?.value ||
