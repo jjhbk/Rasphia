@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getManagementAccess } from "@/app/lib/auth";
+import { getManagementAccessFromRequest } from "@/app/lib/auth";
 import { deleteProductEmbedding } from "@/app/lib/product-vector-store";
 import { prisma } from "@/app/lib/prisma";
 
 export async function DELETE(req: Request) {
   try {
-    const access = await getManagementAccess();
+    const access = await getManagementAccessFromRequest(req);
 
     const { id } = await req.json();
 

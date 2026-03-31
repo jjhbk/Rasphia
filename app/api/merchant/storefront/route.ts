@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getManagementAccess } from "@/app/lib/auth";
+import { getManagementAccessFromRequest } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import {
   ensureUniqueMerchantSlug,
@@ -13,7 +13,7 @@ function isValidUrl(value: string) {
 
 export async function GET(req: NextRequest) {
   try {
-    const access = await getManagementAccess();
+    const access = await getManagementAccessFromRequest(req);
     const merchantIdParam = req.nextUrl.searchParams.get("merchantId");
 
     const merchant = await prisma.merchant.findFirst({
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const access = await getManagementAccess();
+    const access = await getManagementAccessFromRequest(req);
     const body = await req.json();
 
     const merchantIdParam =

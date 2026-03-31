@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getManagementAccess } from "@/app/lib/auth";
+import { getManagementAccessFromRequest } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import {
   isMerchantSlugAvailable,
@@ -8,7 +8,7 @@ import {
 
 export async function GET(req: NextRequest) {
   try {
-    const access = await getManagementAccess();
+    const access = await getManagementAccessFromRequest(req);
     const raw = String(req.nextUrl.searchParams.get("slug") || "").trim();
 
     if (!raw) {

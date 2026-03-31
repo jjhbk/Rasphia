@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
-import { getManagementAccess } from "@/app/lib/auth";
+import { getManagementAccessFromRequest } from "@/app/lib/auth";
 
 export async function POST(req: Request) {
   try {
     // Allow both admins and approved merchants.
-    await getManagementAccess();
+    await getManagementAccessFromRequest(req);
 
     const formData = await req.formData();
     const file = formData.get("file") as File;

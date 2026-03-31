@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getManagementAccess } from "@/app/lib/auth";
+import { getManagementAccessFromRequest } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 
 type OrderStatus =
@@ -41,9 +41,9 @@ function isAllowedStatus(value: string): value is OrderStatus {
   ].includes(value);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const access = await getManagementAccess();
+    const access = await getManagementAccessFromRequest(req);
 
     if (access.role === "admin") {
       const orders = await prisma.order.findMany({
@@ -90,7 +90,7 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const access = await getManagementAccess();
+    const access = await getManagementAccessFromRequest(req);
     const body = await req.json();
     const {
       orderId,

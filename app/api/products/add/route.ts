@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { getManagementAccess } from "@/app/lib/auth";
+import { getManagementAccessFromRequest } from "@/app/lib/auth";
 import { generateProductEmbedding } from "@/app/lib/generateEmbeddings";
 import { prisma } from "@/app/lib/prisma";
 import { Prisma } from "@prisma/client";
 
 export async function POST(req: Request) {
   try {
-    const access = await getManagementAccess();
+    const access = await getManagementAccessFromRequest(req);
 
     const body = await req.json();
     const {

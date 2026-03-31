@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getManagementAccess } from "@/app/lib/auth";
+import { getManagementAccessFromRequest } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 
 export async function GET(req: Request) {
@@ -14,7 +14,7 @@ export async function GET(req: Request) {
     let where: Record<string, unknown> = {};
 
     if (scope === "managed") {
-      const access = await getManagementAccess();
+      const access = await getManagementAccessFromRequest(req);
       if (access.role === "merchant") {
         where = {
           merchantEmail: access.email,

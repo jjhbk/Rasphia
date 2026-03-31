@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getManagementAccess } from "@/app/lib/auth";
+import { getManagementAccessFromRequest } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import type { Prisma } from "@prisma/client";
 
@@ -34,9 +34,9 @@ function canMerchantManageOrder(
   });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const access = await getManagementAccess();
+    const access = await getManagementAccessFromRequest(req);
 
     if (access.role === "admin") {
       const requests = await prisma.orderServiceRequest.findMany({
@@ -102,7 +102,7 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const access = await getManagementAccess();
+    const access = await getManagementAccessFromRequest(req);
     const body = await req.json();
     const { requestId, status, adminNote, resolutionNote } = body || {};
     const parsedStatus = String(status || "");
