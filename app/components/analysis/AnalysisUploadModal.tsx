@@ -327,9 +327,9 @@ export default function AnalysisUploadModal({
           <div className="relative p-5 pb-2">
              <button 
                 onClick={onClose}
-                className="absolute top-3 right-3 p-1.5 rounded-full hover:bg-stone-100/50 text-stone-500 hover:text-stone-800 transition-colors z-10"
+                className="absolute top-3 right-3 h-10 w-10 p-0 inline-flex items-center justify-center rounded-full hover:bg-stone-100/50 text-stone-500 hover:text-stone-800 transition-colors z-10"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
              
              <div className="flex items-end gap-4">

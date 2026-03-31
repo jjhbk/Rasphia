@@ -1,0 +1,24 @@
+<svg width="160" height="160" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="surface" x1="16" y1="12" x2="148" y2="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2C2420"/>
+      <stop offset="1" stop-color="#1A1614"/>
+    </linearGradient>
+    <linearGradient id="stroke" x1="48" y1="28" x2="118" y2="114" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E8DFD3"/>
+      <stop offset="1" stop-color="#FAF7F2"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="96" y1="36" x2="128" y2="70" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E8947A"/>
+      <stop offset="1" stop-color="#C75C3A"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="10" y="10" width="140" height="140" rx="42" fill="url(#surface)"/>
+
+  <!-- Window/curation motif -->
+  <path d="M40 104V83C40 60 57 42 80 42C103 42 120 60 120 83V104" stroke="url(#stroke)" stroke-width="9" stroke-linecap="round"/>
+  <path d="M60 104V80C60 68 68 60 80 60C92 60 100 68 100 80V104" stroke="#D4A574" stroke-width="8" stroke-linecap="round"/>
+  <rect x="57" y="102" width="46" height="10" rx="5" fill="#FAF7F2"/>
+  <circle cx="121" cy="49" r="7" fill="url(#accent)"/>
+</svg>

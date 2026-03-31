@@ -23,6 +23,7 @@ import AnalysisDetailModal from "./components/analysis/AnalysisDetailsModal";
 import AnalysisListModal from "./components/analysis/AnalysisListModal";
 import CartModal from "./components/CartModal";
 import PersonaSidebar from "./components/persona/PersonaSidebar";
+import BrandLogo from "./components/brand/BrandLogo";
 import type {
   Message,
   Product,
@@ -648,9 +649,11 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
                   <PanelLeftOpen className="h-5 w-5" />
                 )}
               </button>
-              <div className="hidden sm:flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-amber-600 to-amber-700 text-white text-sm font-serif font-bold shadow-md shadow-amber-200">
-                R
-              </div>
+              <BrandLogo
+                size={36}
+                className="hidden sm:inline-flex"
+                showWordmark={false}
+              />
               <div className="flex flex-col">
                 <span className="text-sm font-semibold text-stone-900 tracking-tight">
                   Rasphia <span className="hidden sm:inline">Concierge</span>
@@ -659,6 +662,9 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
                   {currentUser.name
                     ? `Session for ${currentUser.name}`
                     : "Guest Session"}
+                </span>
+                <span className="text-[10px] text-amber-800/90 hidden lg:block">
+                  We partner with independent makers, local shops, and neighborhood businesses.
                 </span>
               </div>
             </div>

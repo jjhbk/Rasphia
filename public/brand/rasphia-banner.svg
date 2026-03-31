@@ -1,0 +1,38 @@
+<svg width="1600" height="520" viewBox="0 0 1600 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="40" y1="20" x2="1530" y2="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF8F0"/>
+      <stop offset="0.55" stop-color="#FAF7F2"/>
+      <stop offset="1" stop-color="#E8DFD3"/>
+    </linearGradient>
+    <radialGradient id="orbA" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1320 80) rotate(120) scale(350 300)">
+      <stop offset="0" stop-color="#E8947A" stop-opacity="0.36"/>
+      <stop offset="1" stop-color="#E8947A" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orbB" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(180 500) rotate(-20) scale(420 260)">
+      <stop offset="0" stop-color="#D4A574" stop-opacity="0.44"/>
+      <stop offset="1" stop-color="#D4A574" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1600" height="520" rx="36" fill="url(#bg)"/>
+  <rect width="1600" height="520" rx="36" fill="url(#orbA)"/>
+  <rect width="1600" height="520" rx="36" fill="url(#orbB)"/>
+
+  <g transform="translate(92 94)">
+    <rect x="0" y="0" width="246" height="246" rx="66" fill="#1F1916"/>
+    <path d="M52 170V133C52 97 79 70 122 70C165 70 192 97 192 133V170" stroke="#FAF7F2" stroke-width="12" stroke-linecap="round"/>
+    <path d="M84 170V128C84 109 98 96 122 96C146 96 160 109 160 128V170" stroke="#D4A574" stroke-width="10" stroke-linecap="round"/>
+    <rect x="82" y="166" width="80" height="12" rx="6" fill="#FAF7F2"/>
+    <circle cx="196" cy="82" r="11" fill="#C75C3A"/>
+  </g>
+
+  <text x="386" y="212" fill="#2C2420" font-family="Georgia, serif" font-size="116" letter-spacing="1">Rasphia</text>
+  <text x="390" y="268" fill="#A39B93" font-family="system-ui, -apple-system, sans-serif" font-size="30" letter-spacing="7">SHOP THE VIBE</text>
+  <text x="390" y="350" fill="#2C2420" font-family="system-ui, -apple-system, sans-serif" font-size="42" font-weight="500">
+    You don't need more products. You need the right ones.
+  </text>
+  <text x="390" y="402" fill="#6D665F" font-family="system-ui, -apple-system, sans-serif" font-size="28">
+    A calmer way to discover your neighborhood's best finds.
+  </text>
+</svg>

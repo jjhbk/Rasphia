@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
+import BrandLogo from "@/app/components/brand/BrandLogo";
 
 type MerchantStatus = "approved" | "pending" | "rejected";
 
@@ -84,9 +85,7 @@ export default function MerchantOnboardingPage() {
     return (
       <div className="min-h-screen bg-brand-cream flex items-center justify-center font-body">
         <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 rounded-full bg-brand-charcoal flex items-center justify-center">
-            <span className="font-heading text-lg text-brand-cream">R</span>
-          </div>
+          <BrandLogo size={40} />
           <p className="text-sm text-brand-stone">Loading…</p>
         </div>
       </div>
@@ -97,9 +96,7 @@ export default function MerchantOnboardingPage() {
     return (
       <div className="min-h-screen bg-brand-cream flex items-center justify-center p-6 font-body">
         <div className="max-w-md w-full rounded-3xl border border-brand-sand/30 bg-white/80 p-8 text-center shadow-soft-md backdrop-blur-xl space-y-5">
-          <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-brand-charcoal">
-            <span className="font-heading text-base text-brand-cream">R</span>
-          </div>
+          <BrandLogo size={48} className="mx-auto" />
           <div>
             <p className="font-heading text-xl text-brand-charcoal">Rasphia</p>
             <p className="text-[10px] uppercase tracking-widest text-brand-stone/60 mt-1">

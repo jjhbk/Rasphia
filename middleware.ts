@@ -8,6 +8,7 @@ export function middleware(req: NextRequest) {
   const publicApiPrefixes = [
     "/api/auth",
     "/api/extension",
+    "/api/storefronts",
     "/api/whatsapp",
     "/api/whatsapp/send-otp",
     "/api/whatsapp/verify-otp",

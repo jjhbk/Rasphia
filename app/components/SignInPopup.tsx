@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, ArrowRight } from "lucide-react";
 import React from "react";
 import GoogleIcon from "./icons/GoogleIcon";
+import BrandLogo from "./brand/BrandLogo";
 
 interface SignInPopupProps {
   isOpen: boolean;
@@ -45,15 +46,13 @@ const SignInPopup: React.FC<SignInPopupProps> = ({
               {/* Close */}
               <button
                 onClick={onClose}
-                className="absolute right-5 top-5 h-8 w-8 flex items-center justify-center rounded-xl border border-brand-sand/40 text-brand-stone hover:bg-brand-parchment transition-colors"
+                className="absolute right-5 top-5 h-10 w-10 p-0 inline-flex items-center justify-center rounded-xl border border-brand-sand/40 text-brand-stone hover:bg-brand-parchment transition-colors"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-5 w-5" />
               </button>
 
               {/* Logo mark */}
-              <div className="h-12 w-12 rounded-2xl bg-brand-charcoal flex items-center justify-center mb-6">
-                <span className="font-heading text-xl text-brand-cream">R</span>
-              </div>
+              <BrandLogo size={48} className="mb-6" />
 
               <h2 className="font-heading text-3xl text-brand-charcoal leading-tight">
                 Your personal
@@ -86,7 +85,7 @@ const SignInPopup: React.FC<SignInPopupProps> = ({
               >
                 <GoogleIcon />
                 Continue with Google
-                <ArrowRight className="h-4 w-4 ml-auto" />
+                <ArrowRight className="h-5 w-5 ml-auto" />
               </button>
 
               <p className="mt-4 text-center text-[11px] text-brand-stone/50">

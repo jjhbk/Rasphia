@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { toHighQualityImageUrl } from "@/app/utils/imageQuality";
+
+const PUBLIC_STOREFRONT_STATUSES = [
+  "approved",
+  "APPROVED",
+  "Approved",
+  "active",
+  "ACTIVE",
+  "Active",
+] as const;
 
 type ProductRecord = {
   id: string;
@@ -31,7 +41,7 @@ export async function GET(
     }
 
     const merchant = await prisma.merchant.findFirst({
-      where: { slug, status: "approved" },
+      where: { slug, status: { in: [...PUBLIC_STOREFRONT_STATUSES] } },
       select: {
         id: true,
         slug: true,
@@ -117,8 +127,16 @@ export async function GET(
 
     return NextResponse.json(
       {
-        merchant,
-        products: filtered.map((p) => ({ ...p, _id: p.id })),
+        merchant: {
+          ...merchant,
+          logoUrl: toHighQualityImageUrl(merchant.logoUrl),
+          coverImageUrl: toHighQualityImageUrl(merchant.coverImageUrl),
+        },
+        products: filtered.map((p) => ({
+          ...p,
+          imageUrl: toHighQualityImageUrl(p.imageUrl),
+          _id: p.id,
+        })),
         facets: {
           categories,
           tags: tagFacets,

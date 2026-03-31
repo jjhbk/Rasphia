@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import type { Message as MessageType, Product } from "../types";
 import ProductCard from "./ProductCard";
+import BotIcon from "./icons/BotIcon";
+import UserIcon from "./icons/UserIcon";
 import ComparisonTable from "./ComparisonTable";
 
 interface MessageProps {
@@ -12,30 +14,11 @@ interface MessageProps {
   products: Product[];
 }
 
-/* Warm, subtle typing indicator */
 const TypingIndicator: React.FC = () => (
-  <div className="flex items-center gap-1.5 py-1">
-    {[0, 1, 2].map((i) => (
-      <span
-        key={i}
-        className="h-1.5 w-1.5 rounded-full bg-brand-clay/60 animate-bounce"
-        style={{ animationDelay: `${i * 0.15}s` }}
-      />
-    ))}
-  </div>
-);
-
-/* Rasphia monogram avatar */
-const RasphiaAvatar: React.FC = () => (
-  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand-charcoal">
-    <span className="font-heading text-sm text-brand-cream leading-none">R</span>
-  </div>
-);
-
-/* User initial avatar */
-const UserAvatar: React.FC = () => (
-  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand-sand border border-brand-sand/60">
-    <span className="text-brand-stone text-xs font-medium">You</span>
+  <div className="flex items-center space-x-1">
+    <span className="h-2 w-2 bg-stone-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+    <span className="h-2 w-2 bg-stone-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+    <span className="h-2 w-2 bg-stone-400 rounded-full animate-bounce"></span>
   </div>
 );
 
@@ -78,62 +61,65 @@ const Message: React.FC<MessageProps> = ({
     fetchRecommended();
   }, [message.products]);
 
-  if (isUser) {
-    return (
-      <div className="flex items-end justify-end gap-2.5">
-        <div className="max-w-[75%] md:max-w-[60%]">
-          <div className="px-4 py-3 rounded-2xl rounded-br-sm bg-brand-charcoal text-brand-cream text-sm leading-relaxed shadow-soft">
-            <p className="whitespace-pre-wrap">{message.text}</p>
-          </div>
-        </div>
-        <UserAvatar />
-      </div>
-    );
-  }
-
   return (
-    <div className="flex items-start gap-2.5">
-      <RasphiaAvatar />
+    <div className={`flex items-start gap-4 ${isUser ? "justify-end" : ""}`}>
+      {!isUser && (
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800">
+          <BotIcon />
+        </div>
+      )}
 
-      <div className="flex-1 min-w-0 flex flex-col gap-3">
+      <div
+        className={`max-w-md md:max-w-lg lg:max-w-2xl flex flex-col ${
+          isUser ? "items-end" : "items-start"
+        }`}
+      >
         {/* Message bubble */}
-        <div className="inline-block max-w-[85%]">
-          <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-white border border-brand-sand/40 shadow-soft text-sm leading-relaxed text-brand-charcoal">
-            {isLoading ? (
-              <TypingIndicator />
-            ) : (
-              <p className="whitespace-pre-wrap prose-rasphia">{message.text}</p>
-            )}
-          </div>
+        <div
+          className={`px-5 py-4 rounded-[24px] text-sm leading-relaxed ${
+            isUser
+              ? "bg-gradient-to-br from-amber-100 to-orange-50 text-stone-900 shadow-sm border border-amber-100"
+              : "bg-white/90 text-stone-800 border border-white/70 shadow-[0_10px_30px_rgba(15,15,15,0.08)]"
+          }`}
+        >
+          {isLoading ? (
+            <TypingIndicator />
+          ) : (
+            <p className="whitespace-pre-wrap">{message.text}</p>
+          )}
         </div>
 
         {/* Comparison Table */}
         {message.comparisonTable && (
-          <div className="rounded-2xl border border-brand-sand/40 bg-white shadow-soft overflow-hidden">
+          <div className="mt-4 w-full rounded-2xl border border-white/60 bg-white/80 p-4 shadow-inner">
             <ComparisonTable tableData={message.comparisonTable} />
           </div>
         )}
 
         {/* Recommended Products */}
         {fetchedProducts.length > 0 && (
-          <div className="w-full">
+          <div className="mt-4 grid w-full grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {loadingProducts && (
-              <p className="text-xs text-brand-stone/60 mb-3">Finding products…</p>
+              <p className="text-sm text-stone-500">Loading products…</p>
             )}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {fetchedProducts.map((product, index) => (
-                <ProductCard
-                  key={index}
-                  product={product}
-                  onAddToCart={onAddToCart}
-                  wishlist={wishlist}
-                  onToggleWishlist={onToggleWishlist}
-                />
-              ))}
-            </div>
+            {fetchedProducts.map((product, index) => (
+              <ProductCard
+                key={index}
+                product={product}
+                onAddToCart={onAddToCart}
+                wishlist={wishlist}
+                onToggleWishlist={onToggleWishlist}
+              />
+            ))}
           </div>
         )}
       </div>
+
+      {isUser && (
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-amber-200/80 text-amber-900">
+          <UserIcon />
+        </div>
+      )}
     </div>
   );
 };

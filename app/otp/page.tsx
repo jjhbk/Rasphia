@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import BrandLogo from "@/app/components/brand/BrandLogo";
 
 export default function OTPPage() {
   const [phone, setPhone] = useState("");
@@ -8,8 +9,6 @@ export default function OTPPage() {
   const [status, setStatus] = useState("");
 
   const WHATSAPP_NUMBER = "15551760605";
-  // example: "919876543210"
-  // Do NOT include "+" in wa.me format
 
   async function sendOTP() {
     setStatus("Sending...");
@@ -42,30 +41,32 @@ export default function OTPPage() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-100">
-      <div className="w-full max-w-sm bg-white shadow-lg rounded-xl p-6">
-        <h1 className="text-xl font-semibold mb-4 text-center">
-          WhatsApp OTP Login
-        </h1>
+    <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-brand-hero font-body">
+      <div className="w-full max-w-md bg-white/85 border border-brand-sand/40 shadow-soft-lg rounded-3xl p-7">
+        <div className="flex items-center gap-3 mb-5">
+          <BrandLogo size={38} />
+          <div>
+            <h1 className="text-xl font-heading text-brand-charcoal">WhatsApp OTP Login</h1>
+            <p className="text-xs text-brand-stone">Secure sign-in via WhatsApp verification</p>
+          </div>
+        </div>
 
-        {/* SEND HI BUTTON */}
         <a
           href={`https://wa.me/${WHATSAPP_NUMBER}?text=Hi`}
           target="_blank"
-          className="block text-center w-full bg-green-600 text-white py-2 rounded-md mb-4 hover:bg-green-700"
+          className="block text-center w-full bg-[#25D366] text-white py-2.5 rounded-xl mb-4 hover:opacity-95 transition"
         >
-          👋 Send “Hi” on WhatsApp
+          Send "Hi" on WhatsApp
         </a>
 
-        <p className="text-xs text-gray-500 mb-4 text-center">
-          Tap this first so we can message you. (Meta requires the user to
-          message you before you can send OTP.)
+        <p className="text-xs text-brand-stone mb-4 text-center">
+          Start this first so we can message your OTP.
         </p>
 
-        <label className="block mb-2">Phone Number</label>
+        <label className="block mb-2 text-sm text-brand-charcoal">Phone Number</label>
         <input
           type="text"
-          className="w-full border p-2 rounded mb-4"
+          className="w-full border border-brand-sand/60 bg-brand-parchment/40 p-2.5 rounded-xl mb-4"
           placeholder="9198XXXXXXX"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
@@ -73,15 +74,15 @@ export default function OTPPage() {
 
         <button
           onClick={sendOTP}
-          className="w-full bg-blue-600 text-white py-2 rounded mb-4 hover:bg-blue-700"
+          className="w-full bg-brand-charcoal text-white py-2.5 rounded-xl mb-4 hover:bg-brand-warm-black transition"
         >
           Send OTP
         </button>
 
-        <label className="block mb-2">Enter OTP</label>
+        <label className="block mb-2 text-sm text-brand-charcoal">Enter OTP</label>
         <input
           type="text"
-          className="w-full border p-2 rounded mb-4"
+          className="w-full border border-brand-sand/60 bg-brand-parchment/40 p-2.5 rounded-xl mb-4"
           placeholder="123456"
           value={otp}
           onChange={(e) => setOtp(e.target.value)}
@@ -89,12 +90,12 @@ export default function OTPPage() {
 
         <button
           onClick={verifyOTP}
-          className="w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700"
+          className="w-full bg-brand-terracotta text-white py-2.5 rounded-xl hover:bg-brand-coral transition"
         >
           Verify OTP
         </button>
 
-        <p className="text-center mt-4 text-sm">{status}</p>
+        <p className="text-center mt-4 text-sm text-brand-stone">{status}</p>
       </div>
     </div>
   );

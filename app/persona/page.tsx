@@ -12,6 +12,7 @@ import {
   Layers,
   Home,
 } from "lucide-react";
+import BrandLogo from "@/app/components/brand/BrandLogo";
 
 const ICONS: Record<string, any> = {
   home: Home,
@@ -42,9 +43,7 @@ export default function PersonaPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-brand-cream">
         <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 rounded-full bg-brand-charcoal flex items-center justify-center">
-            <span className="font-heading text-lg text-brand-cream">R</span>
-          </div>
+          <BrandLogo size={40} />
           <p className="text-sm text-brand-stone font-body">Loading your taste graph…</p>
         </div>
       </div>

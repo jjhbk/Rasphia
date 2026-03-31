@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/app/lib/prisma";
+import { isAdminEmail } from "@/app/lib/adminEmails";
 
 /**
  * Validates that the current user is logged in and is an admin.
@@ -13,11 +14,12 @@ export async function requireAdmin() {
     throw new Error("Unauthorized: No session found");
   }
 
-  const user = await prisma.userProfile.findUnique({
-    where: { email: session.user.email },
+  const email = session.user.email.trim();
+  const user = await prisma.userProfile.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
   });
 
-  if (!user || user.role !== "admin") {
+  if (!user || (user.role !== "admin" && !isAdminEmail(email))) {
     throw new Error("Forbidden: Admin access required email is" + user?.email);
   }
 
@@ -38,10 +40,12 @@ export async function getManagementAccess(): Promise<ManagementAccess> {
     throw new Error("Unauthorized: No session found");
   }
 
-  const email = session.user.email;
-  const profile = await prisma.userProfile.findUnique({ where: { email } });
+  const email = session.user.email.trim();
+  const profile = await prisma.userProfile.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
+  });
 
-  if (profile?.role === "admin") {
+  if (profile?.role === "admin" || isAdminEmail(email)) {
     return {
       email,
       role: "admin",
@@ -50,8 +54,8 @@ export async function getManagementAccess(): Promise<ManagementAccess> {
     };
   }
 
-  const merchant = await prisma.merchant.findUnique({
-    where: { email },
+  const merchant = await prisma.merchant.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
     select: { id: true, status: true },
   });
 

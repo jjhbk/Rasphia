@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import BrandBanner from "@/app/components/brand/BrandBanner";
+import BrandLogo from "@/app/components/brand/BrandLogo";
 
 const SLUG_MIN_LENGTH = 3;
 const SLUG_MAX_LENGTH = 40;
@@ -316,22 +318,24 @@ export default function MerchantStorefrontPage() {
   };
 
   if (isLoading) {
-    return <div className="min-h-screen bg-stone-100 p-6">Loading storefront...</div>;
+    return <div className="min-h-screen bg-brand-cream p-6">Loading storefront...</div>;
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f8f4ef] via-[#f3ece3] to-[#efe2d5] p-4 md:p-8">
+    <div className="min-h-screen bg-brand-hero p-4 md:p-8">
       <div className="mx-auto max-w-5xl space-y-6">
+        <BrandBanner className="hidden md:block" />
+
         <div className="rounded-3xl border border-white/70 bg-white/75 backdrop-blur-xl shadow-[0_20px_50px_rgba(0,0,0,0.08)] p-6 md:p-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-stone-500">Merchant Storefront</p>
-              <h1 className="text-3xl md:text-4xl font-serif text-stone-900 mt-1">Design Your Public Store</h1>
+              <p className="text-xs uppercase tracking-[0.22em] text-brand-stone">Merchant Storefront</p>
+              <h1 className="text-3xl md:text-4xl font-heading text-brand-charcoal mt-1">Design Your Public Store</h1>
             </div>
             <div className="flex items-center gap-3">
               <Link
                 href="/admin"
-                className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm text-stone-700 hover:bg-stone-100"
+                className="rounded-full border border-brand-sand/60 bg-white px-4 py-2 text-sm text-brand-charcoal hover:bg-brand-cream"
               >
                 Back to Dashboard
               </Link>
@@ -339,21 +343,21 @@ export default function MerchantStorefrontPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
                     href={publicStoreUrl}
-                    className="rounded-full bg-stone-900 px-4 py-2 text-sm text-white hover:bg-black"
+                    className="rounded-full bg-brand-charcoal px-4 py-2 text-sm text-white hover:bg-brand-warm-black"
                   >
                     View Public Store
                   </Link>
                   <button
                     type="button"
                     onClick={handleCopyStorefrontUrl}
-                    className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm text-stone-700 hover:bg-stone-100"
+                    className="rounded-full border border-brand-sand/60 bg-white px-4 py-2 text-sm text-brand-charcoal hover:bg-brand-cream"
                   >
                     Copy URL
                   </button>
                   <button
                     type="button"
                     onClick={handleShareStorefront}
-                    className="rounded-full border border-stone-300 bg-white px-4 py-2 text-sm text-stone-700 hover:bg-stone-100"
+                    className="rounded-full border border-brand-sand/60 bg-white px-4 py-2 text-sm text-brand-charcoal hover:bg-brand-cream"
                   >
                     Share
                   </button>
@@ -369,16 +373,16 @@ export default function MerchantStorefrontPage() {
           <form onSubmit={onSave} className="mt-6 grid grid-cols-1 gap-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-stone-700">Business Name</label>
+                <label className="text-sm text-brand-charcoal">Business Name</label>
                 <input
                   required
                   value={form.name}
                   onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-amber-200"
+                  className="mt-1 w-full rounded-xl border border-brand-sand/60 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-brand-terracotta/20"
                 />
               </div>
               <div>
-                <label className="text-sm text-stone-700">Store URL Slug</label>
+                <label className="text-sm text-brand-charcoal">Store URL Slug</label>
                 <input
                   required
                   value={form.slug}
@@ -399,10 +403,10 @@ export default function MerchantStorefrontPage() {
                       });
                     }
                   }}
-                  className="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-amber-200"
+                  className="mt-1 w-full rounded-xl border border-brand-sand/60 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-brand-terracotta/20"
                 />
                 {slugStatus === "checking" && (
-                  <p className="text-xs text-stone-500 mt-1">Checking availability...</p>
+                  <p className="text-xs text-brand-stone mt-1">Checking availability...</p>
                 )}
                 {slugStatus === "available" && (
                   <p className="text-xs text-emerald-700 mt-1">{slugHint}</p>
@@ -410,12 +414,12 @@ export default function MerchantStorefrontPage() {
                 {slugStatus === "taken" && (
                   <p className="text-xs text-red-700 mt-1">{slugHint}</p>
                 )}
-                <p className="text-xs text-stone-500 mt-1">Public URL: {publicStoreUrl || "-"}</p>
-                <p className="text-xs text-stone-500 mt-1">
+                <p className="text-xs text-brand-stone mt-1">Public URL: {publicStoreUrl || "-"}</p>
+                <p className="text-xs text-brand-stone mt-1">
                   Allowed: `a-z`, `0-9`, `-`, `_` | Length: {SLUG_MIN_LENGTH}-{SLUG_MAX_LENGTH}
                 </p>
                 {shareableStoreUrl && (
-                  <p className="text-xs text-stone-500 break-all mt-1">
+                  <p className="text-xs text-brand-stone break-all mt-1">
                     Shareable: {shareableStoreUrl}
                   </p>
                 )}
@@ -424,9 +428,9 @@ export default function MerchantStorefrontPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-stone-700">Store Logo</label>
-                <div className="mt-1 rounded-xl border border-stone-300 bg-white p-3">
-                  <label className="inline-flex cursor-pointer rounded-lg border border-stone-300 px-3 py-1.5 text-xs text-stone-700 hover:bg-stone-100">
+                <label className="text-sm text-brand-charcoal">Store Logo</label>
+                <div className="mt-1 rounded-xl border border-brand-sand/60 bg-white p-3">
+                  <label className="inline-flex cursor-pointer rounded-lg border border-brand-sand/60 px-3 py-1.5 text-xs text-brand-charcoal hover:bg-brand-cream">
                     {uploadingField === "logoUrl" ? "Uploading..." : "Upload Logo"}
                     <input
                       type="file"
@@ -447,7 +451,7 @@ export default function MerchantStorefrontPage() {
                   <button
                     type="button"
                     onClick={() => setForm((p) => ({ ...p, logoUrl: "" }))}
-                    className="ml-2 rounded-lg border border-stone-300 px-3 py-1.5 text-xs text-stone-700 hover:bg-stone-100"
+                    className="ml-2 rounded-lg border border-brand-sand/60 px-3 py-1.5 text-xs text-brand-charcoal hover:bg-brand-cream"
                   >
                     Remove
                   </button>
@@ -455,16 +459,16 @@ export default function MerchantStorefrontPage() {
                     <img
                       src={form.logoUrl}
                       alt="Logo preview"
-                      className="mt-3 block h-24 w-24 rounded-xl object-fill bg-white border border-stone-200"
+                      className="mt-3 block h-24 w-24 rounded-xl object-fill bg-white border border-brand-sand/50"
                     />
                   )}
                 </div>
               </div>
 
               <div>
-                <label className="text-sm text-stone-700">Cover Image</label>
-                <div className="mt-1 rounded-xl border border-stone-300 bg-white p-3">
-                  <label className="inline-flex cursor-pointer rounded-lg border border-stone-300 px-3 py-1.5 text-xs text-stone-700 hover:bg-stone-100">
+                <label className="text-sm text-brand-charcoal">Cover Image</label>
+                <div className="mt-1 rounded-xl border border-brand-sand/60 bg-white p-3">
+                  <label className="inline-flex cursor-pointer rounded-lg border border-brand-sand/60 px-3 py-1.5 text-xs text-brand-charcoal hover:bg-brand-cream">
                     {uploadingField === "coverImageUrl"
                       ? "Uploading..."
                       : "Upload Cover"}
@@ -487,7 +491,7 @@ export default function MerchantStorefrontPage() {
                   <button
                     type="button"
                     onClick={() => setForm((p) => ({ ...p, coverImageUrl: "" }))}
-                    className="ml-2 rounded-lg border border-stone-300 px-3 py-1.5 text-xs text-stone-700 hover:bg-stone-100"
+                    className="ml-2 rounded-lg border border-brand-sand/60 px-3 py-1.5 text-xs text-brand-charcoal hover:bg-brand-cream"
                   >
                     Remove
                   </button>
@@ -495,7 +499,7 @@ export default function MerchantStorefrontPage() {
                     <img
                       src={form.coverImageUrl}
                       alt="Cover preview"
-                      className="mt-3 h-28 w-full rounded-xl object-cover border border-stone-200"
+                      className="mt-3 h-28 w-full rounded-xl object-cover border border-brand-sand/50"
                     />
                   )}
                 </div>
@@ -503,27 +507,27 @@ export default function MerchantStorefrontPage() {
             </div>
 
             <div>
-              <label className="text-sm text-stone-700">Store Description</label>
+              <label className="text-sm text-brand-charcoal">Store Description</label>
               <textarea
                 rows={4}
                 value={form.storefrontDescription}
                 onChange={(e) =>
                   setForm((p) => ({ ...p, storefrontDescription: e.target.value }))
                 }
-                className="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-amber-200"
+                className="mt-1 w-full rounded-xl border border-brand-sand/60 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-brand-terracotta/20"
                 placeholder="Tell visitors what your store specializes in."
               />
             </div>
 
             <div>
-              <label className="text-sm text-stone-700">Chatbot Welcome Message</label>
+              <label className="text-sm text-brand-charcoal">Chatbot Welcome Message</label>
               <textarea
                 rows={3}
                 value={form.chatbotWelcomeMessage}
                 onChange={(e) =>
                   setForm((p) => ({ ...p, chatbotWelcomeMessage: e.target.value }))
                 }
-                className="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-amber-200"
+                className="mt-1 w-full rounded-xl border border-brand-sand/60 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-brand-terracotta/20"
                 placeholder="Example: Hi, tell me your budget and I will recommend bestsellers."
               />
             </div>
@@ -532,7 +536,7 @@ export default function MerchantStorefrontPage() {
               <button
                 disabled={isSaving}
                 type="submit"
-                className="rounded-full bg-amber-700 px-6 py-2 text-white hover:bg-amber-800 disabled:opacity-50"
+                className="rounded-full bg-brand-charcoal px-6 py-2 text-white hover:bg-brand-warm-black disabled:opacity-50"
               >
                 {isSaving ? "Saving..." : "Save Storefront"}
               </button>
@@ -541,9 +545,9 @@ export default function MerchantStorefrontPage() {
         </div>
 
         <div className="rounded-3xl border border-white/70 bg-white/75 p-4 md:p-6 backdrop-blur-xl shadow-[0_14px_30px_rgba(0,0,0,0.06)]">
-          <h2 className="text-lg font-medium text-stone-800">Preview</h2>
-          <div className="mt-3 overflow-hidden rounded-2xl border border-stone-200 bg-white">
-            <div className="h-40 bg-stone-200">
+          <h2 className="text-lg font-medium text-brand-charcoal">Preview</h2>
+          <div className="mt-3 overflow-hidden rounded-2xl border border-brand-sand/50 bg-white">
+            <div className="h-40 bg-brand-parchment">
               {form.coverImageUrl ? (
                 <img
                   src={form.coverImageUrl}
@@ -553,17 +557,19 @@ export default function MerchantStorefrontPage() {
               ) : null}
             </div>
             <div className="mt-3 px-4 pb-5">
-              <div className="h-20 w-20 rounded-2xl border-4 border-white bg-stone-100 overflow-hidden">
+              <div className="h-20 w-20 rounded-2xl border-4 border-white bg-brand-cream overflow-hidden">
                 {form.logoUrl ? (
                   <img
                     src={form.logoUrl}
                     alt="Store logo"
                     className="block h-full w-full object-fill bg-white"
                   />
-                ) : null}
+                ) : (
+                  <BrandLogo size={62} className="h-full w-full items-center justify-center" />
+                )}
               </div>
-              <h3 className="mt-3 text-2xl font-serif text-stone-900">{form.name || storefront?.name || "Your Store"}</h3>
-              <p className="mt-1 text-sm text-stone-600">
+              <h3 className="mt-3 text-2xl font-heading text-brand-charcoal">{form.name || storefront?.name || "Your Store"}</h3>
+              <p className="mt-1 text-sm text-brand-stone">
                 {form.storefrontDescription || "Add your store description to make your storefront stand out."}
               </p>
             </div>

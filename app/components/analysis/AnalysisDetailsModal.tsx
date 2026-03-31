@@ -11,8 +11,8 @@ export default function AnalysisDetailModal({ analysis, onClose }: any) {
       <div className="w-full max-w-2xl bg-white rounded-3xl shadow-soft-xl overflow-hidden border border-brand-sand/30">
         <div className="flex items-center justify-between px-6 py-4 border-b border-brand-sand/30">
           <h2 className="font-heading text-xl text-brand-charcoal">{title}</h2>
-          <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-xl border border-brand-sand/40 text-brand-stone hover:bg-brand-parchment transition-colors">
-            <X className="h-3.5 w-3.5" />
+          <button onClick={onClose} className="h-10 w-10 flex items-center justify-center rounded-xl border border-brand-sand/40 text-brand-stone hover:bg-brand-parchment transition-colors">
+            <X className="h-5 w-5" />
           </button>
         </div>
 

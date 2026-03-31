@@ -16,12 +16,13 @@ const ProductCard: React.FC<ProductCardProps> = ({
   wishlist,
   onToggleWishlist,
 }) => {
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat("en-IN", {
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
       minimumFractionDigits: 0,
     }).format(price);
+  };
 
   const isInWishlist = wishlist.some((item) => item.name === product.name);
 
@@ -29,61 +30,47 @@ const ProductCard: React.FC<ProductCardProps> = ({
     ? product.reviews.reduce((acc, r) => acc + (r.rating || 0), 0) /
       product.reviews.length
     : 0;
-
   return (
-    <div className="group flex flex-col overflow-hidden rounded-2xl bg-white border border-brand-sand/40 shadow-soft transition-all hover:shadow-soft-md hover:-translate-y-0.5">
-      {/* Image */}
-      <div className="relative overflow-hidden">
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/90 shadow-lg shadow-stone-200/70 transition hover:-translate-y-1">
+      <div className="relative">
         <img
           src={product.imageUrl}
           alt={product.name}
-          className="h-44 w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+          className="h-48 w-full object-cover"
         />
-        {/* Wishlist button */}
         <button
           onClick={() => onToggleWishlist(product)}
-          className={`absolute top-3 right-3 h-8 w-8 flex items-center justify-center rounded-full backdrop-blur-sm border transition-all ${
-            isInWishlist
-              ? "bg-brand-coral border-brand-coral text-white"
-              : "bg-white/80 border-brand-sand/40 text-brand-stone hover:border-brand-coral hover:text-brand-coral"
-          }`}
-          aria-label={isInWishlist ? "Remove from wishlist" : "Save"}
+          className="absolute top-3 right-3 rounded-full bg-white/80 p-2 text-stone-600 backdrop-blur-sm transition hover:text-red-500"
+          aria-label={isInWishlist ? "Remove from wishlist" : "Add to wishlist"}
         >
           <HeartIcon filled={isInWishlist} />
         </button>
       </div>
+      <div className="flex flex-grow flex-col p-4">
+        <h3 className="font-semibold text-stone-800">{product.name}</h3>
+        <p className="text-sm text-stone-500 mb-2">{product.brand}</p>
 
-      {/* Content */}
-      <div className="flex flex-col flex-1 p-4 gap-2">
-        <div>
-          <h3 className="text-sm font-semibold text-brand-charcoal leading-snug">
-            {product.name}
-          </h3>
-          <p className="text-xs text-brand-stone mt-0.5">{product.brand}</p>
-        </div>
+        {product.reviews?.length != undefined &&
+          product.reviews?.length > 0 && (
+            <div className="flex items-center gap-2 mb-2">
+              <StarRatingDisplay rating={averageRating} />
+              <span className="text-xs text-stone-500">
+                ({product.reviews?.length})
+              </span>
+            </div>
+          )}
 
-        {product.reviews?.length ? (
-          <div className="flex items-center gap-1.5">
-            <StarRatingDisplay rating={averageRating} />
-            <span className="text-[10px] text-brand-stone/70">
-              ({product.reviews.length})
-            </span>
-          </div>
-        ) : null}
-
-        <p className="text-xs text-brand-stone/80 leading-relaxed line-clamp-2 flex-1">
-          {product.story}
-        </p>
-
-        <div className="mt-auto flex items-center justify-between pt-3 border-t border-brand-sand/30">
-          <span className="text-sm font-semibold text-brand-charcoal">
+        <p className="text-sm text-stone-600 flex-grow mb-4">{product.story}</p>
+        <div className="mt-auto flex items-center justify-between">
+          <span className="font-bold text-amber-900">
             {formatPrice(product.price as number)}
           </span>
           <button
             onClick={() => onAddToCart(product)}
-            className="rounded-xl bg-brand-charcoal px-3.5 py-1.5 text-xs font-medium text-brand-cream hover:bg-brand-warm-black transition-colors shadow-soft"
+            className="rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow hover:bg-stone-800"
+            style={{ borderRadius: "999px" }}
           >
-            Add to cart
+            Add To Cart
           </button>
         </div>
       </div>

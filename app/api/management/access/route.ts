@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/app/lib/prisma";
+import { isAdminEmail } from "@/app/lib/adminEmails";
 
 export async function GET() {
   try {
@@ -13,18 +14,20 @@ export async function GET() {
       );
     }
 
-    const email = session.user.email;
-    const profile = await prisma.userProfile.findUnique({ where: { email } });
+    const email = session.user.email.trim();
+    const profile = await prisma.userProfile.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+    });
 
-    if (profile?.role === "admin") {
+    if (profile?.role === "admin" || isAdminEmail(email)) {
       return NextResponse.json(
         { authenticated: true, access: "admin", email },
         { status: 200 }
       );
     }
 
-    const merchant = await prisma.merchant.findUnique({
-      where: { email },
+    const merchant = await prisma.merchant.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
       select: { id: true, status: true, name: true },
     });
 

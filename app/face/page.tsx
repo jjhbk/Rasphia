@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as faceapi from "face-api.js";
+import BrandLogo from "@/app/components/brand/BrandLogo";
 
 export default function CameraFaceFeatureBlurTiny() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -9,7 +10,6 @@ export default function CameraFaceFeatureBlurTiny() {
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [photoTaken, setPhotoTaken] = useState(false);
 
-  // Load tiny models
   useEffect(() => {
     const loadModels = async () => {
       const MODEL_URL = "/models";
@@ -25,7 +25,6 @@ export default function CameraFaceFeatureBlurTiny() {
     loadModels();
   }, []);
 
-  // Start camera
   useEffect(() => {
     navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
       if (videoRef.current) {
@@ -34,12 +33,11 @@ export default function CameraFaceFeatureBlurTiny() {
       }
     });
   }, []);
+
   const expandPolygon = (points: any[], scale = 1.35) => {
-    // Compute polygon center
     const cx = points.reduce((sum, p) => sum + p.x, 0) / points.length;
     const cy = points.reduce((sum, p) => sum + p.y, 0) / points.length;
 
-    // Push all points outward
     return points.map((p) => {
       const dx = p.x - cx;
       const dy = p.y - cy;
@@ -50,7 +48,6 @@ export default function CameraFaceFeatureBlurTiny() {
     });
   };
 
-  // Helper: blur any polygon region
   const blurPolygon = (ctx: CanvasRenderingContext2D, points: any[]) => {
     const tempCanvas = document.createElement("canvas");
     tempCanvas.width = ctx.canvas.width;
@@ -59,7 +56,6 @@ export default function CameraFaceFeatureBlurTiny() {
     const tctx = tempCanvas.getContext("2d")!;
     tctx.drawImage(ctx.canvas, 0, 0);
 
-    // apply blur
     tctx.filter = "blur(18px)";
     tctx.drawImage(tempCanvas, 0, 0);
 
@@ -85,7 +81,6 @@ export default function CameraFaceFeatureBlurTiny() {
 
     ctx.drawImage(video, 0, 0);
 
-    // Detect face with tiny landmark model
     const detection = await faceapi
       .detectSingleFace(
         canvas,
@@ -99,15 +94,13 @@ export default function CameraFaceFeatureBlurTiny() {
     }
 
     const landmarks = detection.landmarks;
-
-    // Get feature sets
     const leftEye = landmarks.getLeftEye();
     const rightEye = landmarks.getRightEye();
     const nose = landmarks.getNose();
     const mouth = landmarks.getMouth();
     const leftEyebrow = landmarks.getLeftEyeBrow();
     const rightEyebrow = landmarks.getRightEyeBrow();
-    // Blur each region
+
     blurPolygon(ctx, expandPolygon(leftEye));
     blurPolygon(ctx, expandPolygon(rightEye));
     blurPolygon(ctx, expandPolygon(nose));
@@ -119,25 +112,40 @@ export default function CameraFaceFeatureBlurTiny() {
   };
 
   return (
-    <div className="space-y-4">
-      {!photoTaken && (
-        <video ref={videoRef} autoPlay playsInline className="border w-full" />
-      )}
+    <div className="min-h-screen bg-brand-hero p-6 font-body">
+      <div className="mx-auto max-w-2xl rounded-3xl bg-white/85 border border-brand-sand/40 p-6 shadow-soft-lg space-y-4">
+        <div className="flex items-center gap-3">
+          <BrandLogo size={38} />
+          <div>
+            <h1 className="text-xl font-heading text-brand-charcoal">Facial Feature Blur</h1>
+            <p className="text-sm text-brand-stone">Capture a face and blur key landmarks for privacy-safe analysis.</p>
+          </div>
+        </div>
 
-      <canvas
-        ref={canvasRef}
-        className="border w-full"
-        style={{ display: photoTaken ? "block" : "none" }}
-      />
+        {!photoTaken && (
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            className="border border-brand-sand/50 rounded-2xl w-full bg-brand-parchment"
+          />
+        )}
 
-      {modelsLoaded && (
-        <button
-          onClick={capturePhoto}
-          className="px-4 py-2 bg-blue-600 text-white rounded"
-        >
-          {photoTaken ? "Retake" : "Capture"}
-        </button>
-      )}
+        <canvas
+          ref={canvasRef}
+          className="border border-brand-sand/50 rounded-2xl w-full"
+          style={{ display: photoTaken ? "block" : "none" }}
+        />
+
+        {modelsLoaded && (
+          <button
+            onClick={capturePhoto}
+            className="px-4 py-2.5 bg-brand-charcoal text-white rounded-xl hover:bg-brand-warm-black transition"
+          >
+            {photoTaken ? "Retake" : "Capture"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { prisma } from "@/app/lib/prisma";
 
+const PUBLIC_STOREFRONT_STATUSES = [
+  "approved",
+  "APPROVED",
+  "Approved",
+  "active",
+  "ACTIVE",
+  "Active",
+] as const;
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -44,7 +53,7 @@ export async function POST(
     }
 
     const merchant = await prisma.merchant.findFirst({
-      where: { slug, status: "approved" },
+      where: { slug, status: { in: [...PUBLIC_STOREFRONT_STATUSES] } },
       select: {
         id: true,
         name: true,

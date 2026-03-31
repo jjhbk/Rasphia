@@ -7,6 +7,7 @@ import { getNextIncompleteStep, isPersonaComplete } from "../utils";
 import { UserProfile } from "@/app/types";
 import { useSession } from "next-auth/react";
 import PersonaSuccess from "@/app/components/persona/PersonaSuccess";
+import BrandLogo from "@/app/components/brand/BrandLogo";
 
 function PersonaProgress({ persona }: any) {
   return (
@@ -122,9 +123,7 @@ export default function PersonaWizard() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-brand-cream font-body">
         <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 rounded-full bg-brand-charcoal flex items-center justify-center">
-            <span className="font-heading text-lg text-brand-cream">R</span>
-          </div>
+          <BrandLogo size={40} />
           <p className="text-sm text-brand-stone">Loading persona…</p>
         </div>
       </div>
@@ -139,9 +138,7 @@ export default function PersonaWizard() {
     <>
       <div className="min-h-screen bg-brand-cream flex items-center justify-center p-6 font-body">
         <div className="text-center max-w-sm">
-          <div className="h-14 w-14 rounded-full bg-brand-charcoal flex items-center justify-center mx-auto mb-6">
-            <span className="font-heading text-xl text-brand-cream">R</span>
-          </div>
+          <BrandLogo size={56} className="mx-auto mb-6" />
           <h1 className="font-heading text-3xl text-brand-charcoal">
             Let Rasphia Understand You
           </h1>

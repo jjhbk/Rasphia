@@ -1,0 +1,29 @@
+<svg width="520" height="180" viewBox="0 0 520 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="520" height="180" rx="32" fill="#FAF7F2"/>
+
+  <g transform="translate(24 20)">
+    <defs>
+      <linearGradient id="surface" x1="16" y1="12" x2="148" y2="150" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#2C2420"/>
+        <stop offset="1" stop-color="#1A1614"/>
+      </linearGradient>
+      <linearGradient id="stroke" x1="48" y1="28" x2="118" y2="114" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#E8DFD3"/>
+        <stop offset="1" stop-color="#FAF7F2"/>
+      </linearGradient>
+      <linearGradient id="accent" x1="96" y1="36" x2="128" y2="70" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#E8947A"/>
+        <stop offset="1" stop-color="#C75C3A"/>
+      </linearGradient>
+    </defs>
+
+    <rect x="0" y="0" width="140" height="140" rx="40" fill="url(#surface)"/>
+    <path d="M30 95V75C30 53 46 36 70 36C94 36 110 53 110 75V95" stroke="url(#stroke)" stroke-width="8.5" stroke-linecap="round"/>
+    <path d="M50 95V72C50 60 58 52 70 52C82 52 90 60 90 72V95" stroke="#D4A574" stroke-width="8" stroke-linecap="round"/>
+    <rect x="48" y="93" width="44" height="9" rx="4.5" fill="#FAF7F2"/>
+    <circle cx="112" cy="44" r="6.5" fill="url(#accent)"/>
+  </g>
+
+  <text x="186" y="86" fill="#2C2420" font-family="Georgia, serif" font-size="56" letter-spacing="0.8">Rasphia</text>
+  <text x="189" y="115" fill="#A39B93" font-family="system-ui, -apple-system, sans-serif" font-size="16" letter-spacing="3">SHOP THE VIBE</text>
+</svg>

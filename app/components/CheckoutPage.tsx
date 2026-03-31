@@ -199,9 +199,9 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
         {/* Close */}
         <button
           onClick={onCancel}
-          className="absolute top-4 right-4 z-10 h-8 w-8 flex items-center justify-center rounded-xl border border-brand-sand/40 bg-white text-brand-stone hover:bg-brand-parchment transition-colors"
+          className="absolute top-4 right-4 z-10 h-10 w-10 flex items-center justify-center rounded-xl border border-brand-sand/40 bg-white text-brand-stone hover:bg-brand-parchment transition-colors"
         >
-          <X className="h-3.5 w-3.5" />
+          <X className="h-5 w-5" />
         </button>
 
         {/* LEFT — Order summary */}

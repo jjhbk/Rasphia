@@ -4,6 +4,7 @@ import type { UserProfile, Order, Product, OrderStatus } from "../types";
 import CartModal from "./CartModal";
 import ProductCard from "./ProductCard";
 import { ArrowLeft, User, Package, Heart, ShoppingCart } from "lucide-react";
+import BrandLogo from "./brand/BrandLogo";
 
 interface ProfilePageProps {
   user: UserProfile;
@@ -116,9 +117,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     return (
       <div className="flex h-screen items-center justify-center bg-brand-cream">
         <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 rounded-full bg-brand-charcoal flex items-center justify-center">
-            <span className="font-heading text-lg text-brand-cream">R</span>
-          </div>
+          <BrandLogo size={40} />
           <p className="text-sm text-brand-stone">Loading profile…</p>
         </div>
       </div>

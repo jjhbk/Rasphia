@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import BrandLogo from "@/app/components/brand/BrandLogo";
 
 export default function ContactUs() {
   const [loading, setLoading] = useState(false);
@@ -71,9 +72,7 @@ export default function ContactUs() {
       <div className="min-h-screen flex justify-center items-center bg-brand-cream p-6 font-body">
         <div className="max-w-lg w-full bg-white/80 backdrop-blur-xl border border-brand-sand/30 p-10 rounded-3xl shadow-soft-md">
           <div className="flex flex-col items-center mb-8">
-            <div className="h-10 w-10 rounded-full bg-brand-charcoal flex items-center justify-center mb-4">
-              <span className="font-heading text-base text-brand-cream">R</span>
-            </div>
+            <BrandLogo size={40} className="mb-4" />
             <h1 className="font-heading text-2xl text-brand-charcoal">Rasphia</h1>
             <p className="text-brand-stone text-sm mt-1">Get in touch with us</p>
           </div>

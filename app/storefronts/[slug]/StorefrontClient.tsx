@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import BrandLogo from "@/app/components/brand/BrandLogo";
+import { toHighQualityImageUrl } from "@/app/utils/imageQuality";
 
 type Product = {
   _id: string;
@@ -49,7 +51,8 @@ export default function MerchantStorefrontPublicPage({
   slug: string;
 }) {
   const [data, setData] = useState<StorefrontResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
@@ -68,9 +71,15 @@ export default function MerchantStorefrontPublicPage({
   const canRenderFilters = Boolean(data);
 
   useEffect(() => {
+    const abortController = new AbortController();
+
     const run = async () => {
       try {
-        setLoading(true);
+        if (data) {
+          setIsFetching(true);
+        } else {
+          setInitialLoading(true);
+        }
         setError(null);
         const qp = new URLSearchParams();
         if (search.trim()) qp.set("q", search.trim());
@@ -81,7 +90,9 @@ export default function MerchantStorefrontPublicPage({
         if (inStockOnly) qp.set("inStock", "true");
         if (sort) qp.set("sort", sort);
 
-        const res = await fetch(`/api/storefronts/${slug}?${qp.toString()}`);
+        const res = await fetch(`/api/storefronts/${slug}?${qp.toString()}`, {
+          signal: abortController.signal,
+        });
         const payload = await res.json();
         if (!res.ok) throw new Error(payload?.error || "Failed to load storefront");
 
@@ -101,15 +112,21 @@ export default function MerchantStorefrontPublicPage({
           setMaxPrice(payload.facets.price.max);
         }
       } catch (e: unknown) {
+        if (abortController.signal.aborted) return;
         const message = e instanceof Error ? e.message : "Failed to load storefront";
         setError(message);
       } finally {
-        setLoading(false);
+        if (abortController.signal.aborted) return;
+        setInitialLoading(false);
+        setIsFetching(false);
       }
     };
 
     const id = setTimeout(run, 160);
-    return () => clearTimeout(id);
+    return () => {
+      clearTimeout(id);
+      abortController.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, search, category, inStockOnly, sort, minPrice, maxPrice, selectedTags.join(",")]);
 
@@ -159,16 +176,16 @@ export default function MerchantStorefrontPublicPage({
     }
   };
 
-  if (loading) {
-    return <div className="min-h-screen bg-stone-100 p-6">Loading storefront...</div>;
+  if (initialLoading && !data) {
+    return <div className="min-h-screen bg-brand-cream p-6">Loading storefront...</div>;
   }
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-stone-100 p-8">
-        <div className="mx-auto max-w-3xl rounded-2xl bg-white border border-stone-200 p-6">
+      <div className="min-h-screen bg-brand-cream p-8">
+        <div className="mx-auto max-w-3xl rounded-2xl bg-white border border-brand-sand/50 p-6">
           <p className="text-red-700">{error || "Storefront not found"}</p>
-          <Link href="/storefronts" className="mt-3 inline-block underline text-stone-700">
+          <Link href="/storefronts" className="mt-3 inline-block underline text-brand-charcoal">
             Back to storefronts
           </Link>
         </div>
@@ -180,18 +197,19 @@ export default function MerchantStorefrontPublicPage({
     <div className="min-h-screen bg-[radial-gradient(circle_at_10%_10%,#f7d5b7_0%,transparent_34%),radial-gradient(circle_at_90%_0%,#f9dcc6_0%,transparent_30%),linear-gradient(160deg,#f8f4ec,#efe5d9_45%,#f5ede1)]">
       <div className="mx-auto max-w-7xl p-4 md:p-8">
         <div className="overflow-hidden rounded-[30px] border border-white/80 bg-white/75 backdrop-blur-xl shadow-[0_30px_70px_rgba(0,0,0,0.09)]">
-          <div className="relative h-56 md:h-72 bg-stone-200">
+          <div className="relative h-56 md:h-72 bg-brand-parchment">
             {data.merchant.coverImageUrl ? (
               <img
                 src={data.merchant.coverImageUrl}
                 alt={data.merchant.name}
                 className="absolute inset-0 h-full w-full object-cover"
+                loading="eager"
               />
             ) : null}
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/5 to-transparent" />
             <Link
               href="/storefronts"
-              className="absolute top-4 left-4 rounded-full bg-white/90 px-3 py-1.5 text-xs text-stone-800 hover:bg-white"
+              className="absolute top-4 left-4 rounded-full bg-white/90 px-3 py-1.5 text-xs text-brand-charcoal hover:bg-white"
             >
               All Storefronts
             </Link>
@@ -200,20 +218,23 @@ export default function MerchantStorefrontPublicPage({
           <div className="px-4 md:px-8 pb-8">
             <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
               <div className="flex items-end gap-4">
-                <div className="h-24 w-24 rounded-3xl border-4 border-white bg-stone-100 overflow-hidden shadow-xl">
+                <div className="h-24 w-24 rounded-3xl border-4 border-white bg-brand-cream overflow-hidden shadow-xl">
                   {data.merchant.logoUrl ? (
                     <img
                       src={data.merchant.logoUrl}
                       alt={`${data.merchant.name} logo`}
                       className="block h-full w-full object-fill bg-white"
+                      loading="eager"
                     />
-                  ) : null}
+                  ) : (
+                    <BrandLogo size={72} className="h-full w-full items-center justify-center" />
+                  )}
                 </div>
                 <div>
-                  <h1 className="text-3xl md:text-4xl font-serif text-stone-900">
+                  <h1 className="text-3xl md:text-4xl font-serif text-brand-charcoal">
                     {data.merchant.name}
                   </h1>
-                  <p className="text-xs uppercase tracking-[0.2em] text-stone-500 mt-1">
+                  <p className="text-xs uppercase tracking-[0.2em] text-brand-stone mt-1">
                     {[data.merchant.city, data.merchant.state]
                       .filter(Boolean)
                       .join(", ") || "Online Store"}
@@ -222,24 +243,27 @@ export default function MerchantStorefrontPublicPage({
               </div>
             </div>
 
-            <p className="mt-4 max-w-3xl text-stone-700 leading-relaxed">
+            <p className="mt-4 max-w-3xl text-brand-charcoal leading-relaxed">
               {data.merchant.storefrontDescription ||
                 "Explore this merchant's curated assortment and ask the store assistant for quick recommendations."}
             </p>
 
             {canRenderFilters && (
-              <div className="mt-6 rounded-2xl border border-stone-200 bg-white/90 p-4 md:p-5">
+              <div className="mt-6 rounded-2xl border border-brand-sand/50 bg-white/90 p-4 md:p-5">
+                {isFetching && (
+                  <p className="mb-3 text-xs text-brand-stone">Updating products...</p>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search products"
-                    className="md:col-span-2 rounded-xl border border-stone-300 px-3 py-2 text-sm"
+                    className="md:col-span-2 rounded-xl border border-brand-sand/60 px-3 py-2 text-sm"
                   />
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="rounded-xl border border-stone-300 px-3 py-2 text-sm"
+                    className="rounded-xl border border-brand-sand/60 px-3 py-2 text-sm"
                   >
                     <option value="">All categories</option>
                     {data.facets.categories.map((c) => (
@@ -251,14 +275,14 @@ export default function MerchantStorefrontPublicPage({
                   <select
                     value={sort}
                     onChange={(e) => setSort(e.target.value)}
-                    className="rounded-xl border border-stone-300 px-3 py-2 text-sm"
+                    className="rounded-xl border border-brand-sand/60 px-3 py-2 text-sm"
                   >
                     <option value="relevance">Relevance</option>
                     <option value="latest">Latest</option>
                     <option value="price_asc">Price: Low to High</option>
                     <option value="price_desc">Price: High to Low</option>
                   </select>
-                  <label className="inline-flex items-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm bg-stone-50">
+                  <label className="inline-flex items-center gap-2 rounded-xl border border-brand-sand/60 px-3 py-2 text-sm bg-brand-parchment/40">
                     <input
                       type="checkbox"
                       checked={inStockOnly}
@@ -270,7 +294,7 @@ export default function MerchantStorefrontPublicPage({
 
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs text-stone-500 mb-2">
+                    <p className="text-xs text-brand-stone mb-2">
                       Price range: ₹{minPrice} - ₹{maxPrice || priceRange?.max || 0}
                     </p>
                     <div className="grid grid-cols-2 gap-2">
@@ -279,7 +303,7 @@ export default function MerchantStorefrontPublicPage({
                         min={priceRange?.min ?? 0}
                         value={minPrice}
                         onChange={(e) => setMinPrice(Math.max(0, Number(e.target.value || 0)))}
-                        className="rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                        className="rounded-lg border border-brand-sand/60 px-3 py-2 text-sm"
                         placeholder="Min price"
                       />
                       <input
@@ -287,14 +311,14 @@ export default function MerchantStorefrontPublicPage({
                         min={minPrice}
                         value={maxPrice}
                         onChange={(e) => setMaxPrice(Math.max(0, Number(e.target.value || 0)))}
-                        className="rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                        className="rounded-lg border border-brand-sand/60 px-3 py-2 text-sm"
                         placeholder="Max price"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <p className="text-xs text-stone-500 mb-2">Tags</p>
+                    <p className="text-xs text-brand-stone mb-2">Tags</p>
                     <div className="flex flex-wrap gap-2">
                       {visibleTagFacets.map((tag) => {
                         const selected = selectedTags.includes(tag);
@@ -310,8 +334,8 @@ export default function MerchantStorefrontPublicPage({
                             }
                             className={`rounded-full border px-3 py-1 text-xs ${
                               selected
-                                ? "bg-stone-900 text-white border-stone-900"
-                                : "bg-white text-stone-700 border-stone-300"
+                                ? "bg-brand-charcoal text-white border-brand-charcoal"
+                                : "bg-white text-brand-charcoal border-brand-sand/60"
                             }`}
                           >
                             {tag}
@@ -329,26 +353,28 @@ export default function MerchantStorefrontPublicPage({
                 {data.products.map((p) => (
                   <div
                     key={p._id}
-                    className="rounded-2xl border border-stone-200 bg-white p-3 shadow-[0_8px_20px_rgba(0,0,0,0.04)]"
+                    className="rounded-2xl border border-brand-sand/50 bg-white p-3 shadow-[0_8px_20px_rgba(0,0,0,0.04)]"
                   >
-                    <div className="h-44 w-full overflow-hidden rounded-xl bg-stone-100">
+                    <div className="h-44 w-full overflow-hidden rounded-xl bg-brand-cream">
                       {p.imageUrl ? (
                         <img
-                          src={p.imageUrl}
+                          src={toHighQualityImageUrl(p.imageUrl)}
                           alt={p.name}
                           className="h-full w-full object-cover"
+                          loading="lazy"
+                          decoding="async"
                         />
                       ) : null}
                     </div>
-                    <h3 className="mt-3 text-lg font-medium text-stone-900">{p.name}</h3>
-                    <p className="text-xs uppercase tracking-[0.18em] text-stone-500 mt-1">
+                    <h3 className="mt-3 text-lg font-medium text-brand-charcoal">{p.name}</h3>
+                    <p className="text-xs uppercase tracking-[0.18em] text-brand-stone mt-1">
                       {p.brand || p.category || "General"}
                     </p>
-                    <p className="mt-2 text-sm text-stone-600 line-clamp-3">
+                    <p className="mt-2 text-sm text-brand-stone line-clamp-3">
                       {p.description || "No description provided."}
                     </p>
                     <div className="mt-3 flex items-center justify-between">
-                      <p className="text-lg font-semibold text-stone-900">
+                      <p className="text-lg font-semibold text-brand-charcoal">
                         ₹{Number(p.price || 0).toFixed(0)}
                       </p>
                       {p.isAvailable && p.stockQuantity > 0 ? (
@@ -365,15 +391,15 @@ export default function MerchantStorefrontPublicPage({
                 ))}
 
                 {!data.products.length && (
-                  <div className="col-span-full rounded-2xl border border-stone-200 bg-white p-8 text-center text-stone-600">
+                  <div className="col-span-full rounded-2xl border border-brand-sand/50 bg-white p-8 text-center text-brand-stone">
                     No products match these filters.
                   </div>
                 )}
               </div>
 
-              <aside className="rounded-2xl border border-stone-200 bg-white p-4 shadow-[0_10px_26px_rgba(0,0,0,0.05)] sticky top-4">
-                <h2 className="text-lg font-serif text-stone-900">Store Assistant</h2>
-                <p className="text-xs text-stone-500 mt-1">
+              <aside className="rounded-2xl border border-brand-sand/50 bg-white p-4 shadow-[0_10px_26px_rgba(0,0,0,0.05)] sticky top-4">
+                <h2 className="text-lg font-serif text-brand-charcoal">Store Assistant</h2>
+                <p className="text-xs text-brand-stone mt-1">
                   Ask about use-cases, budget, bestsellers, or alternatives.
                 </p>
 
@@ -383,7 +409,7 @@ export default function MerchantStorefrontPublicPage({
                       <div
                         className={`rounded-xl px-3 py-2 text-sm ${
                           m.role === "assistant"
-                            ? "bg-stone-100 text-stone-800"
+                            ? "bg-brand-cream text-brand-charcoal"
                             : "bg-amber-100 text-amber-900"
                         }`}
                       >
@@ -394,10 +420,10 @@ export default function MerchantStorefrontPublicPage({
                           {m.suggestedProducts.slice(0, 2).map((sp) => (
                             <div
                               key={sp._id}
-                              className="rounded-lg border border-stone-200 bg-white p-2 text-xs"
+                              className="rounded-lg border border-brand-sand/50 bg-white p-2 text-xs"
                             >
-                              <p className="font-medium text-stone-900">{sp.name}</p>
-                              <p className="text-stone-600">₹{Number(sp.price || 0).toFixed(0)}</p>
+                              <p className="font-medium text-brand-charcoal">{sp.name}</p>
+                              <p className="text-brand-stone">₹{Number(sp.price || 0).toFixed(0)}</p>
                             </div>
                           ))}
                         </div>
@@ -406,10 +432,10 @@ export default function MerchantStorefrontPublicPage({
                   ))}
                   {chatLoading && (
                     <div>
-                      <div className="inline-flex items-center gap-1 rounded-xl bg-stone-100 px-3 py-2">
-                        <span className="h-1.5 w-1.5 rounded-full bg-stone-400 animate-bounce [animation-delay:-0.2s]" />
-                        <span className="h-1.5 w-1.5 rounded-full bg-stone-400 animate-bounce [animation-delay:-0.1s]" />
-                        <span className="h-1.5 w-1.5 rounded-full bg-stone-400 animate-bounce" />
+                      <div className="inline-flex items-center gap-1 rounded-xl bg-brand-cream px-3 py-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-brand-stone/70 animate-bounce [animation-delay:-0.2s]" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-brand-stone/70 animate-bounce [animation-delay:-0.1s]" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-brand-stone/70 animate-bounce" />
                       </div>
                     </div>
                   )}
@@ -421,13 +447,13 @@ export default function MerchantStorefrontPublicPage({
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && !chatLoading && sendChat()}
                     placeholder="Ask this merchant assistant..."
-                    className="flex-1 rounded-xl border border-stone-300 px-3 py-2 text-sm"
+                    className="flex-1 rounded-xl border border-brand-sand/60 px-3 py-2 text-sm"
                     disabled={chatLoading}
                   />
                   <button
                     disabled={chatLoading}
                     onClick={sendChat}
-                    className="rounded-xl bg-stone-900 px-3 py-2 text-sm text-white disabled:opacity-50"
+                    className="rounded-xl bg-brand-charcoal px-3 py-2 text-sm text-white disabled:opacity-50"
                   >
                     {chatLoading ? "..." : "Send"}
                   </button>

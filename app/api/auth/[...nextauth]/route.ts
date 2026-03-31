@@ -2,6 +2,7 @@ import NextAuth, { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { prisma } from "@/app/lib/prisma";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
+import { isAdminEmail } from "@/app/lib/adminEmails";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -41,9 +42,7 @@ export const authOptions: NextAuthOptions = {
         if (existing) return;
 
         // Determine if user is admin
-        const adminEmails =
-          process.env.ADMIN_EMAILS?.split(",").map((e) => e.trim()) || [];
-        const role = adminEmails.includes(user.email ?? "") ? "admin" : "user";
+        const role = isAdminEmail(user.email) ? "admin" : "user";
 
         await prisma.userProfile.create({
           data: {
@@ -71,10 +70,13 @@ export const authOptions: NextAuthOptions = {
           create: {
             email: user.email,
             name: user.name || "",
-            role: "user",
+            role: isAdminEmail(user.email) ? "admin" : "user",
             credits: 50,
           },
-          update: { updatedAt: new Date() },
+          update: {
+            updatedAt: new Date(),
+            role: isAdminEmail(user.email) ? "admin" : undefined,
+          },
         });
       } catch (err) {
         console.error("⚠️ Error updating login timestamp:", err);

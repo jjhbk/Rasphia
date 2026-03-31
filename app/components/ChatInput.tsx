@@ -70,13 +70,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
         <button
           type="submit"
           disabled={!canSend}
-          className={`flex-shrink-0 h-8 w-8 flex items-center justify-center rounded-xl transition-all ${
+          className={`flex-shrink-0 h-10 w-10 p-0 inline-flex items-center justify-center rounded-xl transition-all ${
             canSend
               ? "bg-brand-charcoal text-brand-cream hover:bg-brand-warm-black shadow-soft"
               : "bg-brand-sand/40 text-brand-stone/30 cursor-not-allowed"
           }`}
         >
-          <ArrowUp className="h-4 w-4" />
+          <ArrowUp className="h-5 w-5" />
         </button>
       </div>
     </form>

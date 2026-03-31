@@ -3,12 +3,20 @@ import React from 'react';
 
 interface HeartIconProps {
   filled: boolean;
+  size?: number;
+  className?: string;
 }
 
-const HeartIcon: React.FC<HeartIconProps> = ({ filled }) => (
+const HeartIcon: React.FC<HeartIconProps> = ({
+  filled,
+  size = 24,
+  className = "",
+}) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    className="h-6 w-6"
+    className={className}
+    width={size}
+    height={size}
     viewBox="0 0 24 24"
     fill={filled ? 'currentColor' : 'none'}
     stroke="currentColor"

@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 
+const PUBLIC_STOREFRONT_STATUSES = [
+  "approved",
+  "APPROVED",
+  "Approved",
+  "active",
+  "ACTIVE",
+  "Active",
+] as const;
+
 export async function GET(req: NextRequest) {
   try {
     const q = String(req.nextUrl.searchParams.get("q") || "").trim();
@@ -11,7 +20,7 @@ export async function GET(req: NextRequest) {
 
     const merchants = await prisma.merchant.findMany({
       where: {
-        status: "approved",
+        status: { in: [...PUBLIC_STOREFRONT_STATUSES] },
         ...(q
           ? {
               OR: [

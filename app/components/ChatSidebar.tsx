@@ -66,27 +66,27 @@ export default function ChatSidebar({
     <aside className="flex flex-col h-full bg-transparent">
       {/* Header */}
       <div className="px-5 pt-5 pb-3 flex items-center justify-between">
-        <h2 className="text-xs font-medium uppercase tracking-[0.25em] text-brand-stone/70">
+        <h2 className="text-sm font-semibold text-brand-charcoal tracking-wide">
           Conversations
         </h2>
         <button
           onClick={onNew}
-          className="h-7 w-7 flex items-center justify-center rounded-lg bg-brand-charcoal text-brand-cream hover:bg-brand-warm-black transition-colors"
+          className="h-9 w-9 p-0 inline-flex items-center justify-center rounded-lg bg-brand-charcoal text-brand-cream hover:bg-brand-warm-black transition-colors"
           title="New conversation"
         >
-          <Plus className="h-3.5 w-3.5" />
+          <Plus className="h-5 w-5" />
         </button>
       </div>
 
       {/* Search */}
       <div className="px-4 pb-3">
         <form onSubmit={handleSearch} className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-brand-stone/50" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-brand-stone/50" />
           <input
             placeholder="Search..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-xl bg-brand-parchment/60 border border-brand-sand/40 focus:border-brand-terracotta/40 text-xs text-brand-charcoal placeholder-brand-stone/50 focus:outline-none focus:ring-2 focus:ring-brand-terracotta/10 transition-all"
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-brand-parchment/60 border border-brand-sand/40 focus:border-brand-terracotta/40 text-sm text-brand-charcoal placeholder-brand-stone/50 focus:outline-none focus:ring-2 focus:ring-brand-terracotta/10 transition-all"
           />
         </form>
       </div>
@@ -95,8 +95,8 @@ export default function ChatSidebar({
       <div className="flex-1 overflow-y-auto px-3 space-y-0.5 custom-scrollbar pb-3">
         {chats.length === 0 && (
           <div className="py-10 text-center">
-            <MessageSquare className="h-8 w-8 text-brand-sand mx-auto mb-2" />
-            <p className="text-xs text-brand-stone/50">No conversations yet</p>
+            <MessageSquare className="h-10 w-10 text-brand-sand mx-auto mb-2" />
+            <p className="text-sm text-brand-stone/60">No conversations yet</p>
           </div>
         )}
         {chats.map((chat) => {
@@ -112,7 +112,7 @@ export default function ChatSidebar({
               }`}
             >
               <MessageSquare
-                className={`h-3.5 w-3.5 flex-shrink-0 transition-colors ${
+                className={`h-5 w-5 flex-shrink-0 transition-colors ${
                   isActive ? "text-brand-terracotta" : "text-brand-stone/40"
                 }`}
               />
@@ -125,12 +125,12 @@ export default function ChatSidebar({
                     onBlur={() => saveTitle(chat._id)}
                     onKeyDown={(e) => e.key === "Enter" && saveTitle(chat._id)}
                     autoFocus
-                    className="w-full bg-transparent border-b border-brand-sand text-xs p-0 focus:outline-none text-brand-charcoal"
+                    className="w-full bg-transparent border-b border-brand-sand text-sm p-0 focus:outline-none text-brand-charcoal"
                     onClick={(e) => e.stopPropagation()}
                   />
                 ) : (
                   <p
-                    className={`text-xs font-medium truncate transition-colors ${
+                    className={`text-sm font-medium truncate transition-colors ${
                       isActive ? "text-brand-charcoal" : "text-brand-stone"
                     }`}
                   >
@@ -140,18 +140,26 @@ export default function ChatSidebar({
               </div>
 
               {/* Hover actions */}
-              <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
+              <div
+                className={`flex items-center gap-1 flex-shrink-0 transition-opacity ${
+                  isActive
+                    ? "opacity-100"
+                    : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                }`}
+              >
                 <button
                   onClick={(e) => { e.stopPropagation(); startEditing(chat); }}
-                  className="p-1 text-brand-stone/40 hover:text-brand-charcoal rounded-lg hover:bg-brand-parchment transition-colors"
+                  className="h-9 w-9 p-0 inline-flex items-center justify-center text-brand-stone/80 hover:text-brand-charcoal rounded-lg hover:bg-brand-parchment transition-colors"
+                  aria-label="Rename chat"
                 >
-                  <Pencil className="h-3 w-3" />
+                  <Pencil className="h-5 w-5" />
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); onDelete(chat._id); }}
-                  className="p-1 text-brand-stone/40 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"
+                  className="h-9 w-9 p-0 inline-flex items-center justify-center text-brand-stone/80 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                  aria-label="Delete chat"
                 >
-                  <Trash2 className="h-3 w-3" />
+                  <Trash2 className="h-5 w-5" />
                 </button>
               </div>
             </div>
@@ -161,7 +169,7 @@ export default function ChatSidebar({
 
       {/* Footer */}
       <div className="px-5 py-4 border-t border-brand-sand/30">
-        <p className="text-[10px] text-brand-stone/40">
+        <p className="text-xs text-brand-stone/50">
           Rasphia · vibe shopping
         </p>
       </div>
