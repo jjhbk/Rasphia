@@ -3,9 +3,8 @@ import { POST as storefrontChatPost } from "@/app/api/storefronts/[slug]/chat/ro
 
 export async function POST(
   req: NextRequest,
-  context: { params: Promise<{ slug: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   const params = await context.params;
-  return storefrontChatPost(req, { params: Promise.resolve({ slug: params.slug }) });
+  return storefrontChatPost(req, { params: Promise.resolve({ slug: params.id }) });
 }
-
