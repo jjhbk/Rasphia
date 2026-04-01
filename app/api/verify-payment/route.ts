@@ -111,6 +111,18 @@ export async function POST(req: Request) {
       });
     }
 
+    if (providerStatus.status === "DISPUTED") {
+      return NextResponse.json({
+        status: "disputed",
+        providerStatus: providerStatus.status,
+        mapping: {
+          internalOrderId: order.id,
+          appOrderId: order.receipt || null,
+          seedhapeOrderId: order.orderId,
+        },
+      });
+    }
+
     return NextResponse.json({
       status: "pending",
       providerStatus: providerStatus.status,

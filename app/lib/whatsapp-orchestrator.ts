@@ -1374,6 +1374,18 @@ function pickAddressChoice(value: unknown) {
   return n;
 }
 
+function buildUpiAppLinks(upiUri: string) {
+  if (!upiUri.startsWith("upi://")) {
+    return { gpay: "", phonepe: "", paytm: "" };
+  }
+  const pathAndQuery = upiUri.slice("upi://".length);
+  return {
+    gpay: `tez://${pathAndQuery}`,
+    phonepe: `phonepe://${pathAndQuery}`,
+    paytm: `paytmmp://${pathAndQuery}`,
+  };
+}
+
 async function getSavedAddressesForUser(user: {
   email: string;
   address?: string | null;
@@ -1848,6 +1860,7 @@ async function handleUserOrderCreate(
     merchantConfig.baseUrl
   );
   const androidIntent = links.androidIntents.gpay || links.androidIntents.phonepe;
+  const appLinks = buildUpiAppLinks(seedhapeOrder.upiUri);
   const lines = [
     `Order created: ${seedhapeOrder.id}`,
     `App order ID: ${createdOrder.receipt || "n/a"}`,
@@ -1858,10 +1871,17 @@ async function handleUserOrderCreate(
     `UPI verified name: ${upiVerifiedName}`,
     `Delivery address: ${shippingAddress}`,
     "",
-    "Pay now:",
+    "Pay now (recommended):",
+    links.hostedStatusUrl,
+    "",
+    "UPI links:",
     seedhapeOrder.upiUri,
   ];
+  if (appLinks.gpay) lines.push(appLinks.gpay);
+  if (appLinks.phonepe) lines.push(appLinks.phonepe);
+  if (appLinks.paytm) lines.push(appLinks.paytm);
   if (androidIntent) {
+    lines.push("", "Android intent:");
     lines.push(androidIntent);
   }
   lines.push(

@@ -69,12 +69,15 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [activePayment, setActivePayment] = useState<SeedhapeCheckoutOrder | null>(
     null
   );
+  const [isSeedhapeModalOpen, setIsSeedhapeModalOpen] = useState(false);
+  const [completionNotice, setCompletionNotice] = useState("");
+  const [awaitingManualClose, setAwaitingManualClose] = useState(false);
   const [pendingCustomer, setPendingCustomer] = useState<CheckoutCustomer | null>(
     null
   );
   const [paymentStatusText, setPaymentStatusText] = useState("");
-  const pollRef = useRef<number | null>(null);
   const pendingPaymentsRef = useRef<SeedhapeCheckoutOrder[]>([]);
+  const successHandledRef = useRef<Set<string>>(new Set());
 
   const SHIPPING_COST = 0;
   const subtotal = products.reduce((sum, p, idx) => {
@@ -102,14 +105,6 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
     });
     setQuantities(initialQuantities);
   }, [user, products]);
-
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) {
-        window.clearInterval(pollRef.current);
-      }
-    };
-  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -191,13 +186,16 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       }
 
       const [first, ...rest] = orders;
+      successHandledRef.current.clear();
       setActivePayment(first);
+      setIsSeedhapeModalOpen(true);
       pendingPaymentsRef.current = rest;
       setPendingCustomer(normalizedCustomer);
+      setAwaitingManualClose(false);
+      setCompletionNotice("");
       setPaymentStatusText(
-        `Waiting for payment confirmation (1/${orders.length})...`
+        `Order created (1/${orders.length}). Complete payment in SeedhaPe.`
       );
-      startPaymentPolling(first.id, normalizedCustomer);
     } catch (err) {
       console.error("Payment error:", err);
       alert(
@@ -225,56 +223,47 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
     });
     const verify = await verifyRes.json();
     if (verify.status === "ok") {
-      if (pollRef.current) {
-        window.clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
       if (pendingPaymentsRef.current.length > 0) {
         const [nextOrder, ...rest] = pendingPaymentsRef.current;
         pendingPaymentsRef.current = rest;
         setActivePayment(nextOrder);
+        setIsSeedhapeModalOpen(true);
         setPaymentStatusText(`Payment confirmed for ${orderId}. Continue with next payment.`);
-        if (normalizedCustomer) {
-          startPaymentPolling(nextOrder.id, normalizedCustomer);
-        }
         return;
       }
 
-      setActivePayment(null);
+      setCompletionNotice(
+        `Payment complete for order ${orderId}. Please click Complete Order to finish.`
+      );
+      setPaymentStatusText(
+        "Payment verified. Review status and click Complete Order when ready."
+      );
+      setIsSeedhapeModalOpen(false);
       pendingPaymentsRef.current = [];
-      setPendingCustomer(null);
+      setAwaitingManualClose(true);
       setIsProcessing(false);
-      if (normalizedCustomer) {
-        onPlaceOrder(normalizedCustomer, `seedhape_${orderId}`);
-      }
       return;
     }
     if (verify.status === "expired") {
-      if (pollRef.current) {
-        window.clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-      setActivePayment(null);
+      setIsSeedhapeModalOpen(false);
       pendingPaymentsRef.current = [];
       setPaymentStatusText("Payment expired. Please create a new checkout.");
       setIsProcessing(false);
       return;
     }
-    setPaymentStatusText("Payment pending. Complete payment in your UPI app.");
-  };
-
-  const startPaymentPolling = (
-    orderId: string,
-    normalizedCustomer: CheckoutCustomer
-  ) => {
-    if (pollRef.current) {
-      window.clearInterval(pollRef.current);
+    if (verify.status === "disputed") {
+      setIsSeedhapeModalOpen(false);
+      setPaymentStatusText(
+        "Payment marked as disputed by provider. Please contact support before retrying."
+      );
+      setCompletionNotice(
+        "This payment is disputed. Do not place this order until dispute is resolved."
+      );
+      setAwaitingManualClose(false);
+      setIsProcessing(false);
+      return;
     }
-    pollRef.current = window.setInterval(() => {
-      checkPaymentStatus(orderId, normalizedCustomer).catch((err) => {
-        console.error("Payment poll error:", err);
-      });
-    }, 4000);
+    setPaymentStatusText("Payment pending. Complete payment in your UPI app.");
   };
 
   const inputClass = "w-full px-4 py-2.5 bg-brand-parchment/50 border border-brand-sand/50 rounded-xl focus:outline-none focus:border-brand-terracotta/40 focus:ring-2 focus:ring-brand-terracotta/10 text-sm text-brand-charcoal placeholder-brand-stone/40 transition-all";
@@ -450,23 +439,29 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
       {activePayment && (
         <>
-          <PaymentModal
-            orderId={activePayment.seedhapeOrderId || activePayment.id}
-            open={true}
-            onClose={() => {
-              setPaymentStatusText(
-                "Payment window closed. Re-open checkout to continue."
-              );
-            }}
-            onSuccess={async (result) => {
-              const customerToUse = pendingCustomer || customer;
-              await checkPaymentStatus(result.orderId, customerToUse);
-            }}
-            onExpired={(orderId) => {
-              setPaymentStatusText(`Order ${orderId} expired. Please retry checkout.`);
-              setIsProcessing(false);
-            }}
-          />
+          {isSeedhapeModalOpen && (
+            <PaymentModal
+              orderId={activePayment.seedhapeOrderId || activePayment.id}
+              open={isSeedhapeModalOpen}
+              onClose={() => {
+                setIsSeedhapeModalOpen(false);
+                setPaymentStatusText(
+                  "Payment window closed. Re-open or tap Check Payment Status."
+                );
+              }}
+              onSuccess={async (result) => {
+                if (successHandledRef.current.has(result.orderId)) return;
+                successHandledRef.current.add(result.orderId);
+                const customerToUse = pendingCustomer || customer;
+                await checkPaymentStatus(result.orderId, customerToUse);
+              }}
+              onExpired={(orderId) => {
+                setIsSeedhapeModalOpen(false);
+                setPaymentStatusText(`Order ${orderId} expired. Please retry checkout.`);
+                setIsProcessing(false);
+              }}
+            />
+          )}
           <div className="fixed bottom-4 left-1/2 z-[70] w-[min(92vw,560px)] -translate-x-1/2 rounded-2xl border border-brand-sand/40 bg-white/95 p-4 shadow-soft-xl backdrop-blur">
             <p className="text-xs text-brand-stone">
               Paying: {activePayment.productName || "Item"} •{" "}
@@ -479,8 +474,62 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
               {activePayment.seedhapeOrderId || activePayment.id}
             </p>
             <p className="mt-2 text-xs text-brand-stone">{paymentStatusText}</p>
+            {!awaitingManualClose && (
+              <div className="mt-3 flex items-center justify-end gap-2">
+                {!isSeedhapeModalOpen && (
+                  <>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-brand-sand px-3 py-1.5 text-xs font-medium text-brand-charcoal hover:bg-brand-parchment transition-colors"
+                      onClick={() => {
+                        const customerToUse = pendingCustomer || customer;
+                        checkPaymentStatus(activePayment.id, customerToUse).catch((err) => {
+                          console.error("Manual payment verify error:", err);
+                        });
+                      }}
+                    >
+                      Check Payment Status
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg bg-brand-charcoal px-3 py-1.5 text-xs font-medium text-brand-cream hover:bg-brand-warm-black transition-colors"
+                      onClick={() => setIsSeedhapeModalOpen(true)}
+                    >
+                      Re-open Payment
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </>
+      )}
+      {!!completionNotice && (
+        <div className="fixed bottom-4 left-1/2 z-[70] w-[min(92vw,560px)] -translate-x-1/2 rounded-2xl border border-green-200 bg-white/95 p-4 shadow-soft-xl backdrop-blur">
+          <p className="text-sm font-medium text-green-700">{completionNotice}</p>
+          {awaitingManualClose && (
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                className="rounded-lg bg-brand-charcoal px-3 py-2 text-xs font-medium text-brand-cream hover:bg-brand-warm-black transition-colors"
+                onClick={() => {
+                  if (!activePayment) return;
+                  const customerToUse = pendingCustomer || customer;
+                  onPlaceOrder(
+                    customerToUse,
+                    `seedhape_${activePayment.seedhapeOrderId || activePayment.id}`
+                  );
+                  setCompletionNotice("");
+                  setAwaitingManualClose(false);
+                  setPendingCustomer(null);
+                  setActivePayment(null);
+                }}
+              >
+                Complete Order
+              </button>
+            </div>
+          )}
+        </div>
       )}
       </div>
     </SeedhaPeProvider>
