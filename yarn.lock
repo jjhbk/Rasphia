@@ -538,6 +538,18 @@
   resolved "https://registry.npmjs.org/@rtsao/scc/-/scc-1.1.0.tgz"
   integrity sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==
 
+"@seedhape/react@^0.3.12":
+  version "0.3.12"
+  resolved "https://registry.npmjs.org/@seedhape/react/-/react-0.3.12.tgz"
+  integrity sha512-vblwTRhoBXkUVxtFhY9puTMAdHI9ZqJKtUB5AbM99D73PcSEN+cNUs+7xqJfYAaH0mp4nXng7nHV2W78zUFDUg==
+  dependencies:
+    "@seedhape/sdk" "0.3.6"
+
+"@seedhape/sdk@^0.3.6", "@seedhape/sdk@0.3.6":
+  version "0.3.6"
+  resolved "https://registry.npmjs.org/@seedhape/sdk/-/sdk-0.3.6.tgz"
+  integrity sha512-oz/EWJBG0UxG/r+hVi+JQghF0o1FgyVbeTHuQv2ie0gW1F1Wj2loVG0CklgyJtYGxWIgD94JDfiOqIQM5h39RA==
+
 "@standard-schema/spec@^1.0.0":
   version "1.0.0"
   resolved "https://registry.npmjs.org/@standard-schema/spec/-/spec-1.0.0.tgz"

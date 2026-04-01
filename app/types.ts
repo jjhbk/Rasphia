@@ -97,7 +97,11 @@ export interface Product {
     rating: number; // 1–5
     comment?: string; // optional text
     user?: string; // optional userId/email
+    userEmail?: string;
+    authorName?: string;
     date?: string; // ISO string
+    createdAt?: string;
+    imageUrls?: string[];
   }[];
   // 🧮 Optional embedding for vector search
   embedding?: number[];

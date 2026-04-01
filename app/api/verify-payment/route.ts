@@ -1,46 +1,54 @@
-import { validateWebhookSignature } from "razorpay/dist/utils/razorpay-utils";
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import type { Prisma } from "@prisma/client";
+import {
+  getSeedhapeOrderStatusWithConfig,
+  isSeedhapePaidStatus,
+} from "@/app/lib/seedhape";
+import { finalizeOrderAsPaid } from "@/app/lib/order-payment";
+import { getMerchantSeedhapeConfig } from "@/app/lib/merchant-seedhape";
+
+type CustomerPayload = {
+  email?: string;
+  name?: string;
+  phone?: string;
+  address?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+};
 
 export async function POST(req: Request) {
   try {
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-      customer,
-    } = await req.json();
+    const body = (await req.json()) as {
+      seedhape_order_id?: string;
+      orderId?: string;
+      internal_order_id?: string;
+      app_order_id?: string;
+      customer?: CustomerPayload;
+    };
+    const seedhapeOrderId = String(
+      body.seedhape_order_id || body.orderId || ""
+    ).trim();
+    const internalOrderId = String(body.internal_order_id || "").trim();
+    const appOrderId = String(body.app_order_id || "").trim();
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    if (!seedhapeOrderId && !internalOrderId && !appOrderId) {
       return NextResponse.json(
-        { status: "error", message: "Missing payment verification fields" },
+        {
+          status: "error",
+          message:
+            "Missing order identifiers. Provide seedhape_order_id, internal_order_id, or app_order_id.",
+        },
         { status: 400 }
       );
     }
 
-    const secret = process.env.RAZORPAY_KEY_SECRET!;
-    const body = `${razorpay_order_id}|${razorpay_payment_id}`;
-
-    const isValidSignature = validateWebhookSignature(
-      body,
-      razorpay_signature,
-      secret
-    );
-
-    if (!isValidSignature) {
-      console.warn(
-        "⚠️ Invalid Razorpay signature for order:",
-        razorpay_order_id
-      );
-      return NextResponse.json(
-        { status: "verification_failed" },
-        { status: 400 }
-      );
-    }
-
-    const order = await prisma.order.findUnique({
-      where: { orderId: razorpay_order_id },
+    const order = await resolveOrderForVerification({
+      seedhapeOrderId,
+      internalOrderId,
+      appOrderId,
     });
     if (!order) {
       return NextResponse.json(
@@ -48,147 +56,193 @@ export async function POST(req: Request) {
         { status: 404 }
       );
     }
+
     if (order.status === "paid") {
       return NextResponse.json({ status: "ok" }, { status: 200 });
     }
 
-    const orderedItems = Array.isArray(order.products)
-      ? (order.products as Array<{ productId?: string; quantity?: number; name?: string }>)
-      : [];
-
-    const stockOps: Array<{ productId: string; quantity: number }> = orderedItems
-      .map((item) => ({
-        productId: String(item.productId || "").trim(),
-        quantity: Math.max(1, Number(item.quantity || 1)),
-      }))
-      .filter((item) => item.productId);
-
-    await prisma.$transaction(async (tx) => {
-      for (const op of stockOps) {
-        const decreased = await tx.product.updateMany({
-          where: {
-            id: op.productId,
-            isAvailable: true,
-            stockQuantity: { gte: op.quantity },
-          },
-          data: {
-            stockQuantity: { decrement: op.quantity },
-            updatedAt: new Date(),
-          },
-        });
-        if (decreased.count === 0) {
-          const p = await tx.product.findUnique({ where: { id: op.productId } });
-          throw new Error(
-            `Insufficient stock for ${p?.name || op.productId} during verification`
-          );
-        }
-      }
-
-      const touchedIds = stockOps.map((s) => s.productId);
-      for (const pid of touchedIds) {
-        const p = await tx.product.findUnique({ where: { id: pid } });
-        if (p && p.stockQuantity <= 0 && p.isAvailable) {
-          await tx.product.update({
-            where: { id: pid },
-            data: { isAvailable: false, stockQuantity: 0, updatedAt: new Date() },
-          });
-        }
-      }
-
-      const nextOrderStatusHistory = [
-        ...((Array.isArray(order.statusHistory)
-          ? order.statusHistory
-          : []) as Array<Record<string, unknown>>),
-        {
-          status: "paid",
-          note: "Payment verified",
-          by: customer?.email || "system",
-          at: new Date().toISOString(),
-        },
-      ];
-
-      await tx.order.update({
-        where: { orderId: razorpay_order_id },
-        data: {
-          status: "paid",
-          paymentId: razorpay_payment_id,
-          verifiedAt: new Date(),
-          statusHistory: nextOrderStatusHistory as unknown as Prisma.InputJsonValue,
-        },
-      });
+    const merchantConfig = await resolveOrderMerchantSeedhapeConfig(order);
+    const providerStatus = await getSeedhapeOrderStatusWithConfig(order.orderId, {
+      apiKey: merchantConfig.apiKey,
+      baseUrl: merchantConfig.baseUrl,
     });
 
-    // ✅ Upsert user profile if included
-    if (customer?.email) {
-      const addressEntry = {
-        name: String(customer.name || "").trim(),
-        phone: String(customer.phone || "").trim(),
-        addressLine1: String(customer.addressLine1 || "").trim(),
-        addressLine2: String(customer.addressLine2 || "").trim(),
-        city: String(customer.city || "").trim(),
-        state: String(customer.state || "").trim(),
-        zipCode: String(customer.zipCode || "").trim(),
-        address: String(customer.address || "").trim(),
-      };
-
-      await prisma.user.upsert({
-        where: { email: customer.email },
-        create: {
-          email: customer.email,
-          name: customer.name,
-          phone: customer.phone,
-          address: customer.address,
-        },
-        update: {
-          name: customer.name,
-          phone: customer.phone,
-          address: customer.address,
-          updatedAt: new Date(),
-        },
+    if (isSeedhapePaidStatus(providerStatus.status)) {
+      const finalizeResult = await finalizeOrderAsPaid({
+        orderId: order.orderId,
+        paymentId: order.paymentId || `seedhape_${order.orderId}`,
+        by: body.customer?.email || "system",
+        note: `SeedhaPe payment ${providerStatus.status.toLowerCase()}`,
+        verifiedAt: providerStatus.verifiedAt
+          ? new Date(providerStatus.verifiedAt)
+          : new Date(),
       });
 
-      const existingProfile = await prisma.userProfile.findUnique({
-        where: { email: customer.email },
-        select: { addressBook: true },
-      });
-      const existingAddressBook = Array.isArray(existingProfile?.addressBook)
-        ? existingProfile?.addressBook
-        : [];
-      const mergedAddressBook = existingAddressBook.some(
-        (entry: any) => entry.address === addressEntry.address
-      )
-        ? existingAddressBook.map((entry: any) =>
-            entry.address === addressEntry.address ? addressEntry : entry
-          )
-        : [addressEntry, ...existingAddressBook];
+      if (!finalizeResult.ok && finalizeResult.reason === "not_found") {
+        return NextResponse.json(
+          { status: "error", message: "Order not found" },
+          { status: 404 }
+        );
+      }
 
-      await prisma.userProfile.upsert({
-        where: { email: customer.email },
-        create: {
-          email: customer.email,
-          name: customer.name,
-          phone: customer.phone,
-          address: customer.address,
-          addressBook: mergedAddressBook,
-          credits: 0,
-        },
-        update: {
-          name: customer.name,
-          phone: customer.phone,
-          address: customer.address,
-          addressBook: mergedAddressBook,
-          updatedAt: new Date(),
+      if (body.customer?.email) {
+        await upsertCustomerProfile(body.customer);
+      }
+
+      return NextResponse.json({
+        status: "ok",
+        providerStatus: providerStatus.status,
+        verifiedAt: providerStatus.verifiedAt || null,
+        mapping: {
+          internalOrderId: order.id,
+          appOrderId: order.receipt || null,
+          seedhapeOrderId: order.orderId,
         },
       });
     }
 
-    console.log(`✅ Payment verified successfully: ${razorpay_payment_id}`);
-    return NextResponse.json({ status: "ok" });
+    if (
+      providerStatus.status === "EXPIRED" ||
+      providerStatus.status === "REJECTED"
+    ) {
+      return NextResponse.json({
+        status: "expired",
+        providerStatus: providerStatus.status,
+      });
+    }
+
+    return NextResponse.json({
+      status: "pending",
+      providerStatus: providerStatus.status,
+      mapping: {
+        internalOrderId: order.id,
+        appOrderId: order.receipt || null,
+        seedhapeOrderId: order.orderId,
+      },
+    });
   } catch (error) {
-    console.error("❌ Error verifying payment:", error);
+    console.error("❌ Error verifying SeedhaPe payment:", error);
+    const message =
+      error instanceof Error ? error.message : "Payment verification failed";
     return NextResponse.json(
-      { status: "error", message: "Payment verification failed" },
+      { status: "error", message },
       { status: 500 }
     );
   }
+}
+
+async function resolveOrderForVerification(input: {
+  seedhapeOrderId?: string;
+  internalOrderId?: string;
+  appOrderId?: string;
+}) {
+  if (input.seedhapeOrderId) {
+    const bySeedhape = await prisma.order.findUnique({
+      where: { orderId: input.seedhapeOrderId },
+    });
+    if (bySeedhape) return bySeedhape;
+  }
+  if (input.internalOrderId) {
+    const byInternal = await prisma.order.findUnique({
+      where: { id: input.internalOrderId },
+    });
+    if (byInternal) return byInternal;
+  }
+  if (input.appOrderId) {
+    const byApp = await prisma.order.findFirst({
+      where: { receipt: input.appOrderId },
+      orderBy: { createdAt: "desc" },
+    });
+    if (byApp) return byApp;
+  }
+  return null;
+}
+
+async function upsertCustomerProfile(customer: CustomerPayload) {
+  if (!customer.email) return;
+
+  const email = customer.email;
+  const addressEntry = {
+    name: String(customer.name || "").trim(),
+    phone: String(customer.phone || "").trim(),
+    addressLine1: String(customer.addressLine1 || "").trim(),
+    addressLine2: String(customer.addressLine2 || "").trim(),
+    city: String(customer.city || "").trim(),
+    state: String(customer.state || "").trim(),
+    zipCode: String(customer.zipCode || "").trim(),
+    address: String(customer.address || "").trim(),
+  };
+
+  await prisma.user.upsert({
+    where: { email },
+    create: {
+      email,
+      name: customer.name,
+      phone: customer.phone,
+      address: customer.address,
+    },
+    update: {
+      name: customer.name,
+      phone: customer.phone,
+      address: customer.address,
+      updatedAt: new Date(),
+    },
+  });
+
+  const existingProfile = await prisma.userProfile.findUnique({
+    where: { email },
+    select: { addressBook: true },
+  });
+  const existingAddressBook = Array.isArray(existingProfile?.addressBook)
+    ? existingProfile.addressBook
+    : [];
+  const mergedAddressBook = existingAddressBook.some(
+    (entry: any) => entry.address === addressEntry.address
+  )
+    ? existingAddressBook.map((entry: any) =>
+        entry.address === addressEntry.address ? addressEntry : entry
+      )
+    : [addressEntry, ...existingAddressBook];
+
+  await prisma.userProfile.upsert({
+    where: { email },
+    create: {
+      email,
+      name: customer.name,
+      phone: customer.phone,
+      address: customer.address,
+      addressBook: mergedAddressBook,
+      credits: 0,
+    },
+    update: {
+      name: customer.name,
+      phone: customer.phone,
+      address: customer.address,
+      addressBook: mergedAddressBook,
+      updatedAt: new Date(),
+    },
+  });
+}
+
+async function resolveOrderMerchantSeedhapeConfig(order: {
+  merchantId: string | null;
+  products: unknown;
+}) {
+  let merchantId = String(order.merchantId || "").trim();
+  if (!merchantId && Array.isArray(order.products) && order.products.length > 0) {
+    const firstProductId = String(
+      (order.products[0] as { productId?: string })?.productId || ""
+    ).trim();
+    if (firstProductId) {
+      const product = await prisma.product.findUnique({
+        where: { id: firstProductId },
+        select: { merchantId: true },
+      });
+      merchantId = String(product?.merchantId || "").trim();
+    }
+  }
+  if (!merchantId) {
+    throw new Error("Merchant missing on order. Cannot verify provider status.");
+  }
+  return getMerchantSeedhapeConfig(merchantId);
 }

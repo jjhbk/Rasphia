@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authGuard } from "@/app/lib/auth-guard";
 import { prisma } from "@/app/lib/prisma";
 import { ensureUniqueMerchantSlug } from "@/app/lib/merchantSlug";
+import { ensureMerchantSeedhapeDefaults } from "@/app/lib/merchant-seedhape";
 
 function validateMerchantApplication(input: {
   businessName?: unknown;
@@ -154,6 +155,7 @@ export async function POST(req: NextRequest) {
         approvedBy: null,
       },
     });
+    await ensureMerchantSeedhapeDefaults(merchant.id);
 
     await prisma.userProfile.upsert({
       where: { email: sessionEmail },

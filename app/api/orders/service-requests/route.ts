@@ -2,18 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { authGuard } from "@/app/lib/auth-guard";
 import { prisma } from "@/app/lib/prisma";
 import { randomUUID } from "crypto";
+import type { Prisma } from "@prisma/client";
 
-type RequestType = "refund" | "replacement";
-const ELIGIBLE_ORDER_STATUSES = new Set([
+type RequestType = "refund" | "replacement" | "cancellation";
+const REFUND_REPLACEMENT_ELIGIBLE_ORDER_STATUSES = new Set([
   "paid",
   "Processing",
   "Shipped",
   "Delivered",
 ]);
+const CANCELLATION_ELIGIBLE_ORDER_STATUSES = new Set([
+  "created",
+  "paid",
+  "Processing",
+]);
 const TERMINAL_REQUEST_STATUSES = new Set(["completed", "rejected"]);
 
 function isValidType(value: string): value is RequestType {
-  return value === "refund" || value === "replacement";
+  return value === "refund" || value === "replacement" || value === "cancellation";
 }
 
 export async function GET(req: NextRequest) {
@@ -61,14 +67,25 @@ export async function POST(req: NextRequest) {
     }
     if (!isValidType(String(type))) {
       return NextResponse.json(
-        { error: "type must be either refund or replacement" },
+        { error: "type must be refund, replacement, or cancellation" },
         { status: 400 }
       );
     }
 
     const order = await prisma.order.findUnique({
       where: { orderId: String(orderId) },
-      select: { orderId: true, status: true, customer: true, products: true },
+      select: {
+        orderId: true,
+        id: true,
+        status: true,
+        amount: true,
+        currency: true,
+        receipt: true,
+        merchantId: true,
+        customer: true,
+        products: true,
+        createdAt: true,
+      },
     });
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
@@ -83,11 +100,15 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
-    if (!ELIGIBLE_ORDER_STATUSES.has(String(order.status || ""))) {
+    const normalizedType = String(type) as RequestType;
+    const isEligible =
+      normalizedType === "cancellation"
+        ? CANCELLATION_ELIGIBLE_ORDER_STATUSES.has(String(order.status || ""))
+        : REFUND_REPLACEMENT_ELIGIBLE_ORDER_STATUSES.has(String(order.status || ""));
+    if (!isEligible) {
       return NextResponse.json(
         {
-          error:
-            "This order is not eligible for refund/replacement at its current status.",
+          error: `This order is not eligible for ${normalizedType} at its current status.`,
         },
         { status: 409 }
       );
@@ -96,7 +117,7 @@ export async function POST(req: NextRequest) {
     const existingOpen = await prisma.orderServiceRequest.findFirst({
       where: {
         orderId: String(orderId),
-        type: String(type),
+        type: normalizedType,
         status: { notIn: Array.from(TERMINAL_REQUEST_STATUSES) },
       },
       select: { requestId: true },
@@ -121,51 +142,78 @@ export async function POST(req: NextRequest) {
       .map((p) => p.name)
       .filter((n): n is string => typeof n === "string" && n.length > 0);
 
-    const productOwnersById = ids.length
-      ? await prisma.product.findMany({
-          where: { id: { in: ids } },
-          select: { merchantEmail: true },
-        })
-      : [];
-    const productOwnersByName =
-      !productOwnersById.length && names.length
+    let merchantEmail: string | null = null;
+    if (order.merchantId) {
+      const merchant = await prisma.merchant.findUnique({
+        where: { id: order.merchantId },
+        select: { email: true },
+      });
+      merchantEmail = merchant?.email || null;
+    } else {
+      const productOwnersById = ids.length
         ? await prisma.product.findMany({
-            where: { name: { in: names } },
+            where: { id: { in: ids } },
             select: { merchantEmail: true },
           })
         : [];
-    const productOwners = productOwnersById.length
-      ? productOwnersById
-      : productOwnersByName;
+      const productOwnersByName =
+        !productOwnersById.length && names.length
+          ? await prisma.product.findMany({
+              where: { name: { in: names } },
+              select: { merchantEmail: true },
+            })
+          : [];
+      const productOwners = productOwnersById.length
+        ? productOwnersById
+        : productOwnersByName;
 
-    const uniqueMerchantEmails = Array.from(
-      new Set(
-        productOwners
-          .map((p) => p.merchantEmail)
-          .filter((e): e is string => typeof e === "string" && e.length > 0)
-      )
-    );
+      const uniqueMerchantEmails = Array.from(
+        new Set(
+          productOwners
+            .map((p) => p.merchantEmail)
+            .filter((e): e is string => typeof e === "string" && e.length > 0)
+        )
+      );
+      merchantEmail =
+        uniqueMerchantEmails.length === 1 ? uniqueMerchantEmails[0] : null;
+    }
 
-    const merchantEmail =
-      uniqueMerchantEmails.length === 1 ? uniqueMerchantEmails[0] : null;
+    const requestId = `SR-${randomUUID()}`;
+    const requestNumber = buildRequestNumber();
+    const timeline: Array<Record<string, unknown>> = [
+      {
+        action: "requested",
+        by: sessionEmail,
+        note: String(reason).trim(),
+        at: new Date().toISOString(),
+      },
+    ];
 
     const created = await prisma.orderServiceRequest.create({
       data: {
-        requestId: `SR-${randomUUID()}`,
+        requestId,
+        requestNumber,
         orderId: String(orderId),
-        type: String(type),
+        merchantId: order.merchantId || null,
+        type: normalizedType,
         reason: String(reason).trim(),
         details: details ? String(details).trim() : null,
+        requestedAmount: Number(order.amount || 0),
         requestedByEmail: sessionEmail,
         merchantEmail,
-        timeline: [
-          {
-            action: "requested",
-            by: sessionEmail,
-            note: String(reason).trim(),
-            at: new Date().toISOString(),
-          },
-        ],
+        timeline: timeline as Prisma.InputJsonValue,
+        orderSnapshot: {
+          id: order.id,
+          orderId: order.orderId,
+          receipt: order.receipt,
+          status: order.status,
+          amount: order.amount,
+          currency: order.currency,
+          merchantId: order.merchantId,
+          createdAt: order.createdAt,
+        } as Prisma.InputJsonValue,
+        customerSnapshot: (order.customer || {}) as Prisma.InputJsonValue,
+        requestedItems: orderProducts as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -177,4 +225,13 @@ export async function POST(req: NextRequest) {
         : "Failed to create service request";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+function buildRequestNumber() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const rand = Math.floor(Math.random() * 900000) + 100000;
+  return `RR-${y}${m}${day}-${rand}`;
 }

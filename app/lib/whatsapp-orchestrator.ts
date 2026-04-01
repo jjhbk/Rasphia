@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 import { prisma } from "@/app/lib/prisma";
 import { ensureUniqueMerchantSlug } from "@/app/lib/merchantSlug";
@@ -6,18 +6,32 @@ import { generateProductEmbedding } from "@/app/lib/generateEmbeddings";
 import { embedQuery } from "@/app/lib/queryEmbeddings";
 import { searchProductEmbeddings } from "@/app/lib/product-vector-store";
 import { Prisma } from "@prisma/client";
+import { randomUUID } from "crypto";
 import { uploadWhatsAppMediaToBlob } from "@/app/lib/whatsapp";
+import {
+  buildSeedhapePaymentLinks,
+  createSeedhapeOrderWithConfig,
+  getSeedhapeOrderStatusWithConfig,
+  isSeedhapePaidStatus,
+} from "@/app/lib/seedhape";
+import { finalizeOrderAsPaid } from "@/app/lib/order-payment";
+import { ensureMerchantSeedhapeDefaults, getMerchantSeedhapeConfig } from "@/app/lib/merchant-seedhape";
 
-const openai = process.env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  : null;
+const geminiApiKey =
+  process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "";
+const gemini = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 
 export const WA_INTENTS = [
   "user_register",
   "user_persona_update",
   "user_discover_products",
   "user_discover_merchants",
+  "user_order_create",
   "user_order_query",
+  "user_payment_confirm",
+  "user_refund_request",
+  "user_replacement_request",
+  "user_cancellation_request",
   "user_wishlist_add",
   "user_wishlist_remove",
   "user_wishlist_view",
@@ -89,6 +103,9 @@ type SessionData = {
   draft?: Record<string, unknown>;
   lastPrompt?: string;
   processedMessageIds?: string[];
+  activeMerchantId?: string;
+  activeMerchantSlug?: string;
+  activeMerchantName?: string;
   pendingRoleSelection?: boolean;
   pendingConfirmation?: {
     type: "stock_update_zero" | "order_status_update";
@@ -107,15 +124,61 @@ type ConversationTurn = {
   content: string;
 };
 
+type MerchantChatContext = {
+  id: string;
+  slug: string;
+  name: string;
+  status: string;
+};
+
 const WHATSAPP_CONTEXT_WINDOW = Number(process.env.WHATSAPP_CONTEXT_WINDOW || 20);
 const WHATSAPP_CONTEXT_KEEP = Number(process.env.WHATSAPP_CONTEXT_KEEP || 40);
+
+function formatWhatsAppMarkdown(text: string) {
+  const raw = String(text || "").replace(/\r\n/g, "\n").trim();
+  if (!raw) return "";
+
+  const formatted = raw
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return "";
+      if (/^https?:\/\//i.test(trimmed) || /^intent:\/\//i.test(trimmed)) {
+        return trimmed;
+      }
+      const afterPaymentMatch = /^After payment,\s*reply:\s*(.+)$/i.exec(trimmed);
+      if (afterPaymentMatch) {
+        return `After payment, reply with:\n\`${afterPaymentMatch[1].trim()}\``;
+      }
+      const keyValueMatch = /^([A-Za-z][A-Za-z0-9 /_-]{1,40}):\s*(.+)$/.exec(trimmed);
+      if (keyValueMatch) {
+        return `*${keyValueMatch[1]}:* ${keyValueMatch[2]}`;
+      }
+      const headingMatch = /^([A-Za-z][A-Za-z0-9 /_-]{1,40}):$/.exec(trimmed);
+      if (headingMatch) {
+        return `*${headingMatch[1]}*`;
+      }
+      return line;
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return formatted;
+}
 
 const REQUIRED_BY_INTENT: Record<WaIntent, string[]> = {
   user_register: ["userName", "userEmail"],
   user_persona_update: ["personaText"],
   user_discover_products: [],
   user_discover_merchants: [],
+  user_order_create: ["productName"],
   user_order_query: [],
+  user_payment_confirm: ["orderId"],
+  user_refund_request: ["orderId", "reason"],
+  user_replacement_request: ["orderId", "reason"],
+  user_cancellation_request: ["orderId", "reason"],
   user_wishlist_add: ["productName"],
   user_wishlist_remove: ["productName"],
   user_wishlist_view: [],
@@ -141,9 +204,13 @@ const REQUIRED_BY_INTENT: Record<WaIntent, string[]> = {
 };
 
 const OPTIONAL_BY_INTENT: Partial<Record<WaIntent, string[]>> = {
-  user_discover_products: ["query", "category", "maxPrice", "tag"],
+  user_discover_products: ["query", "category", "maxPrice", "tag", "merchantSlug"],
   user_discover_merchants: ["query", "city"],
-  user_order_query: ["orderId"],
+  user_order_create: ["quantity", "merchantSlug"],
+  user_order_query: ["orderId", "activeOnly", "merchantSlug"],
+  user_refund_request: ["details"],
+  user_replacement_request: ["details"],
+  user_cancellation_request: ["details"],
   user_persona_update: ["personaTags"],
   product_upload: ["brand", "description", "imageUrl"],
   product_update: ["price", "stockQuantity", "category", "brand", "description", "imageUrl"],
@@ -156,6 +223,7 @@ const FIELD_PROMPTS: Record<string, string> = {
   personaText: "Please share your persona/preferences in one line.",
   personaTags: "Optionally share persona tags separated by commas.",
   query: "Please share what you want to discover.",
+  quantity: "Optionally share quantity (default is 1).",
   maxPrice: "Optionally share a max price.",
   tag: "Optionally share a tag (for example: gift, decor, skincare).",
   businessName: "Please share your business name.",
@@ -172,6 +240,10 @@ const FIELD_PROMPTS: Record<string, string> = {
   stockQuantity: "Please share stock quantity (number).",
   productName: "Please share the product name.",
   orderId: "Please share the order ID.",
+  reason: "Please share the reason for this request.",
+  details: "Optionally share extra details for this request.",
+  merchantSlug: "Share merchant slug to continue in that merchant chat context.",
+  activeOnly: "Set activeOnly=true to fetch active orders only.",
   status:
     "Please share the target status (created, paid, Processing, Shipped, Delivered, Cancelled, Refunded, Replacement).",
 };
@@ -183,6 +255,7 @@ function prettyFieldName(field: string) {
     personaText: "Persona Summary",
     personaTags: "Persona Tags",
     query: "Search Query",
+    quantity: "Quantity",
     maxPrice: "Max Price",
     tag: "Tag",
     city: "City",
@@ -195,6 +268,10 @@ function prettyFieldName(field: string) {
     stockQuantity: "Stock Quantity",
     imageUrl: "Image URL",
     orderId: "Order ID",
+    reason: "Reason",
+    details: "Details",
+    merchantSlug: "Merchant Slug",
+    activeOnly: "Active Orders Only",
   };
   return labels[field] || `${field.charAt(0).toUpperCase()}${field.slice(1)}`;
 }
@@ -237,12 +314,24 @@ function buildUnclearIntentTemplate(merchantStatus?: string) {
     "Example: update persona personaText=I like minimal decor under 1500",
     "3) Discover products",
     "Example: discover products query=gift for mom category=home maxPrice=2000",
+    "3a) Enter merchant chat context",
+    "Example: shop acme-decor",
     "4) Discover merchants",
     "Example: discover merchants city=Hyderabad query=wallpapers",
     "5) Query my orders",
     "Example: my orders",
     "Example: track order orderId=ORD123",
-    "6) Wishlist",
+    "6) Create an order and pay",
+    "Example: buy productName=Canvas Lamp quantity=2",
+    "7) Confirm payment",
+    "Example: confirm payment orderId=sp_ord_ab12cd34ef56",
+    "8) Request refund",
+    "Example: refund orderId=sp_ord_ab12cd34ef56 reason=Received damaged item",
+    "9) Request replacement",
+    "Example: replacement orderId=sp_ord_ab12cd34ef56 reason=Wrong size received",
+    "10) Request cancellation",
+    "Example: cancel order orderId=sp_ord_ab12cd34ef56 reason=Ordered by mistake",
+    "11) Wishlist",
     "Example: add wishlist productName=Guts Wallpaper",
     "Example: remove wishlist productName=Guts Wallpaper",
     "Example: view wishlist",
@@ -268,10 +357,77 @@ function buildUnclearIntentTemplate(merchantStatus?: string) {
     "",
     "Notes:",
     "- I auto-detect whether this number is acting as a user or merchant from your message + registration state.",
+    "- For merchant-scoped user flows, set merchant context first: shop <merchant-slug>.",
     "- For sensitive actions (stock=0, order status change), I will ask YES/NO confirmation.",
     "- You can also send a product image; I will attach it to product upload/update draft.",
     "",
     merchantLine,
+  ].join("\n");
+}
+
+function buildInitialUsageInstructions(args: {
+  merchantStatus?: string;
+  hasUserProfile: boolean;
+  hasMerchantProfile: boolean;
+}) {
+  const merchantStatusLine = args.hasMerchantProfile
+    ? `Merchant profile detected (${args.merchantStatus || "unknown status"}).`
+    : "No merchant profile linked to this number yet.";
+  const userStatusLine = args.hasUserProfile
+    ? "User profile detected for this number."
+    : "No user profile linked to this number yet.";
+
+  return [
+    "Welcome to Rasphia WhatsApp Assistant.",
+    "I support both USER and MERCHANT workflows in this same chat.",
+    "",
+    "USER FUNCTIONS",
+    "1) Register user",
+    "Example: register userName=Rahul userEmail=rahul@example.com",
+    "2) Update persona",
+    "Example: update persona personaText=I like minimal decor under 1500",
+    "3) Discover products",
+    "Example: discover products query=gift for mom category=home maxPrice=2000",
+    "3a) Enter merchant chat context",
+    "Example: shop acme-decor",
+    "4) Create order + get payment link",
+    "Example: buy productName=Canvas Lamp quantity=2",
+    "5) Confirm payment",
+    "Example: confirm payment orderId=sp_ord_ab12cd34ef56",
+    "6) Track orders",
+    "Example: my orders",
+    "7) Request refund",
+    "Example: refund orderId=sp_ord_ab12cd34ef56 reason=Received damaged item",
+    "8) Request replacement",
+    "Example: replacement orderId=sp_ord_ab12cd34ef56 reason=Wrong size received",
+    "9) Request cancellation",
+    "Example: cancel order orderId=sp_ord_ab12cd34ef56 reason=Ordered by mistake",
+    "10) Wishlist",
+    "Example: add wishlist productName=Guts Wallpaper",
+    "",
+    "MERCHANT FUNCTIONS",
+    "1) Register merchant",
+    "Example: register merchant businessName=Acme Decor email=a@b.com addressLine1=... addressLine2=... city=Hyderabad state=Telangana zipCode=500001 locationLink=https://maps.google.com/...",
+    "2) Upload product",
+    "Example: add product name=Canvas Lamp category=home price=1499 stockQuantity=20",
+    "3) Update product",
+    "Example: update product productName=Canvas Lamp price=1299 stockQuantity=15",
+    "4) Query products/stock",
+    "Example: stock query Canvas Lamp",
+    "5) Update stock",
+    "Example: stock update productName=Canvas Lamp stockQuantity=0",
+    "6) Manage orders",
+    "Example: active orders",
+    "Example: update order status orderId=ORD123 status=Shipped",
+    "",
+    "NOTES",
+    "- For sensitive actions, I will ask YES/NO confirmation.",
+    "- To use merchant-scoped user flows, first set context: shop <merchant-slug>. Use 'clear merchant' to exit.",
+    "- You can send product images and I will attach them to product drafts.",
+    `- ${userStatusLine}`,
+    `- ${merchantStatusLine}`,
+    "",
+    "Reply with your next command directly.",
   ].join("\n");
 }
 
@@ -331,6 +487,69 @@ function detectRoleChoice(text: string): "merchant" | "user" | null {
     return "user";
   }
   return null;
+}
+
+function shouldSendInitialGuide(text: string) {
+  const t = String(text || "").trim().toLowerCase();
+  if (!t) return true;
+  if (t.length <= 2) return true;
+  if (["hi", "hey", "hello", "start", "menu", "help", "hii", "yo"].includes(t)) {
+    return true;
+  }
+  return false;
+}
+
+function extractMerchantSlugFromText(text: string) {
+  const raw = String(text || "").trim().toLowerCase();
+  if (!raw) return "";
+  const directLink = raw.match(/\/storefronts\/([a-z0-9_-]{3,60})/i)?.[1];
+  if (directLink) return directLink;
+  const cmd = raw.match(
+    /\b(?:merchant|shop|store|from)\s*(?:=|:)?\s*([a-z0-9_-]{3,60})\b/i
+  )?.[1];
+  return cmd || "";
+}
+
+function shouldClearMerchantContext(text: string) {
+  const t = String(text || "").trim().toLowerCase();
+  return /\b(clear|exit|leave|reset)\s+(merchant|shop|store)\b/.test(t);
+}
+
+async function resolveMerchantContext(args: {
+  draft: Record<string, unknown>;
+  session: SessionData;
+}) {
+  const draftSlug = String(args.draft.merchantSlug || "").trim().toLowerCase();
+  const sessionSlug = String(args.session.activeMerchantSlug || "").trim().toLowerCase();
+  const sessionId = String(args.session.activeMerchantId || "").trim();
+
+  let merchant:
+    | {
+        id: string;
+        slug: string;
+        name: string;
+        status: string;
+      }
+    | null = null;
+  if (draftSlug) {
+    merchant = await prisma.merchant.findFirst({
+      where: { slug: draftSlug },
+      select: { id: true, slug: true, name: true, status: true },
+    });
+  } else if (sessionId) {
+    merchant = await prisma.merchant.findFirst({
+      where: { id: sessionId },
+      select: { id: true, slug: true, name: true, status: true },
+    });
+  } else if (sessionSlug) {
+    merchant = await prisma.merchant.findFirst({
+      where: { slug: sessionSlug },
+      select: { id: true, slug: true, name: true, status: true },
+    });
+  }
+
+  if (!merchant) return null;
+  return merchant as MerchantChatContext;
 }
 
 function missingRequired(intent: WaIntent, draft: Record<string, unknown>) {
@@ -473,6 +692,48 @@ function fallbackIntent(message: string): IntentParse {
   ) {
     return { intent: "user_order_query", fields: {} };
   }
+  if (text.includes("my active order") || text.includes("active my order")) {
+    return { intent: "user_order_query", fields: { activeOnly: true } };
+  }
+  if (
+    text.includes("confirm payment") ||
+    text.includes("verify payment") ||
+    text.includes("payment confirm")
+  ) {
+    return { intent: "user_payment_confirm", fields: {} };
+  }
+  if (
+    text.includes("refund") ||
+    text.includes("return money") ||
+    text.includes("money back")
+  ) {
+    return { intent: "user_refund_request", fields: {} };
+  }
+  if (
+    text.includes("replacement") ||
+    text.includes("replace order") ||
+    text.includes("replace item")
+  ) {
+    return { intent: "user_replacement_request", fields: {} };
+  }
+  if (
+    (text.includes("cancel") && text.includes("order")) ||
+    text.includes("order cancellation")
+  ) {
+    return { intent: "user_cancellation_request", fields: {} };
+  }
+  if (
+    text.includes("buy") ||
+    text.includes("create order") ||
+    text.includes("place order") ||
+    text.includes("order product")
+  ) {
+    const qty = text.match(/(?:qty|quantity|x)\s*[:=]?\s*(\d{1,3})/)?.[1];
+    return {
+      intent: "user_order_create",
+      fields: qty ? { quantity: Number(qty) } : {},
+    };
+  }
   if (text.includes("wishlist") && (text.includes("view") || text.includes("show"))) {
     return { intent: "user_wishlist_view", fields: {} };
   }
@@ -524,7 +785,7 @@ async function inferIntent(
   activeIntent?: WaIntent,
   history: ConversationTurn[] = []
 ): Promise<IntentParse> {
-  if (!openai) return fallbackIntent(message);
+  if (!gemini) return fallbackIntent(message);
 
   const fieldKeys = [
     "userName",
@@ -532,6 +793,7 @@ async function inferIntent(
     "personaText",
     "personaTags",
     "query",
+    "quantity",
     "maxPrice",
     "tag",
     "businessName",
@@ -550,94 +812,84 @@ async function inferIntent(
     "price",
     "stockQuantity",
     "orderId",
+    "merchantSlug",
+    "activeOnly",
+    "reason",
+    "details",
     "status",
   ] as const;
 
-  const schema = {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      intent: {
-        type: "string",
-        enum: WA_INTENTS,
-      },
-      fields: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          userName: { type: ["string", "null"] },
-          userEmail: { type: ["string", "null"] },
-          personaText: { type: ["string", "null"] },
-          personaTags: { type: ["string", "null"] },
-          query: { type: ["string", "null"] },
-          maxPrice: { type: ["number", "null"] },
-          tag: { type: ["string", "null"] },
-          businessName: { type: ["string", "null"] },
-          email: { type: ["string", "null"] },
-          addressLine1: { type: ["string", "null"] },
-          addressLine2: { type: ["string", "null"] },
-          city: { type: ["string", "null"] },
-          state: { type: ["string", "null"] },
-          zipCode: { type: ["string", "null"] },
-          locationLink: { type: ["string", "null"] },
-          name: { type: ["string", "null"] },
-          productName: { type: ["string", "null"] },
-          category: { type: ["string", "null"] },
-          brand: { type: ["string", "null"] },
-          description: { type: ["string", "null"] },
-          price: { type: ["number", "null"] },
-          stockQuantity: { type: ["number", "null"] },
-          orderId: { type: ["string", "null"] },
-          status: { type: ["string", "null"] },
-        },
-        required: fieldKeys,
-      },
-    },
-    required: ["intent", "fields"],
-  } as const;
-
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4.1-mini",
-    temperature: 0,
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "whatsapp_merchant_intent",
-        strict: true,
-        schema,
-      },
-    },
-    messages: [
-      {
-        role: "system",
-        content: `You are an intent parser for Rasphia WhatsApp automation (user + merchant flows).
-Pick one intent from the enum.
+  const response = await gemini.models.generateContent({
+    model: "gemini-2.0-flash",
+    contents: [
+      `You are an intent parser for Rasphia WhatsApp automation (user + merchant flows).
+Pick one intent from this enum only: ${WA_INTENTS.join(", ")}.
 Extract only explicit fields from user message.
-If continuation message likely belongs to prior intent (${activeIntent || "none"}), keep same intent unless user clearly switched.`,
-      },
-      ...history.map((turn) => ({
-        role: turn.role,
-        content: turn.content,
-      })),
-      {
-        role: "user",
-        content: message,
-      },
-    ],
+If continuation message likely belongs to prior intent (${activeIntent || "none"}), keep same intent unless user clearly switched.
+
+Return strict JSON with shape:
+{
+  "intent": "<enum value>",
+  "fields": {
+    "userName": string|null,
+    "userEmail": string|null,
+    "personaText": string|null,
+    "personaTags": string|null,
+    "query": string|null,
+    "quantity": number|null,
+    "maxPrice": number|null,
+    "tag": string|null,
+    "businessName": string|null,
+    "email": string|null,
+    "addressLine1": string|null,
+    "addressLine2": string|null,
+    "city": string|null,
+    "state": string|null,
+    "zipCode": string|null,
+    "locationLink": string|null,
+    "name": string|null,
+    "productName": string|null,
+    "category": string|null,
+    "brand": string|null,
+    "description": string|null,
+    "price": number|null,
+    "stockQuantity": number|null,
+    "orderId": string|null,
+    "merchantSlug": string|null,
+    "activeOnly": boolean|null,
+    "reason": string|null,
+    "details": string|null,
+    "status": string|null
+  }
+}`,
+      ...history.map((turn) => `${turn.role === "user" ? "User" : "Assistant"}: ${turn.content}`),
+      `User: ${message}`,
+    ].join("\n\n"),
+    config: {
+      temperature: 0,
+      responseMimeType: "application/json",
+    },
   });
 
-  const raw = completion.choices[0]?.message?.content || "{}";
+  const raw = response.text || "{}";
   const parsed = JSON.parse(raw) as IntentParse;
   if (!WA_INTENTS.includes(parsed.intent)) {
     return fallbackIntent(message);
   }
+
+  const allowedFieldKeys = new Set(fieldKeys);
+  const normalizedFields = Object.fromEntries(
+    Object.entries(parsed.fields || {}).filter(
+      ([key, value]) =>
+        allowedFieldKeys.has(key as (typeof fieldKeys)[number]) &&
+        value !== null &&
+        value !== undefined
+    )
+  );
+
   return {
     intent: parsed.intent,
-    fields: Object.fromEntries(
-      Object.entries(parsed.fields || {}).filter(
-        ([, value]) => value !== null && value !== undefined
-      )
-    ),
+    fields: normalizedFields,
   };
 }
 
@@ -788,7 +1040,10 @@ async function handleUserPersonaUpdate(
   };
 }
 
-async function handleUserDiscoverProducts(draft: Record<string, unknown>) {
+async function handleUserDiscoverProducts(
+  draft: Record<string, unknown>,
+  merchantContext?: MerchantChatContext | null
+) {
   const query = String(draft.query || draft.productName || draft.name || "").trim();
   const category = String(draft.category || "").trim();
   const maxPrice = safeNumber(draft.maxPrice);
@@ -813,7 +1068,9 @@ async function handleUserDiscoverProducts(draft: Record<string, unknown>) {
   if (!rankedIds.length) {
     return {
       done: true,
-      reply: "I could not find matching products from the curated catalog. Try rephrasing your need.",
+      reply: merchantContext?.name
+        ? `I could not find matching products in ${merchantContext.name}. Try rephrasing your need.`
+        : "I could not find matching products from the curated catalog. Try rephrasing your need.",
       nextIntent: undefined,
       nextDraft: {},
     };
@@ -823,6 +1080,7 @@ async function handleUserDiscoverProducts(draft: Record<string, unknown>) {
     where: {
       id: { in: rankedIds },
       isAvailable: true,
+      ...(merchantContext?.id ? { merchantId: merchantContext.id } : {}),
       ...(category ? { category: { contains: category, mode: "insensitive" } } : {}),
       ...(maxPrice !== null ? { price: { lte: maxPrice } } : {}),
     },
@@ -842,7 +1100,9 @@ async function handleUserDiscoverProducts(draft: Record<string, unknown>) {
   if (!filtered.length) {
     return {
       done: true,
-      reply: "I found related products but none matched your filters. Try broader category/tag or a higher max price.",
+      reply: merchantContext?.name
+        ? `I found related products in ${merchantContext.name} but none matched your filters. Try broader category/tag or a higher max price.`
+        : "I found related products but none matched your filters. Try broader category/tag or a higher max price.",
       nextIntent: undefined,
       nextDraft: {},
     };
@@ -853,7 +1113,7 @@ async function handleUserDiscoverProducts(draft: Record<string, unknown>) {
     .map((p) => `• ${p.name} | ₹${p.price || 0} | ${p.category || "General"} | stock ${p.stockQuantity}`);
   return {
     done: true,
-    reply: `Top product matches:\n${lines.join("\n")}`,
+    reply: `${merchantContext?.name ? `Merchant: ${merchantContext.name}\n` : ""}Top product matches:\n${lines.join("\n")}`,
     nextIntent: undefined,
     nextDraft: {},
   };
@@ -1055,11 +1315,529 @@ function customerEmailFromOrderCustomer(customer: Prisma.JsonValue) {
   return String(obj.email || "").trim().toLowerCase();
 }
 
-async function handleUserOrderQuery(
+function customerNameFromOrderCustomer(customer: Prisma.JsonValue) {
+  if (!customer || typeof customer !== "object" || Array.isArray(customer)) {
+    return "";
+  }
+  const obj = customer as Record<string, unknown>;
+  return String(obj.name || "").trim().toLowerCase();
+}
+
+function pickPositiveInt(value: unknown, fallback = 1) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.floor(parsed));
+}
+
+const TERMINAL_SERVICE_REQUEST_STATUSES = new Set(["completed", "rejected"]);
+const REFUND_ELIGIBLE_ORDER_STATUSES = new Set([
+  "paid",
+  "Processing",
+  "Shipped",
+  "Delivered",
+]);
+const REPLACEMENT_ELIGIBLE_ORDER_STATUSES = new Set([
+  "paid",
+  "Processing",
+  "Shipped",
+  "Delivered",
+]);
+const CANCELLATION_ELIGIBLE_ORDER_STATUSES = new Set([
+  "created",
+  "paid",
+  "Processing",
+]);
+
+function buildServiceRequestNumber() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const rand = Math.floor(Math.random() * 900000) + 100000;
+  return `RR-${y}${m}${day}-${rand}`;
+}
+
+async function resolveMerchantEmailForOrder(order: {
+  merchantId: string | null;
+  products: Prisma.JsonValue | null;
+}) {
+  if (order.merchantId) {
+    const merchant = await prisma.merchant.findUnique({
+      where: { id: order.merchantId },
+      select: { email: true },
+    });
+    return merchant?.email || null;
+  }
+
+  const orderProducts = Array.isArray(order.products)
+    ? (order.products as Array<{ productId?: string; name?: string }>)
+    : [];
+  const ids = orderProducts
+    .map((p) => p.productId)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+  const names = orderProducts
+    .map((p) => p.name)
+    .filter((n): n is string => typeof n === "string" && n.length > 0);
+
+  const productOwnersById = ids.length
+    ? await prisma.product.findMany({
+        where: { id: { in: ids } },
+        select: { merchantEmail: true },
+      })
+    : [];
+  const productOwnersByName =
+    !productOwnersById.length && names.length
+      ? await prisma.product.findMany({
+          where: { name: { in: names } },
+          select: { merchantEmail: true },
+        })
+      : [];
+  const productOwners = productOwnersById.length
+    ? productOwnersById
+    : productOwnersByName;
+
+  const uniqueMerchantEmails = Array.from(
+    new Set(
+      productOwners
+        .map((p) => p.merchantEmail)
+        .filter((e): e is string => typeof e === "string" && e.length > 0)
+    )
+  );
+  return uniqueMerchantEmails.length === 1 ? uniqueMerchantEmails[0] : null;
+}
+
+async function handleUserServiceRequest(
   user: { email: string },
+  draft: Record<string, unknown>,
+  requestType: "refund" | "replacement" | "cancellation",
+  merchantContext?: MerchantChatContext | null
+) {
+  const intentKey: WaIntent = requestType === "refund"
+    ? "user_refund_request"
+    : requestType === "replacement"
+    ? "user_replacement_request"
+    : "user_cancellation_request";
+
+  const missing = missingRequired(intentKey, draft);
+  if (missing.length) {
+    const checklist = buildIntentChecklist(intentKey, draft);
+    return {
+      done: false,
+      reply: `${FIELD_PROMPTS[missing[0]] || "Please share the missing details."}${checklist}`,
+      nextIntent: intentKey,
+      nextDraft: draft,
+    };
+  }
+
+  const orderId = String(draft.orderId || "").trim();
+  const reason = String(draft.reason || "").trim();
+  const details = String(draft.details || "").trim();
+  const order = await prisma.order.findUnique({
+    where: { orderId },
+    select: {
+      id: true,
+      orderId: true,
+      status: true,
+      amount: true,
+      currency: true,
+      receipt: true,
+      merchantId: true,
+      customer: true,
+      products: true,
+      createdAt: true,
+    },
+  });
+
+  if (!order) {
+    return {
+      done: true,
+      reply: `Order not found: ${orderId}`,
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  if (merchantContext?.id && String(order.merchantId || "") !== merchantContext.id) {
+    return {
+      done: true,
+      reply: `Order ${orderId} does not belong to merchant ${merchantContext.name}.`,
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  if (customerEmailFromOrderCustomer(order.customer) !== user.email.toLowerCase()) {
+    return {
+      done: true,
+      reply: "You can request service only for your own order.",
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  const eligibleStatuses =
+    requestType === "refund"
+      ? REFUND_ELIGIBLE_ORDER_STATUSES
+      : requestType === "replacement"
+      ? REPLACEMENT_ELIGIBLE_ORDER_STATUSES
+      : CANCELLATION_ELIGIBLE_ORDER_STATUSES;
+  if (!eligibleStatuses.has(String(order.status || ""))) {
+    return {
+      done: true,
+      reply:
+        requestType === "refund"
+          ? "This order is not eligible for refund at its current status."
+          : requestType === "replacement"
+          ? "This order is not eligible for replacement at its current status."
+          : "This order is not eligible for cancellation at its current status.",
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  const existingOpen = await prisma.orderServiceRequest.findFirst({
+    where: {
+      orderId,
+      type: requestType,
+      status: { notIn: Array.from(TERMINAL_SERVICE_REQUEST_STATUSES) },
+    },
+    select: { requestId: true },
+  });
+  if (existingOpen) {
+    return {
+      done: true,
+      reply: `A ${requestType} request is already open for this order. Please wait for review.`,
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  const requestId = `SR-${randomUUID()}`;
+  const requestNumber = buildServiceRequestNumber();
+  const merchantEmail = await resolveMerchantEmailForOrder({
+    merchantId: order.merchantId || null,
+    products: order.products,
+  });
+  const orderProducts = Array.isArray(order.products)
+    ? (order.products as Array<Record<string, unknown>>)
+    : [];
+  const timeline = [
+    {
+      action: "requested",
+      by: user.email,
+      note: reason,
+      at: new Date().toISOString(),
+      source: "whatsapp",
+    },
+  ];
+
+  await prisma.orderServiceRequest.create({
+    data: {
+      requestId,
+      requestNumber,
+      orderId,
+      merchantId: order.merchantId || null,
+      type: requestType,
+      reason,
+      details: details || null,
+      requestedAmount: Number(order.amount || 0),
+      requestedByEmail: user.email,
+      merchantEmail,
+      timeline: timeline as Prisma.InputJsonValue,
+      orderSnapshot: {
+        id: order.id,
+        orderId: order.orderId,
+        receipt: order.receipt,
+        status: order.status,
+        amount: order.amount,
+        currency: order.currency,
+        merchantId: order.merchantId,
+        createdAt: order.createdAt,
+      } as Prisma.InputJsonValue,
+      customerSnapshot: (order.customer || {}) as Prisma.InputJsonValue,
+      requestedItems: orderProducts as Prisma.InputJsonValue,
+    },
+  });
+
+  return {
+    done: true,
+    reply: `${
+      requestType === "refund"
+        ? "Refund"
+        : requestType === "replacement"
+        ? "Replacement"
+        : "Cancellation"
+    } request submitted successfully.\nRequest number: ${requestNumber}\nOrder ID: ${orderId}\nStatus: requested`,
+    nextIntent: undefined,
+    nextDraft: {},
+  };
+}
+
+async function handleUserOrderCreate(
+  user: { email: string; name?: string | null; phone?: string | null; address?: string | null },
+  draft: Record<string, unknown>,
+  merchantContext?: MerchantChatContext | null
+) {
+  const missing = missingRequired("user_order_create", draft);
+  if (missing.length) {
+    const checklist = buildIntentChecklist("user_order_create", draft);
+    return {
+      done: false,
+      reply: `${FIELD_PROMPTS[missing[0]] || "Please share the product name to buy."}${checklist}`,
+      nextIntent: "user_order_create" as WaIntent,
+      nextDraft: draft,
+    };
+  }
+
+  const productName = String(draft.productName || draft.name || "").trim();
+  const quantity = pickPositiveInt(draft.quantity, 1);
+  const product = await prisma.product.findFirst({
+    where: {
+      name: { contains: productName, mode: "insensitive" },
+      isAvailable: true,
+      ...(merchantContext?.id ? { merchantId: merchantContext.id } : {}),
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  if (!product) {
+    return {
+      done: true,
+      reply: `No available product found matching "${productName}".`,
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  if ((product.stockQuantity || 0) < quantity) {
+    return {
+      done: true,
+      reply: `Insufficient stock for ${product.name}. Available quantity is ${product.stockQuantity}.`,
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  const totalRupees = Number(product.price || 0) * quantity;
+  const totalPaise = Math.max(100, Math.round(totalRupees * 100));
+  const externalOrderId = `wa_${Date.now()}`;
+  const merchantId = String(product.merchantId || "").trim();
+  if (!merchantId) {
+    return {
+      done: true,
+      reply: `Product ${product.name} is not linked to a merchant account.`,
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+  let merchantConfig: Awaited<ReturnType<typeof getMerchantSeedhapeConfig>>;
+  try {
+    merchantConfig = await getMerchantSeedhapeConfig(merchantId);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Merchant payment not configured.";
+    return {
+      done: true,
+      reply: `Merchant payment setup is incomplete for this product. (${message})`,
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+  const merchant = await prisma.merchant.findUnique({
+    where: { id: merchantId },
+    select: { name: true },
+  });
+
+  const seedhapeOrder = await createSeedhapeOrderWithConfig(
+    {
+      amount: totalPaise,
+      description: `WhatsApp order: ${product.name} x${quantity}`,
+      externalOrderId,
+      expectedSenderName: String(user.name || "").trim() || undefined,
+      customerEmail: user.email,
+      customerPhone: String(user.phone || "").trim() || undefined,
+      expiresInMinutes: 30,
+      metadata: {
+        source: "whatsapp",
+        customerEmail: user.email,
+        merchantId,
+        productId: product.id,
+        quantity,
+      },
+    },
+    {
+      apiKey: merchantConfig.apiKey,
+      baseUrl: merchantConfig.baseUrl,
+    }
+  );
+
+  const createdOrder = await prisma.order.create({
+    data: {
+      orderId: seedhapeOrder.id,
+      merchantId,
+      paymentId: null,
+      amount: totalRupees,
+      currency: "INR",
+      receipt: externalOrderId,
+      status: "created",
+      mode: "seedhape_whatsapp",
+      products: [
+        {
+          productId: product.id,
+          name: product.name,
+          brand: product.brand,
+          price: product.price,
+          imageUrl: product.imageUrl,
+          quantity,
+        },
+      ],
+      customer: {
+        name: String(user.name || "").trim(),
+        email: user.email,
+        phone: String(user.phone || "").trim(),
+        address: String(user.address || "").trim(),
+        channel: "whatsapp",
+      },
+      statusHistory: [
+        {
+          status: "created",
+          note: "Order created via WhatsApp with SeedhaPe",
+          by: "whatsapp_user",
+          at: new Date().toISOString(),
+        },
+      ],
+      isReviewed: false,
+      createdAt: new Date(),
+    },
+  });
+
+  const links = buildSeedhapePaymentLinks(
+    seedhapeOrder.id,
+    seedhapeOrder.upiUri,
+    merchantConfig.baseUrl
+  );
+  const androidIntent = links.androidIntents.gpay || links.androidIntents.phonepe;
+  const lines = [
+    `Order created: ${seedhapeOrder.id}`,
+    `App order ID: ${createdOrder.receipt || "n/a"}`,
+    `Internal order ID: ${createdOrder.id}`,
+    `Merchant: ${merchant?.name || merchantId}`,
+    `Item: ${product.name} x${quantity}`,
+    `Amount: ₹${totalRupees}`,
+    "",
+    "Pay now:",
+    seedhapeOrder.upiUri,
+  ];
+  if (androidIntent) {
+    lines.push(androidIntent);
+  }
+  lines.push(
+    "",
+    `After payment, reply: confirm payment orderId=${seedhapeOrder.id}`
+  );
+
+  return {
+    done: true,
+    reply: lines.join("\n"),
+    nextIntent: undefined,
+    nextDraft: {},
+  };
+}
+
+async function handleUserPaymentConfirm(
+  user: { email: string; name?: string | null },
   draft: Record<string, unknown>
 ) {
+  const missing = missingRequired("user_payment_confirm", draft);
+  if (missing.length) {
+    const checklist = buildIntentChecklist("user_payment_confirm", draft);
+    return {
+      done: false,
+      reply: `${FIELD_PROMPTS[missing[0]] || "Please share the order ID."}${checklist}`,
+      nextIntent: "user_payment_confirm" as WaIntent,
+      nextDraft: draft,
+    };
+  }
+
+  const orderId = String(draft.orderId || "").trim();
+  const order = await prisma.order.findUnique({ where: { orderId } });
+  if (!order) {
+    return {
+      done: true,
+      reply: `Order not found: ${orderId}`,
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  const orderEmail = customerEmailFromOrderCustomer(order.customer);
+  const orderName = customerNameFromOrderCustomer(order.customer);
+  const callerName = String(user.name || "").trim().toLowerCase();
+  if (orderEmail !== user.email.toLowerCase() && (orderName && orderName !== callerName)) {
+    return {
+      done: true,
+      reply: "You are not allowed to verify this order.",
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  const merchantId = String(order.merchantId || "").trim();
+  if (!merchantId) {
+    return {
+      done: true,
+      reply: "Merchant not found for this order. Please contact support.",
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+  const merchantConfig = await getMerchantSeedhapeConfig(merchantId);
+  const providerStatus = await getSeedhapeOrderStatusWithConfig(orderId, {
+    apiKey: merchantConfig.apiKey,
+    baseUrl: merchantConfig.baseUrl,
+  });
+  if (!isSeedhapePaidStatus(providerStatus.status)) {
+    if (providerStatus.status === "EXPIRED" || providerStatus.status === "REJECTED") {
+      return {
+        done: true,
+        reply: `Order ${orderId} is ${providerStatus.status}. Create a new order to continue.`,
+        nextIntent: undefined,
+        nextDraft: {},
+      };
+    }
+    return {
+      done: true,
+      reply: `Payment is still ${providerStatus.status}. Please complete payment and retry in a few seconds.`,
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  await finalizeOrderAsPaid({
+    orderId,
+    paymentId: order.paymentId || `seedhape_${orderId}`,
+    by: user.email,
+    note: `SeedhaPe payment ${providerStatus.status.toLowerCase()} via WhatsApp`,
+    verifiedAt: providerStatus.verifiedAt
+      ? new Date(providerStatus.verifiedAt)
+      : new Date(),
+  });
+
+  return {
+    done: true,
+    reply: `Payment confirmed for ${orderId}. Your order is now marked paid.`,
+    nextIntent: undefined,
+    nextDraft: {},
+  };
+}
+
+async function handleUserOrderQuery(
+  user: { email: string },
+  draft: Record<string, unknown>,
+  merchantContext?: MerchantChatContext | null
+) {
   const inputOrderId = String(draft.orderId || "").trim().toLowerCase();
+  const activeOnly = Boolean(draft.activeOnly);
   const orders = await prisma.order.findMany({
     orderBy: { createdAt: "desc" },
     take: 150,
@@ -1068,6 +1846,15 @@ async function handleUserOrderQuery(
   const userOrders = orders.filter((order) => {
     const email = customerEmailFromOrderCustomer(order.customer);
     if (email !== user.email.toLowerCase()) return false;
+    if (merchantContext?.id && String(order.merchantId || "") !== merchantContext.id) {
+      return false;
+    }
+    if (
+      activeOnly &&
+      !["created", "paid", "Processing", "Shipped"].includes(String(order.status || ""))
+    ) {
+      return false;
+    }
     if (!inputOrderId) return true;
     return String(order.orderId || "").toLowerCase().includes(inputOrderId);
   });
@@ -1077,7 +1864,27 @@ async function handleUserOrderQuery(
       done: true,
       reply: inputOrderId
         ? `No orders found for order ID "${draft.orderId}".`
+        : activeOnly
+        ? "No active orders found for your account."
         : "No orders found for your account yet.",
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  if (inputOrderId && userOrders.length) {
+    const order = userOrders[0];
+    const orderItems = Array.isArray(order.products)
+      ? (order.products as Array<{ name?: string; quantity?: number }>)
+      : [];
+    const itemLine = orderItems
+      .slice(0, 5)
+      .map((p) => `${p.name || "Item"} x${Math.max(1, Number(p.quantity || 1))}`)
+      .join(", ");
+    const tracking = order.trackingNumber ? `\nTracking: ${order.trackingNumber}` : "";
+    return {
+      done: true,
+      reply: `Order details:\nOrder ID: ${order.orderId}\nStatus: ${order.status}\nAmount: ₹${order.amount}\nItems: ${itemLine || "n/a"}${tracking}`,
       nextIntent: undefined,
       nextDraft: {},
     };
@@ -1090,7 +1897,7 @@ async function handleUserOrderQuery(
 
   return {
     done: true,
-    reply: `Your orders:\n${lines.join("\n")}`,
+    reply: `${merchantContext?.name ? `Merchant: ${merchantContext.name}\n` : ""}${activeOnly ? "Your active orders:\n" : "Your orders:\n"}${lines.join("\n")}`,
     nextIntent: undefined,
     nextDraft: {},
   };
@@ -1130,7 +1937,7 @@ async function handleRegister(phone: string, draft: Record<string, unknown>) {
     .filter(Boolean)
     .join(", ");
 
-  await prisma.merchant.upsert({
+  const merchantRecord = await prisma.merchant.upsert({
     where: { email: payload.email.toLowerCase() },
     create: {
       slug,
@@ -1165,6 +1972,7 @@ async function handleRegister(phone: string, draft: Record<string, unknown>) {
       updatedAt: new Date(),
     },
   });
+  await ensureMerchantSeedhapeDefaults(merchantRecord.id);
 
   await prisma.userProfile.upsert({
     where: { email: payload.email.toLowerCase() },
@@ -1777,6 +2585,8 @@ async function handleOrderUpdateStatus(
 
 export async function processMerchantWhatsAppMessage(input: {
   fromPhone: string;
+  recipientPhone?: string;
+  recipientPhoneNumberId?: string;
   text: string;
   messageId?: string;
   mediaId?: string;
@@ -1794,16 +2604,71 @@ export async function processMerchantWhatsAppMessage(input: {
   }
 
   const merchant = await getMerchantByPhone(phone);
+  const recipientMerchant = input.recipientPhone
+    ? await getMerchantByPhone(input.recipientPhone)
+    : null;
+  const isMerchantInboxMode = Boolean(
+    recipientMerchant && (!merchant || merchant.id !== recipientMerchant.id)
+  );
   const userProfile = await getUserByPhone(phone);
   const inboundText = String(input.text || input.mediaCaption || "").trim();
   const inboundContextText =
     inboundText || (input.mediaId ? "Image uploaded for product workflow" : "");
+  const explicitMerchantSlug = extractMerchantSlugFromText(inboundContextText);
+  const activeOnlyHint =
+    /\bmy active orders?\b/.test(inboundContextText.toLowerCase()) ||
+    /\bactive orders?\b/.test(inboundContextText.toLowerCase());
 
   if (inboundContextText) {
     await appendConversationMessage(sessionId, "user", inboundContextText, {
       messageId: input.messageId,
       intent: session.activeIntent,
     });
+  }
+
+  if (shouldClearMerchantContext(inboundContextText)) {
+    const reply = "Merchant context cleared. You can continue with global Rasphia discovery.";
+    const formattedReply = formatWhatsAppMarkdown(reply);
+    await saveSession(phone, {
+      ...session,
+      activeMerchantId: undefined,
+      activeMerchantSlug: undefined,
+      activeMerchantName: undefined,
+      lastPrompt: formattedReply,
+      processedMessageIds: input.messageId
+        ? [...processedMessageIds, input.messageId].slice(-50)
+        : processedMessageIds,
+      pendingRoleSelection: false,
+      pendingConfirmation: null,
+    });
+    await appendConversationMessage(sessionId, "assistant", formattedReply);
+    await pruneConversation(sessionId);
+    return formattedReply;
+  }
+
+  if (!session.lastPrompt && shouldSendInitialGuide(inboundContextText)) {
+    const reply = buildInitialUsageInstructions({
+      merchantStatus: merchant?.status,
+      hasUserProfile: Boolean(userProfile),
+      hasMerchantProfile: Boolean(merchant),
+    });
+    const formattedReply = formatWhatsAppMarkdown(reply);
+    await saveSession(phone, {
+      activeIntent: undefined,
+      draft: {},
+      activeMerchantId: session.activeMerchantId,
+      activeMerchantSlug: session.activeMerchantSlug,
+      activeMerchantName: session.activeMerchantName,
+      lastPrompt: formattedReply,
+      processedMessageIds: input.messageId
+        ? [...processedMessageIds, input.messageId].slice(-50)
+        : processedMessageIds,
+      pendingRoleSelection: !isMerchantInboxMode && !merchant && !userProfile,
+      pendingConfirmation: null,
+    });
+    await appendConversationMessage(sessionId, "assistant", formattedReply);
+    await pruneConversation(sessionId);
+    return formattedReply;
   }
 
   if (session.pendingConfirmation && inboundText) {
@@ -1850,11 +2715,15 @@ export async function processMerchantWhatsAppMessage(input: {
         nextIntent: undefined,
         nextDraft: {},
       };
+      const formattedReply = formatWhatsAppMarkdown(finalResult.reply);
 
       await saveSession(phone, {
         activeIntent: finalResult.nextIntent,
         draft: finalResult.nextDraft,
-        lastPrompt: finalResult.reply,
+        activeMerchantId: session.activeMerchantId,
+        activeMerchantSlug: session.activeMerchantSlug,
+        activeMerchantName: session.activeMerchantName,
+        lastPrompt: formattedReply,
         processedMessageIds: input.messageId
           ? [...processedMessageIds, input.messageId].slice(-50)
           : processedMessageIds,
@@ -1864,61 +2733,67 @@ export async function processMerchantWhatsAppMessage(input: {
       await appendConversationMessage(
         sessionId,
         "assistant",
-        finalResult.reply,
+        formattedReply,
         { intent: finalResult.nextIntent }
       );
       await pruneConversation(sessionId);
-      return finalResult.reply;
+      return formattedReply;
     }
 
     if (isNegative(inboundText)) {
       const reply = "Update cancelled. No changes were made.";
+      const formattedReply = formatWhatsAppMarkdown(reply);
       await saveSession(phone, {
         activeIntent: undefined,
         draft: {},
-        lastPrompt: reply,
+        activeMerchantId: session.activeMerchantId,
+        activeMerchantSlug: session.activeMerchantSlug,
+        activeMerchantName: session.activeMerchantName,
+        lastPrompt: formattedReply,
         processedMessageIds: input.messageId
           ? [...processedMessageIds, input.messageId].slice(-50)
           : processedMessageIds,
         pendingConfirmation: null,
         pendingRoleSelection: false,
       });
-      await appendConversationMessage(sessionId, "assistant", reply);
+      await appendConversationMessage(sessionId, "assistant", formattedReply);
       await pruneConversation(sessionId);
-      return reply;
+      return formattedReply;
     }
 
     const reply =
       "Please reply YES to confirm or NO to cancel the pending update.";
+    const formattedReply = formatWhatsAppMarkdown(reply);
     await saveSession(phone, {
       ...session,
-      lastPrompt: reply,
+      lastPrompt: formattedReply,
       processedMessageIds: input.messageId
         ? [...processedMessageIds, input.messageId].slice(-50)
         : processedMessageIds,
     });
-    await appendConversationMessage(sessionId, "assistant", reply, {
+    await appendConversationMessage(sessionId, "assistant", formattedReply, {
       intent: session.activeIntent,
     });
     await pruneConversation(sessionId);
-    return reply;
+    return formattedReply;
   }
 
   if (session.pendingConfirmation && !inboundText) {
     const reply =
       "Please reply YES to confirm or NO to cancel the pending update.";
+    const formattedReply = formatWhatsAppMarkdown(reply);
     await saveSession(phone, {
       ...session,
-      lastPrompt: reply,
+      lastPrompt: formattedReply,
       processedMessageIds: input.messageId
         ? [...processedMessageIds, input.messageId].slice(-50)
         : processedMessageIds,
     });
-    await appendConversationMessage(sessionId, "assistant", reply, {
+    await appendConversationMessage(sessionId, "assistant", formattedReply, {
       intent: session.activeIntent,
     });
     await pruneConversation(sessionId);
-    return reply;
+    return formattedReply;
   }
 
   if (session.pendingRoleSelection) {
@@ -1926,17 +2801,18 @@ export async function processMerchantWhatsAppMessage(input: {
     if (!chosenRole) {
       const reply =
         "Please confirm your role by replying with one word: USER or MERCHANT.";
+      const formattedReply = formatWhatsAppMarkdown(reply);
       await saveSession(phone, {
         ...session,
-        lastPrompt: reply,
+        lastPrompt: formattedReply,
         processedMessageIds: input.messageId
           ? [...processedMessageIds, input.messageId].slice(-50)
           : processedMessageIds,
         pendingRoleSelection: true,
       });
-      await appendConversationMessage(sessionId, "assistant", reply);
+      await appendConversationMessage(sessionId, "assistant", formattedReply);
       await pruneConversation(sessionId);
-      return reply;
+      return formattedReply;
     }
 
     const nextIntent: WaIntent =
@@ -1955,21 +2831,22 @@ export async function processMerchantWhatsAppMessage(input: {
         : userProfile
         ? "Great, I will continue in user mode. Tell me what you want to discover."
         : "Great, user mode selected. Please share userName and userEmail to register.";
+    const formattedReply = formatWhatsAppMarkdown(reply);
 
     await saveSession(phone, {
       ...session,
       activeIntent: nextIntent,
-      lastPrompt: reply,
+      lastPrompt: formattedReply,
       processedMessageIds: input.messageId
         ? [...processedMessageIds, input.messageId].slice(-50)
         : processedMessageIds,
       pendingRoleSelection: false,
     });
-    await appendConversationMessage(sessionId, "assistant", reply, {
+    await appendConversationMessage(sessionId, "assistant", formattedReply, {
       intent: nextIntent,
     });
     await pruneConversation(sessionId);
-    return reply;
+    return formattedReply;
   }
 
   let mediaUrl = "";
@@ -2008,7 +2885,12 @@ export async function processMerchantWhatsAppMessage(input: {
     "user_persona_update",
     "user_discover_products",
     "user_discover_merchants",
+    "user_order_create",
     "user_order_query",
+    "user_payment_confirm",
+    "user_refund_request",
+    "user_replacement_request",
+    "user_cancellation_request",
     "user_wishlist_add",
     "user_wishlist_remove",
     "user_wishlist_view",
@@ -2026,6 +2908,14 @@ export async function processMerchantWhatsAppMessage(input: {
     /\bwishlist\b/.test(lowerInbound) ||
     /\bpersona\b/.test(lowerInbound) ||
     /\bdiscover\b/.test(lowerInbound) ||
+    /\bbuy\b/.test(lowerInbound) ||
+    /\bcreate order\b/.test(lowerInbound) ||
+    /\bconfirm payment\b/.test(lowerInbound) ||
+    /\brefund\b/.test(lowerInbound) ||
+    /\breplacement\b/.test(lowerInbound) ||
+    /\breplace\b/.test(lowerInbound) ||
+    /\bmy active orders?\b/.test(lowerInbound) ||
+    (/\bcancel\b/.test(lowerInbound) && /\border\b/.test(lowerInbound)) ||
     /\bmy order\b/.test(lowerInbound) ||
     /\btrack order\b/.test(lowerInbound);
 
@@ -2034,14 +2924,36 @@ export async function processMerchantWhatsAppMessage(input: {
       ? session.activeIntent
       : parsed.intent;
 
+  let forceUserActiveOnly = false;
+  let merchantInboxBlockedAction = false;
+  if (isMerchantInboxMode && merchantIntents.has(intent) && intent !== "merchant_register") {
+    if (intent === "order_query_active") {
+      intent = "user_order_query";
+      forceUserActiveOnly = true;
+    } else if (intent === "order_update_status") {
+      intent = "user_order_query";
+    } else if (intent === "product_query" || intent === "stock_query") {
+      intent = "user_discover_products";
+    } else {
+      merchantInboxBlockedAction = true;
+      intent = "help";
+    }
+  }
   if (!merchant && merchantIntents.has(intent) && intent !== "merchant_register") {
-    intent = userProfile ? "user_discover_products" : "user_register";
+    if (intent === "order_query_active" && userProfile) {
+      intent = "user_order_query";
+      forceUserActiveOnly = true;
+    } else {
+      intent = userProfile ? "user_discover_products" : "user_register";
+    }
   }
   if (!userProfile && userIntents.has(intent) && intent !== "user_register") {
     intent = "user_register";
   }
   if (intent === "unknown") {
-    if (asksMerchantRole && !asksUserRole) {
+    if (isMerchantInboxMode) {
+      intent = userProfile ? "user_discover_products" : "user_register";
+    } else if (asksMerchantRole && !asksUserRole) {
       intent = merchant ? "product_query" : "merchant_register";
     } else if (asksUserRole || userProfile) {
       intent = userProfile ? "user_discover_products" : "user_register";
@@ -2051,10 +2963,66 @@ export async function processMerchantWhatsAppMessage(input: {
   const draft = {
     ...(session.draft || {}),
     ...(parsed.fields || {}),
+    ...(explicitMerchantSlug ? { merchantSlug: explicitMerchantSlug } : {}),
+    ...(activeOnlyHint ? { activeOnly: true } : {}),
+    ...(forceUserActiveOnly ? { activeOnly: true } : {}),
     ...(mediaUrl ? { imageUrl: mediaUrl } : {}),
   };
+  const merchantContext = isMerchantInboxMode
+    ? {
+        id: recipientMerchant!.id,
+        slug: recipientMerchant!.slug,
+        name: recipientMerchant!.name,
+        status: recipientMerchant!.status,
+      }
+    : await resolveMerchantContext({
+        draft,
+        session,
+      });
+
+  if (explicitMerchantSlug && !merchantContext) {
+    const reply = `Merchant context "${explicitMerchantSlug}" not found. Share a valid merchant slug (example: shop acme-decor).`;
+    const formattedReply = formatWhatsAppMarkdown(reply);
+    await saveSession(phone, {
+      ...session,
+      lastPrompt: formattedReply,
+      processedMessageIds: input.messageId
+        ? [...processedMessageIds, input.messageId].slice(-50)
+        : processedMessageIds,
+    });
+    await appendConversationMessage(sessionId, "assistant", formattedReply);
+    await pruneConversation(sessionId);
+    return formattedReply;
+  }
+
+  const merchantSwitchOnly = Boolean(
+    explicitMerchantSlug &&
+      /^(?:shop|store|merchant|switch)(?:\s+to)?\s*[a-z0-9_-]{3,60}$/i.test(
+        inboundContextText.trim()
+      )
+  );
+  if (!isMerchantInboxMode && merchantSwitchOnly && merchantContext) {
+    const reply = `Merchant context set to ${merchantContext.name} (${merchantContext.slug}).\nYou can now discover products, place orders, track active orders, and request refund/replacement/cancellation for this merchant.`;
+    const formattedReply = formatWhatsAppMarkdown(reply);
+    await saveSession(phone, {
+      ...session,
+      activeMerchantId: merchantContext.id,
+      activeMerchantSlug: merchantContext.slug,
+      activeMerchantName: merchantContext.name,
+      lastPrompt: formattedReply,
+      processedMessageIds: input.messageId
+        ? [...processedMessageIds, input.messageId].slice(-50)
+        : processedMessageIds,
+      pendingRoleSelection: false,
+      pendingConfirmation: null,
+    });
+    await appendConversationMessage(sessionId, "assistant", formattedReply);
+    await pruneConversation(sessionId);
+    return formattedReply;
+  }
 
   if (
+    !isMerchantInboxMode &&
     !merchant &&
     !userProfile &&
     (intent === "help" || intent === "unknown") &&
@@ -2063,18 +3031,19 @@ export async function processMerchantWhatsAppMessage(input: {
   ) {
     const reply =
       "Before I continue, please confirm your role: are you a Rasphia USER or a Rasphia MERCHANT?";
+    const formattedReply = formatWhatsAppMarkdown(reply);
     await saveSession(phone, {
       ...session,
-      lastPrompt: reply,
+      lastPrompt: formattedReply,
       processedMessageIds: input.messageId
         ? [...processedMessageIds, input.messageId].slice(-50)
         : processedMessageIds,
       pendingRoleSelection: true,
       draft,
     });
-    await appendConversationMessage(sessionId, "assistant", reply);
+    await appendConversationMessage(sessionId, "assistant", formattedReply);
     await pruneConversation(sessionId);
-    return reply;
+    return formattedReply;
   }
 
   let result:
@@ -2090,7 +3059,9 @@ export async function processMerchantWhatsAppMessage(input: {
   if (intent === "help" || intent === "unknown") {
     result = {
       done: !mediaUrl,
-      reply: mediaUrl
+      reply: merchantInboxBlockedAction
+        ? "This is a merchant customer chat. Merchant stock/product management actions are not available here. You can discover products, place orders, track orders, and request refund/replacement/cancellation."
+        : mediaUrl
         ? `Image received and attached. ${merchant?.status === "approved" ? "Tell me product details like name/category/price/stock." : "Please continue with registration details."}`
         : buildUnclearIntentTemplate(merchant?.status),
       nextIntent: mediaUrl
@@ -2116,9 +3087,29 @@ export async function processMerchantWhatsAppMessage(input: {
       result = await handleUserPersonaUpdate({ email: userProfile.email }, draft);
     }
   } else if (intent === "user_discover_products") {
-    result = await handleUserDiscoverProducts(draft);
+    result = await handleUserDiscoverProducts(draft, merchantContext);
   } else if (intent === "user_discover_merchants") {
     result = await handleUserDiscoverMerchants(draft);
+  } else if (intent === "user_order_create") {
+    if (!userProfile) {
+      result = {
+        done: false,
+        reply: "Please register as user first. Share: userName and userEmail.",
+        nextIntent: "user_register",
+        nextDraft: draft,
+      };
+    } else {
+      result = await handleUserOrderCreate(
+        {
+          email: userProfile.email,
+          name: userProfile.name,
+          phone: userProfile.phone,
+          address: userProfile.address,
+        },
+        draft,
+        merchantContext
+      );
+    }
   } else if (intent === "user_order_query") {
     if (!userProfile) {
       result = {
@@ -2128,7 +3119,73 @@ export async function processMerchantWhatsAppMessage(input: {
         nextDraft: draft,
       };
     } else {
-      result = await handleUserOrderQuery({ email: userProfile.email }, draft);
+      result = await handleUserOrderQuery(
+        { email: userProfile.email },
+        draft,
+        merchantContext
+      );
+    }
+  } else if (intent === "user_payment_confirm") {
+    if (!userProfile) {
+      result = {
+        done: false,
+        reply: "Please register as user first. Share: userName and userEmail.",
+        nextIntent: "user_register",
+        nextDraft: draft,
+      };
+    } else {
+      result = await handleUserPaymentConfirm(
+        { email: userProfile.email, name: userProfile.name },
+        draft
+      );
+    }
+  } else if (intent === "user_refund_request") {
+    if (!userProfile) {
+      result = {
+        done: false,
+        reply: "Please register as user first. Share: userName and userEmail.",
+        nextIntent: "user_register",
+        nextDraft: draft,
+      };
+    } else {
+      result = await handleUserServiceRequest(
+        { email: userProfile.email },
+        draft,
+        "refund",
+        merchantContext
+      );
+    }
+  } else if (intent === "user_replacement_request") {
+    if (!userProfile) {
+      result = {
+        done: false,
+        reply: "Please register as user first. Share: userName and userEmail.",
+        nextIntent: "user_register",
+        nextDraft: draft,
+      };
+    } else {
+      result = await handleUserServiceRequest(
+        { email: userProfile.email },
+        draft,
+        "replacement",
+        merchantContext
+      );
+    }
+  } else if (intent === "user_cancellation_request") {
+    if (!userProfile) {
+      result = {
+        done: false,
+        reply: "Please register as user first. Share: userName and userEmail.",
+        nextIntent: "user_register",
+        nextDraft: draft,
+      };
+    } else {
+      result = await handleUserServiceRequest(
+        { email: userProfile.email },
+        draft,
+        "cancellation",
+        merchantContext
+      );
     }
   } else if (intent === "user_wishlist_add") {
     if (!userProfile) {
@@ -2219,12 +3276,18 @@ export async function processMerchantWhatsAppMessage(input: {
       result = await handleStockQuery(merchant, draft);
     }
   } else if (intent === "order_query_active") {
-    if (!merchant) {
+    if (userProfile) {
+      result = await handleUserOrderQuery(
+        { email: userProfile.email },
+        { ...draft, activeOnly: true },
+        merchantContext
+      );
+    } else if (!merchant) {
       result = {
         done: false,
-        reply: "Active order query is merchant-only in WhatsApp currently.",
-        nextIntent: undefined,
-        nextDraft: {},
+        reply: "Please register as user first. Share: userName and userEmail.",
+        nextIntent: "user_register",
+        nextDraft: draft,
       };
     } else {
       result = await handleOrderQueryActive(merchant);
@@ -2250,20 +3313,24 @@ export async function processMerchantWhatsAppMessage(input: {
     };
   }
 
+  const formattedResultReply = formatWhatsAppMarkdown(result.reply);
   await saveSession(phone, {
     activeIntent: result.nextIntent,
     draft: result.nextDraft,
-    lastPrompt: result.reply,
+    activeMerchantId: merchantContext?.id || session.activeMerchantId,
+    activeMerchantSlug: merchantContext?.slug || session.activeMerchantSlug,
+    activeMerchantName: merchantContext?.name || session.activeMerchantName,
+    lastPrompt: formattedResultReply,
     processedMessageIds: input.messageId
       ? [...processedMessageIds, input.messageId].slice(-50)
       : processedMessageIds,
     pendingConfirmation: result.pendingConfirmation || null,
     pendingRoleSelection: false,
   });
-  await appendConversationMessage(sessionId, "assistant", result.reply, {
+  await appendConversationMessage(sessionId, "assistant", formattedResultReply, {
     intent: result.nextIntent,
   });
   await pruneConversation(sessionId);
 
-  return result.reply;
+  return formattedResultReply;
 }

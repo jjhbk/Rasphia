@@ -86,6 +86,12 @@ export default function ManagementDashboard() {
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
   const [isLoadingServiceRequests, setIsLoadingServiceRequests] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [updatingOrderIds, setUpdatingOrderIds] = useState<Record<string, boolean>>({});
+  const [orderUpdateFeedback, setOrderUpdateFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+    orderId?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (sessionStatus !== "authenticated") return;
@@ -103,6 +109,14 @@ export default function ManagementDashboard() {
       }
     }
   }, [access]);
+
+  useEffect(() => {
+    if (!orderUpdateFeedback) return;
+    const timer = window.setTimeout(() => {
+      setOrderUpdateFeedback(null);
+    }, 3500);
+    return () => window.clearTimeout(timer);
+  }, [orderUpdateFeedback]);
 
   const loadAccess = async () => {
     try {
@@ -256,21 +270,39 @@ export default function ManagementDashboard() {
     status: string,
     extra: Record<string, unknown> = {}
   ) => {
+    setUpdatingOrderIds((prev) => ({ ...prev, [orderId]: true }));
+    setOrderUpdateFeedback(null);
     try {
       const res = await fetch("/api/management/orders", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderId, status, ...extra }),
       });
-      if (!res.ok) throw new Error("Failed to update order status");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to update order status");
+      }
       setOrders((prev) =>
         prev.map((o) =>
           o.id === orderId ? { ...o, status, ...(extra as Partial<ManagementOrder>) } : o
         )
       );
+      setOrderUpdateFeedback({
+        type: "success",
+        message: `Order ${orderId} updated to ${status}.`,
+        orderId,
+      });
     } catch (e) {
       console.error(e);
-      alert("Could not update order status");
+      const message =
+        e instanceof Error ? e.message : "Could not update order status";
+      setOrderUpdateFeedback({
+        type: "error",
+        message,
+        orderId,
+      });
+    } finally {
+      setUpdatingOrderIds((prev) => ({ ...prev, [orderId]: false }));
     }
   };
 
@@ -351,18 +383,26 @@ export default function ManagementDashboard() {
           <div className="mb-6 rounded-2xl border border-brand-sand/40 bg-brand-parchment/50 p-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-sm text-brand-charcoal font-medium">
-                Build your public merchant storefront
+                Build your public merchant storefront and payment setup
               </p>
               <p className="text-xs text-brand-stone mt-0.5">
-                Add logo, cover image, description, and merchant chatbot welcome.
+                Add branding, chatbot welcome message, and SeedhaPe payment credentials.
               </p>
             </div>
-            <Link
-              href="/merchant/storefront"
-              className="px-4 py-2 rounded-xl bg-brand-charcoal text-brand-cream text-sm hover:bg-brand-warm-black transition-colors"
-            >
-              Storefront Settings
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/merchant/storefront"
+                className="px-4 py-2 rounded-xl bg-brand-charcoal text-brand-cream text-sm hover:bg-brand-warm-black transition-colors"
+              >
+                Storefront Settings
+              </Link>
+              <Link
+                href="/merchant/storefront#seedhape-payments"
+                className="px-4 py-2 rounded-xl border border-brand-sand/60 bg-white text-brand-charcoal text-sm hover:bg-brand-cream transition-colors"
+              >
+                SeedhaPe Settings
+              </Link>
+            </div>
           </div>
         )}
 
@@ -475,6 +515,17 @@ export default function ManagementDashboard() {
 
         <section>
           <h2 className="font-heading text-lg text-brand-charcoal mb-4">Managed Orders</h2>
+          {orderUpdateFeedback && (
+            <div
+              className={`mb-3 rounded-xl border px-3 py-2 text-xs ${
+                orderUpdateFeedback.type === "success"
+                  ? "border-green-200 bg-green-50 text-green-700"
+                  : "border-red-200 bg-red-50 text-red-700"
+              }`}
+            >
+              {orderUpdateFeedback.message}
+            </div>
+          )}
           {isLoadingOrders ? (
             <p className="text-brand-stone text-sm">Loading orders…</p>
           ) : orders.length === 0 ? (
@@ -505,6 +556,7 @@ export default function ManagementDashboard() {
                         <select
                           value={o.status}
                           onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
+                          disabled={Boolean(updatingOrderIds[o.id])}
                           className={inputClass}
                         >
                           {ORDER_STATUSES.map((s) => (
@@ -558,9 +610,10 @@ export default function ManagementDashboard() {
                                 trackingUrl: o.trackingUrl,
                               })
                             }
-                            className="px-2 py-1 rounded-lg bg-brand-parchment text-brand-charcoal text-xs border border-brand-sand/40 hover:bg-brand-sand/30 transition-colors"
+                            disabled={Boolean(updatingOrderIds[o.id])}
+                            className="px-2 py-1 rounded-lg bg-brand-parchment text-brand-charcoal text-xs border border-brand-sand/40 hover:bg-brand-sand/30 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                           >
-                            Save
+                            {updatingOrderIds[o.id] ? "Saving..." : "Save"}
                           </button>
                         </div>
                       </td>
@@ -574,7 +627,7 @@ export default function ManagementDashboard() {
 
         <section className="mt-8">
           <h2 className="font-heading text-lg text-brand-charcoal mb-4">
-            Refund / Replacement Requests
+            Refund / Replacement / Cancellation Requests
           </h2>
           {isLoadingServiceRequests ? (
             <p className="text-brand-stone text-sm">Loading service requests…</p>

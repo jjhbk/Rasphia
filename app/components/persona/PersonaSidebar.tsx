@@ -91,7 +91,7 @@ export default function PersonaSidebar({
         {/* 🎉 NEW “View Persona” BUTTON */}
         <a
           href="/persona"
-          className="w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-amber-600 text-white text-sm mt-4 shadow-lg"
+          className="w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-brand-charcoal text-brand-cream text-sm font-semibold mt-4 ring-1 ring-brand-warm-black/15 shadow-soft-md hover:bg-brand-warm-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-charcoal/45"
         >
           <Eye className="h-4 w-4" />
           View Complete Persona

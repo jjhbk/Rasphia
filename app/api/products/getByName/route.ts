@@ -17,6 +17,16 @@ export async function GET(req: NextRequest) {
           name: true,
         },
       },
+      reviewItems: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          rating: true,
+          comment: true,
+          userEmail: true,
+          createdAt: true,
+          imageUrls: true,
+        },
+      },
     },
   });
 
@@ -29,5 +39,16 @@ export async function GET(req: NextRequest) {
     _id: product.id,
     merchantSlug: product.merchant?.slug || null,
     merchantName: product.merchant?.name || null,
+    reviews: (product.reviewItems || []).map((review) => ({
+      rating: review.rating,
+      comment: review.comment || "",
+      user: review.userEmail || "",
+      userEmail: review.userEmail || "",
+      date: review.createdAt?.toISOString?.() || "",
+      createdAt: review.createdAt?.toISOString?.() || "",
+      imageUrls: Array.isArray(review.imageUrls)
+        ? (review.imageUrls as string[])
+        : [],
+    })),
   });
 }

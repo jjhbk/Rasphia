@@ -98,6 +98,15 @@ type Storefront = {
   locationLink?: string | null;
 };
 
+type MerchantSeedhapeSettings = {
+  configured: boolean;
+  apiKeyMasked: string | null;
+  webhookUrl: string;
+  baseUrl: string;
+  configuredAt: string | null;
+  generatedWebhookSecret?: string | null;
+};
+
 export default function MerchantStorefrontPage() {
   const [storefront, setStorefront] = useState<Storefront | null>(null);
   const [form, setForm] = useState({
@@ -114,11 +123,20 @@ export default function MerchantStorefrontPage() {
     "logoUrl" | "coverImageUrl" | null
   >(null);
   const [error, setError] = useState<string | null>(null);
+  const [seedhapeError, setSeedhapeError] = useState<string | null>(null);
   const [slugStatus, setSlugStatus] = useState<
     "idle" | "checking" | "available" | "taken"
   >("idle");
   const [slugHint, setSlugHint] = useState("");
   const [origin, setOrigin] = useState("");
+  const [seedhape, setSeedhape] = useState<MerchantSeedhapeSettings | null>(null);
+  const [seedhapeForm, setSeedhapeForm] = useState({
+    seedhapeApiKey: "",
+    seedhapeWebhookSecret: "",
+  });
+  const [isSavingSeedhape, setIsSavingSeedhape] = useState(false);
+  const [isRotatingSecret, setIsRotatingSecret] = useState(false);
+  const [seedhapeSuccess, setSeedhapeSuccess] = useState<string | null>(null);
 
   const publicStoreUrl = useMemo(() => {
     if (!form.slug) return "";
@@ -151,6 +169,18 @@ export default function MerchantStorefrontPage() {
           storefrontDescription: s?.storefrontDescription || "",
           chatbotWelcomeMessage: s?.chatbotWelcomeMessage || "",
         });
+
+        const seedhapeRes = await fetch("/api/merchant/seedhape");
+        const seedhapeData = await seedhapeRes.json();
+        if (seedhapeRes.ok && seedhapeData?.seedhape) {
+          const settings = seedhapeData.seedhape as MerchantSeedhapeSettings;
+          setSeedhape(settings);
+          if (settings.generatedWebhookSecret) {
+            setSeedhapeSuccess(
+              `Default webhook secret generated. Save it now: ${settings.generatedWebhookSecret}`
+            );
+          }
+        }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Failed to load storefront";
         setError(msg);
@@ -314,6 +344,70 @@ export default function MerchantStorefrontPage() {
       }
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const webhookUrl = seedhape?.webhookUrl || `${origin || ""}/api/seedhape-webhook`;
+
+  const saveSeedhapeSettings = async () => {
+    try {
+      setIsSavingSeedhape(true);
+      setSeedhapeError(null);
+      setSeedhapeSuccess(null);
+
+      const payload: Record<string, unknown> = {};
+      if (seedhapeForm.seedhapeApiKey.trim()) {
+        payload.seedhapeApiKey = seedhapeForm.seedhapeApiKey.trim();
+      }
+      if (seedhapeForm.seedhapeWebhookSecret.trim()) {
+        payload.seedhapeWebhookSecret = seedhapeForm.seedhapeWebhookSecret.trim();
+      }
+
+      const res = await fetch("/api/merchant/seedhape", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to save SeedhaPe settings");
+
+      const next = data?.seedhape as MerchantSeedhapeSettings;
+      setSeedhape(next);
+      setSeedhapeForm((prev) => ({
+        ...prev,
+        seedhapeApiKey: "",
+        seedhapeWebhookSecret: "",
+      }));
+      setSeedhapeSuccess("SeedhaPe settings updated.");
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : "Failed to save SeedhaPe settings";
+      setSeedhapeError(msg);
+    } finally {
+      setIsSavingSeedhape(false);
+    }
+  };
+
+  const rotateSeedhapeSecret = async () => {
+    try {
+      setIsRotatingSecret(true);
+      setSeedhapeError(null);
+      setSeedhapeSuccess(null);
+      const res = await fetch("/api/merchant/seedhape", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rotateWebhookSecret: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to rotate webhook secret");
+      setSeedhape(data.seedhape as MerchantSeedhapeSettings);
+      setSeedhapeSuccess("Webhook secret rotated successfully.");
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : "Failed to rotate webhook secret";
+      setSeedhapeError(msg);
+    } finally {
+      setIsRotatingSecret(false);
     }
   };
 
@@ -544,7 +638,10 @@ export default function MerchantStorefrontPage() {
           </form>
         </div>
 
-        <div className="rounded-3xl border border-white/70 bg-white/75 p-4 md:p-6 backdrop-blur-xl shadow-[0_14px_30px_rgba(0,0,0,0.06)]">
+        <div
+          id="seedhape-payments"
+          className="rounded-3xl border border-white/70 bg-white/75 p-4 md:p-6 backdrop-blur-xl shadow-[0_14px_30px_rgba(0,0,0,0.06)]"
+        >
           <h2 className="text-lg font-medium text-brand-charcoal">Preview</h2>
           <div className="mt-3 overflow-hidden rounded-2xl border border-brand-sand/50 bg-white">
             <div className="h-40 bg-brand-parchment">
@@ -574,6 +671,91 @@ export default function MerchantStorefrontPage() {
               </p>
             </div>
           </div>
+        </div>
+
+        <div className="rounded-3xl border border-white/70 bg-white/75 p-4 md:p-6 backdrop-blur-xl shadow-[0_14px_30px_rgba(0,0,0,0.06)]">
+          <h2 className="text-lg font-medium text-brand-charcoal">SeedhaPe Payments</h2>
+          <p className="mt-1 text-sm text-brand-stone">
+            Configure merchant-level SeedhaPe credentials for direct customer payments.
+          </p>
+
+          {seedhapeError && (
+            <p className="mt-4 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              {seedhapeError}
+            </p>
+          )}
+          {seedhapeSuccess && (
+            <p className="mt-4 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-sm text-emerald-700">
+              {seedhapeSuccess}
+            </p>
+          )}
+
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm text-brand-charcoal">API Key</label>
+              <input
+                type="password"
+                value={seedhapeForm.seedhapeApiKey}
+                onChange={(e) =>
+                  setSeedhapeForm((p) => ({ ...p, seedhapeApiKey: e.target.value }))
+                }
+                placeholder={seedhape?.apiKeyMasked || "sp_live_xxxxx..."}
+                className="mt-1 w-full rounded-xl border border-brand-sand/60 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-brand-terracotta/20"
+              />
+              <p className="mt-1 text-xs text-brand-stone">
+                Leave blank to keep existing key.
+              </p>
+            </div>
+            <div>
+              <label className="text-sm text-brand-charcoal">Webhook Secret</label>
+              <input
+                type="password"
+                value={seedhapeForm.seedhapeWebhookSecret}
+                onChange={(e) =>
+                  setSeedhapeForm((p) => ({
+                    ...p,
+                    seedhapeWebhookSecret: e.target.value,
+                  }))
+                }
+                placeholder="Set or replace webhook secret"
+                className="mt-1 w-full rounded-xl border border-brand-sand/60 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-brand-terracotta/20"
+              />
+              <p className="mt-1 text-xs text-brand-stone">
+                Use rotate for random secret generation.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={saveSeedhapeSettings}
+              disabled={isSavingSeedhape}
+              className="rounded-full bg-brand-charcoal px-5 py-2 text-white hover:bg-brand-warm-black disabled:opacity-50"
+            >
+              {isSavingSeedhape ? "Saving..." : "Save SeedhaPe Settings"}
+            </button>
+            <button
+              type="button"
+              onClick={rotateSeedhapeSecret}
+              disabled={isRotatingSecret}
+              className="rounded-full border border-brand-sand/60 bg-white px-5 py-2 text-brand-charcoal hover:bg-brand-cream disabled:opacity-50"
+            >
+              {isRotatingSecret ? "Rotating..." : "Rotate Webhook Secret"}
+            </button>
+          </div>
+
+          <p className="mt-3 text-xs text-brand-stone break-all">
+            Common webhook URL: {webhookUrl}
+          </p>
+          <p className="mt-1 text-xs text-brand-stone break-all">
+            Common SeedhaPe API base URL: {seedhape?.baseUrl || "Not configured"}
+          </p>
+
+          <p className="mt-3 text-xs text-brand-stone">
+            Status: {seedhape?.configured ? "Configured" : "Not configured"}
+            {seedhape?.configuredAt ? ` • Updated ${new Date(seedhape.configuredAt).toLocaleString()}` : ""}
+          </p>
         </div>
       </div>
     </div>

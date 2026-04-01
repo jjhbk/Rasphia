@@ -53,6 +53,41 @@ const initialUser: UserProfile = {
   addressBook: [],
 };
 
+const CART_STORAGE_PREFIX = "rasphia_cart_v1";
+const CART_SYNC_EVENT = "rasphia-cart-updated";
+const CART_LAST_KEY = "rasphia_cart_last_key";
+const BOOTSTRAP_CACHE_PREFIX = "rasphia_bootstrap_v1";
+const BOOTSTRAP_CACHE_TTL_MS = 2 * 60 * 1000;
+
+function deriveCartIdFromProduct(raw: { id?: string; _id?: string; name?: string }) {
+  const explicit = String(raw?.id || raw?._id || "").trim();
+  if (explicit) return explicit;
+  const name = String(raw?.name || "").trim().toLowerCase();
+  return name ? `name:${name.replace(/\s+/g, "_")}` : "";
+}
+
+function isSameCart(
+  a: Array<{ id?: string; _id?: string; name?: string; quantity?: number; price?: number }>,
+  b: Array<{ id?: string; _id?: string; name?: string; quantity?: number; price?: number }>
+) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const x = a[i];
+    const y = b[i];
+    const xId = String(x?.id || x?._id || "");
+    const yId = String(y?.id || y?._id || "");
+    if (
+      xId !== yId ||
+      String(x?.name || "") !== String(y?.name || "") ||
+      Number(x?.quantity || 1) !== Number(y?.quantity || 1) ||
+      Number(x?.price || 0) !== Number(y?.price || 0)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 const App: React.FC = () => {
   const { data: session, status } = useSession();
   const isAuthenticated = !!session?.user;
@@ -84,6 +119,13 @@ const App: React.FC = () => {
   const [isMobile, setIsMobile] = useState(false);
 
   const [cart, setCart] = useState<Product[]>([]);
+  const cartItemCount = cart.reduce(
+    (sum, item) => sum + Math.max(1, Number(item.quantity || 1)),
+    0
+  );
+  const [cartStorageKey, setCartStorageKey] = useState(
+    `${CART_STORAGE_PREFIX}:guest`
+  );
   const [isCartOpen, setIsCartOpen] = useState(false);
   const {
     persona,
@@ -134,6 +176,101 @@ const App: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [status]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const email = String(session?.user?.email || "").trim().toLowerCase();
+    if (email) {
+      const userKey = `${CART_STORAGE_PREFIX}:${email}`;
+      const guestKey = `${CART_STORAGE_PREFIX}:guest`;
+      try {
+        const guestRaw = window.localStorage.getItem(guestKey);
+        if (guestRaw) {
+          const guestParsed = JSON.parse(guestRaw);
+          const userParsed = JSON.parse(window.localStorage.getItem(userKey) || "[]");
+          if (Array.isArray(guestParsed) && guestParsed.length) {
+            const merged = [...(Array.isArray(userParsed) ? userParsed : [])];
+            for (const g of guestParsed) {
+              const gid = deriveCartIdFromProduct(g);
+              if (!gid) continue;
+              const idx = merged.findIndex(
+                (x: any) => deriveCartIdFromProduct(x) === gid
+              );
+              if (idx === -1) merged.push(g);
+              else {
+                merged[idx] = {
+                  ...merged[idx],
+                  quantity: Math.max(
+                    1,
+                    Number(merged[idx]?.quantity || 1) + Number(g?.quantity || 1)
+                  ),
+                };
+              }
+            }
+            window.localStorage.setItem(userKey, JSON.stringify(merged));
+            window.localStorage.removeItem(guestKey);
+          }
+        }
+      } catch {
+        // ignore parse errors
+      }
+      window.localStorage.setItem(CART_LAST_KEY, userKey);
+      setCartStorageKey((prev) => (prev === userKey ? prev : userKey));
+      return;
+    }
+    const fallback =
+      window.localStorage.getItem(CART_LAST_KEY) || `${CART_STORAGE_PREFIX}:guest`;
+    setCartStorageKey((prev) => (prev === fallback ? prev : fallback));
+  }, [session?.user?.email]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const readCart = () => {
+      try {
+        const raw = window.localStorage.getItem(cartStorageKey);
+        if (!raw) {
+          setCart((prev) => (prev.length ? [] : prev));
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+          setCart((prev) => (prev.length ? [] : prev));
+          return;
+        }
+        const normalized = parsed
+          .map((item) => ({
+            ...(item || {}),
+            id: deriveCartIdFromProduct(item),
+            _id: deriveCartIdFromProduct(item) || undefined,
+            name: String(item?.name || "").trim(),
+            price: Number(item?.price || 0),
+            quantity: Math.max(1, Number(item?.quantity || 1)),
+          }))
+          .filter((item) => item.name && item.id);
+        setCart((prev) => (isSameCart(prev, normalized) ? prev : normalized));
+      } catch {
+        setCart((prev) => (prev.length ? [] : prev));
+      }
+    };
+    readCart();
+    const onStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== cartStorageKey) return;
+      readCart();
+    };
+    const onCartSync = () => readCart();
+    window.addEventListener("storage", onStorage);
+    window.addEventListener(CART_SYNC_EVENT, onCartSync);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(CART_SYNC_EVENT, onCartSync);
+    };
+  }, [cartStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(cartStorageKey, JSON.stringify(cart));
+    window.dispatchEvent(new Event(CART_SYNC_EVENT));
+  }, [cart, cartStorageKey]);
+
   const handleOpenAnalysisDetails = (id: string) => {
     const found = recentAnalyses.find((a) => a.analysisId === id);
     if (found) {
@@ -151,8 +288,63 @@ const App: React.FC = () => {
     const userName = session?.user?.name ?? "";
     if (!userEmail) return;
 
+    const applyBootstrap = (payload: {
+      profile: any;
+      orders: any[];
+      chats: any[];
+      analyses: any[];
+    }) => {
+      const profile = payload.profile || {};
+      const userOrders = payload.orders || [];
+      const chats = payload.chats || [];
+      const analyses = payload.analyses || [];
+
+      setCurrentUser({
+        name: profile?.name || userName,
+        email: profile?.email || userEmail,
+        phone: profile?.phone || "",
+        address: profile?.address || "",
+        wishlist: profile?.wishlist || [],
+        addressBook: profile?.addressBook || [],
+      });
+
+      setOrders(userOrders || []);
+      setChatSessions(chats || []);
+
+      if (chats?.length) {
+        setActiveChatId(chats[0]._id);
+        setMessages(chats[0].messages || [initialMessage]);
+      }
+
+      setRecentAnalyses(analyses);
+    };
+
     const loadUserData = async () => {
       try {
+        const cacheKey = `${BOOTSTRAP_CACHE_PREFIX}:${userEmail.toLowerCase()}`;
+        if (typeof window !== "undefined") {
+          const raw = window.sessionStorage.getItem(cacheKey);
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (
+                parsed?.ts &&
+                Date.now() - Number(parsed.ts) < BOOTSTRAP_CACHE_TTL_MS
+              ) {
+                applyBootstrap({
+                  profile: parsed.profile,
+                  orders: parsed.orders || [],
+                  chats: parsed.chats || [],
+                  analyses: parsed.analyses || [],
+                });
+                return;
+              }
+            } catch {
+              // ignore stale/invalid cache
+            }
+          }
+        }
+
         const [profileRes, ordersRes, chatsRes, analysesRes] =
           await Promise.all([
             fetch(
@@ -179,34 +371,42 @@ const App: React.FC = () => {
         const userOrders = await ordersRes.json();
         const chats = await chatsRes.json();
 
-        setCurrentUser({
-          name: profile?.name || userName,
-          email: profile?.email || userEmail,
-          phone: profile?.phone || "",
-          address: profile?.address || "",
-          wishlist: profile?.wishlist || [],
-          addressBook: profile?.addressBook || [],
-        });
-
-        setOrders(userOrders || []);
-        setChatSessions(chats || []);
-
-        if (chats?.length) {
-          setActiveChatId(chats[0]._id);
-          setMessages(chats[0].messages || [initialMessage]);
-        } else {
+        if (!chats?.length) {
           const res = await fetch("/api/chats/create", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email: userEmail, initialMessage }),
           });
           const newChat = await res.json();
-          setChatSessions([newChat]);
-          setActiveChatId(newChat._id);
-          setMessages(newChat.messages || [initialMessage]);
+          const payload = {
+            profile,
+            orders: userOrders || [],
+            chats: [newChat],
+            analyses,
+          };
+          applyBootstrap(payload);
+          if (typeof window !== "undefined") {
+            window.sessionStorage.setItem(
+              cacheKey,
+              JSON.stringify({ ...payload, ts: Date.now() })
+            );
+          }
+          return;
         }
 
-        setRecentAnalyses(analyses);
+        const payload = {
+          profile,
+          orders: userOrders || [],
+          chats: chats || [],
+          analyses,
+        };
+        applyBootstrap(payload);
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(
+            cacheKey,
+            JSON.stringify({ ...payload, ts: Date.now() })
+          );
+        }
         //alert("User Login successful! Try reconnecting the extension now!");
       } catch (error) {
         console.error("Error loading user data:", error);
@@ -314,11 +514,17 @@ const App: React.FC = () => {
 
         const aiMessage = await res.json();
         setMessages((prev) => [...prev, aiMessage]);
-        const chatsRes = await fetch(
-          `/api/chats/list?email=${encodeURIComponent(currentUser.email)}`
+        setChatSessions((prev) =>
+          prev.map((chat: any) =>
+            chat._id === activeChatId
+              ? {
+                  ...chat,
+                  messages: [...(Array.isArray(chat.messages) ? chat.messages : []), userMessage, aiMessage],
+                  updatedAt: new Date().toISOString(),
+                }
+              : chat
+          )
         );
-        const chats = await chatsRes.json();
-        setChatSessions(chats || []);
       } catch (err) {
         console.error("Rasphia AI error:", err);
         setMessages((prev) => [
@@ -390,6 +596,7 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
     setOrders([]);
     setCurrentUser(initialUser);
     setIsProfileVisible(false);
+    setCart([]);
   };
 
   const handleAddToCart = (product: Product) => {
@@ -410,9 +617,18 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
     }
 
     setCart((prev) => {
+      const cartId = deriveCartIdFromProduct(product);
       const exists = prev.find((p) => p.name === product.name);
       if (exists) return prev;
-      return [...prev, product];
+      return [
+        ...prev,
+        {
+          ...product,
+          id: cartId || product.id,
+          _id: cartId || product._id || product.id,
+          quantity: Math.max(1, Number(product.quantity || 1)),
+        },
+      ];
     });
 
     setMessages((prev) => [
@@ -530,11 +746,19 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
     comment: string,
     imageUrls: string[]
   ) => {
-    const orderToReview = orders.find((o) => o.id === orderId);
+    const orderToReview =
+      orders.find(
+        (o) => o.id === orderId || String((o as any).orderId || "") === orderId
+      ) ||
+      (reviewingOrder &&
+      (reviewingOrder.id === orderId ||
+        String((reviewingOrder as any).orderId || "") === orderId)
+        ? reviewingOrder
+        : null);
     if (!orderToReview) return;
 
     try {
-      await fetch("/api/reviews/add", {
+      const res = await fetch("/api/reviews/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -547,15 +771,22 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
           authorName: currentUser.name,
         }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to submit review");
+      }
 
       setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, isReviewed: true } : o))
+        prev.map((o) =>
+          o.id === orderId || String((o as any).orderId || "") === orderId
+            ? { ...o, isReviewed: true }
+            : o
+        )
       );
     } catch (err) {
       console.error("Review error:", err);
+      throw err;
     }
-
-    handleCloseReview();
   };
 
   if (status === "loading" && !authCheckTimedOut)
@@ -688,9 +919,9 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
                 aria-label="View cart"
               >
                 <ShoppingCart className="h-5 w-5" />
-                {cart.length > 0 && (
+                {cartItemCount > 0 && (
                   <span className="absolute -top-1 -right-1 min-w-[18px] h-5 px-1 rounded-full bg-amber-600 text-white text-[10px] font-semibold flex items-center justify-center">
-                    {cart.length}
+                    {cartItemCount}
                   </span>
                 )}
               </button>

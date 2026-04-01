@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { requireAdmin } from "@/app/lib/auth";
 import { ensureUniqueMerchantSlug } from "@/app/lib/merchantSlug";
+import { ensureMerchantSeedhapeDefaults } from "@/app/lib/merchant-seedhape";
 
 function validateMerchantPayload(input: {
   businessName?: unknown;
@@ -116,6 +117,7 @@ export async function POST(req: NextRequest) {
           "Hi, welcome to our store. Tell me what you are looking for and I will help you quickly.",
       },
     });
+    await ensureMerchantSeedhapeDefaults(merchant.id);
 
     return NextResponse.json(merchant, { status: 201 });
   } catch (error: unknown) {

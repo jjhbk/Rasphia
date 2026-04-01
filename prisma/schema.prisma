@@ -181,6 +181,7 @@ model Review {
 model Order {
   id            String    @id @default(cuid())
   orderId       String    @unique @map("order_id")
+  merchantId    String?   @map("merchant_id")
   paymentId     String?   @map("payment_id")
   amount        Float
   currency      String
@@ -205,6 +206,7 @@ model Order {
   serviceRequests OrderServiceRequest[]
 
   @@index([status])
+  @@index([merchantId])
   @@index([createdAt])
   @@map("orders")
 }
@@ -212,14 +214,20 @@ model Order {
 model OrderServiceRequest {
   id              String   @id @default(cuid())
   requestId       String   @unique @map("request_id")
+  requestNumber   String?  @unique @map("request_number")
   orderId         String   @map("order_id")
+  merchantId      String?  @map("merchant_id")
   type            String
   status          String   @default("requested")
   reason          String
   details         String?
+  requestedAmount Float?   @map("requested_amount")
   requestedByEmail String  @map("requested_by_email")
   reviewedByEmail String?  @map("reviewed_by_email")
   merchantEmail   String?  @map("merchant_email")
+  orderSnapshot   Json?    @map("order_snapshot")
+  customerSnapshot Json?   @map("customer_snapshot")
+  requestedItems  Json?    @map("requested_items")
   adminNote       String?  @map("admin_note")
   resolutionNote  String?  @map("resolution_note")
   timeline        Json?
@@ -230,8 +238,10 @@ model OrderServiceRequest {
   order Order @relation(fields: [orderId], references: [orderId], onDelete: Cascade)
 
   @@index([orderId])
+  @@index([merchantId])
   @@index([requestedByEmail])
   @@index([merchantEmail])
+  @@index([requestNumber])
   @@index([status])
   @@index([type])
   @@map("order_service_requests")
@@ -382,6 +392,11 @@ model Merchant {
   coverImageUrl String?           @map("cover_image_url")
   storefrontDescription String?   @map("storefront_description")
   chatbotWelcomeMessage String?   @map("chatbot_welcome_message")
+  seedhapeApiKeyEncrypted String? @map("seedhape_api_key_encrypted")
+  seedhapeWebhookSecretEncrypted String? @map("seedhape_webhook_secret_encrypted")
+  seedhapeWebhookPath String?     @unique @map("seedhape_webhook_path")
+  seedhapeBaseUrl String?         @map("seedhape_base_url")
+  seedhapeConfiguredAt DateTime?  @map("seedhape_configured_at")
   status       String             @default("pending")
   approvedAt   DateTime?          @map("approved_at")
   approvedBy   String?            @map("approved_by")

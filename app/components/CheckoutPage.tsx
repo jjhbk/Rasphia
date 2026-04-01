@@ -1,13 +1,35 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { Product, CheckoutCustomer, UserProfile } from "../types";
 import { X, ShieldCheck } from "lucide-react";
+import { PaymentModal, SeedhaPeProvider } from "@seedhape/react";
+import type { CreateOrderOptions, OrderData } from "@seedhape/sdk";
 
-declare global {
-  interface Window {
-    Razorpay: any;
-  }
-}
+type SeedhapeCheckoutOrder = {
+  id: string; // SeedhaPe order ID (backward-compatible)
+  seedhapeOrderId?: string;
+  seedhapeBaseUrl?: string;
+  internalOrderId?: string;
+  appOrderId?: string | null;
+  merchantId?: string;
+  merchantName?: string;
+  productName?: string;
+  amount: number;
+  currency: string;
+  status: string;
+  upiUri: string;
+  qrCode: string;
+  expiresAt: string;
+  paymentLinks?: {
+    upiUri?: string;
+    androidIntents?: {
+      gpay?: string;
+      phonepe?: string;
+      paytm?: string;
+      bhim?: string;
+    };
+  };
+};
 
 interface CheckoutPageProps {
   products: Product[];
@@ -22,6 +44,14 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   onPlaceOrder,
   onCancel,
 }) => {
+  const unsupportedCreateOrder = async (
+    _opts: CreateOrderOptions
+  ): Promise<OrderData> => {
+    throw new Error(
+      "Direct SeedhaPe order creation is disabled in this flow. Use /api/create-order."
+    );
+  };
+
   const [customer, setCustomer] = useState<CheckoutCustomer>({
     name: "",
     email: "",
@@ -36,6 +66,15 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedSavedAddress, setSelectedSavedAddress] = useState("");
+  const [activePayment, setActivePayment] = useState<SeedhapeCheckoutOrder | null>(
+    null
+  );
+  const [pendingCustomer, setPendingCustomer] = useState<CheckoutCustomer | null>(
+    null
+  );
+  const [paymentStatusText, setPaymentStatusText] = useState("");
+  const pollRef = useRef<number | null>(null);
+  const pendingPaymentsRef = useRef<SeedhapeCheckoutOrder[]>([]);
 
   const SHIPPING_COST = 0;
   const subtotal = products.reduce((sum, p, idx) => {
@@ -62,13 +101,15 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       initialQuantities[`${p._id || p.name}-${idx}`] = 1;
     });
     setQuantities(initialQuantities);
-
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.async = true;
-    document.body.appendChild(script);
-    return () => { document.body.removeChild(script); };
   }, [user, products]);
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) {
+        window.clearInterval(pollRef.current);
+      }
+    };
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -126,70 +167,129 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
           totalAmount,
         }),
       });
-      if (!res.ok) throw new Error("Failed to create order");
-      const order = await res.json();
-      if (!order?.id) throw new Error("Invalid order");
-      const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
-        amount: order.amount,
-        currency: order.currency,
-        name: "Rasphia",
-        description: `Purchase of ${products.length} item(s)`,
-        image: products[0]?.imageUrl || "",
-        order_id: order.id,
-        prefill: {
-          name: normalizedCustomer.name,
-          email: normalizedCustomer.email,
-          contact: normalizedCustomer.phone,
-        },
-        notes: {
-          items: products.map((p, idx) => { const key = `${p._id || p.name}-${idx}`; return `${p.name} x${quantities[key] || 1}`; }).join(", "),
-          address: normalizedCustomer.address,
-        },
-        theme: { color: "#2C2420" },
-        handler: async function (response: any) {
-          try {
-            const verifyRes = await fetch("/api/verify-payment", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                ...response,
-                customer: normalizedCustomer,
-                products: products.map((p, idx) => {
-                  const key = `${p._id || p.name}-${idx}`;
-                  return { ...p, quantity: quantities[key] || 1 };
-                }),
-                totalAmount,
-              }),
-            });
-            const verify = await verifyRes.json();
-            if (verify.status === "ok") {
-              onPlaceOrder(normalizedCustomer, response.razorpay_payment_id);
-            } else {
-              alert("Payment verification failed.");
-            }
-          } catch (err) {
-            console.error("Verification error:", err);
-            alert("Error verifying payment.");
-          } finally {
-            setIsProcessing(false);
-          }
-        },
-        modal: { ondismiss: () => setIsProcessing(false) },
-      };
-      new window.Razorpay(options).open();
+      if (!res.ok) {
+        const errorPayload = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(errorPayload?.error || "Failed to create order");
+      }
+      const payload = (await res.json()) as {
+        orders?: SeedhapeCheckoutOrder[];
+      } & SeedhapeCheckoutOrder;
+      const orders = Array.isArray(payload.orders)
+        ? payload.orders
+        : payload?.id
+        ? [payload]
+        : [];
+      if (
+        !orders.length ||
+        !orders[0]?.id ||
+        !orders[0]?.upiUri ||
+        !orders[0]?.seedhapeBaseUrl
+      ) {
+        throw new Error("Invalid order response");
+      }
+
+      const [first, ...rest] = orders;
+      setActivePayment(first);
+      pendingPaymentsRef.current = rest;
+      setPendingCustomer(normalizedCustomer);
+      setPaymentStatusText(
+        `Waiting for payment confirmation (1/${orders.length})...`
+      );
+      startPaymentPolling(first.id, normalizedCustomer);
     } catch (err) {
       console.error("Payment error:", err);
-      alert("Error initiating payment.");
+      alert(
+        err instanceof Error ? err.message : "Error initiating payment."
+      );
       setIsProcessing(false);
     }
+  };
+
+  const checkPaymentStatus = async (
+    orderId: string,
+    normalizedCustomer?: CheckoutCustomer
+  ) => {
+    const activeOrder =
+      activePayment && activePayment.id === orderId ? activePayment : null;
+    const verifyRes = await fetch("/api/verify-payment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        seedhape_order_id: orderId,
+        internal_order_id: activeOrder?.internalOrderId,
+        app_order_id: activeOrder?.appOrderId,
+        customer: normalizedCustomer,
+      }),
+    });
+    const verify = await verifyRes.json();
+    if (verify.status === "ok") {
+      if (pollRef.current) {
+        window.clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      if (pendingPaymentsRef.current.length > 0) {
+        const [nextOrder, ...rest] = pendingPaymentsRef.current;
+        pendingPaymentsRef.current = rest;
+        setActivePayment(nextOrder);
+        setPaymentStatusText(`Payment confirmed for ${orderId}. Continue with next payment.`);
+        if (normalizedCustomer) {
+          startPaymentPolling(nextOrder.id, normalizedCustomer);
+        }
+        return;
+      }
+
+      setActivePayment(null);
+      pendingPaymentsRef.current = [];
+      setPendingCustomer(null);
+      setIsProcessing(false);
+      if (normalizedCustomer) {
+        onPlaceOrder(normalizedCustomer, `seedhape_${orderId}`);
+      }
+      return;
+    }
+    if (verify.status === "expired") {
+      if (pollRef.current) {
+        window.clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      setActivePayment(null);
+      pendingPaymentsRef.current = [];
+      setPaymentStatusText("Payment expired. Please create a new checkout.");
+      setIsProcessing(false);
+      return;
+    }
+    setPaymentStatusText("Payment pending. Complete payment in your UPI app.");
+  };
+
+  const startPaymentPolling = (
+    orderId: string,
+    normalizedCustomer: CheckoutCustomer
+  ) => {
+    if (pollRef.current) {
+      window.clearInterval(pollRef.current);
+    }
+    pollRef.current = window.setInterval(() => {
+      checkPaymentStatus(orderId, normalizedCustomer).catch((err) => {
+        console.error("Payment poll error:", err);
+      });
+    }, 4000);
   };
 
   const inputClass = "w-full px-4 py-2.5 bg-brand-parchment/50 border border-brand-sand/50 rounded-xl focus:outline-none focus:border-brand-terracotta/40 focus:ring-2 focus:ring-brand-terracotta/10 text-sm text-brand-charcoal placeholder-brand-stone/40 transition-all";
   const labelClass = "block text-[10px] font-semibold uppercase tracking-widest text-brand-stone/60 mb-1.5";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+    <SeedhaPeProvider
+      onCreateOrder={unsupportedCreateOrder}
+      baseUrl={
+        activePayment?.seedhapeBaseUrl ||
+        process.env.NEXT_PUBLIC_SEEDHAPE_BASE_URL ||
+        undefined
+      }
+    >
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div
         className="absolute inset-0 bg-brand-warm-black/30 backdrop-blur-sm"
         onClick={onCancel}
@@ -296,7 +396,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
             <div>
               <label className={labelClass}>Phone</label>
-              <input type="tel" name="phone" value={customer.phone} onChange={handleInputChange} required pattern="^\+?[0-9\s\-()]{8,20}$" placeholder="10-digit number" className={inputClass} />
+              <input type="tel" name="phone" value={customer.phone} onChange={handleInputChange} required placeholder="10-digit number" className={inputClass} />
             </div>
 
             <div>
@@ -325,7 +425,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
               <div className="grid grid-cols-3 gap-2">
                 <input type="text" name="city" value={customer.city || ""} onChange={handleInputChange} required minLength={2} placeholder="City" className={inputClass} />
                 <input type="text" name="state" value={customer.state || ""} onChange={handleInputChange} required minLength={2} placeholder="State" className={inputClass} />
-                <input type="text" name="zipCode" value={customer.zipCode || ""} onChange={handleInputChange} required pattern="[A-Za-z0-9\\- ]{4,12}" placeholder="PIN" className={inputClass} />
+                <input type="text" name="zipCode" value={customer.zipCode || ""} onChange={handleInputChange} required placeholder="PIN" className={inputClass} />
               </div>
             </div>
 
@@ -340,14 +440,50 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
               <div className="flex items-center justify-center gap-1.5 mt-3">
                 <ShieldCheck className="h-3.5 w-3.5 text-brand-sage" />
                 <p className="text-[11px] text-brand-stone/60">
-                  Secured by Razorpay
+                  Secured by SeedhaPe (UPI)
                 </p>
               </div>
             </div>
           </form>
         </div>
       </div>
-    </div>
+
+      {activePayment && (
+        <>
+          <PaymentModal
+            orderId={activePayment.seedhapeOrderId || activePayment.id}
+            open={true}
+            onClose={() => {
+              setPaymentStatusText(
+                "Payment window closed. Re-open checkout to continue."
+              );
+            }}
+            onSuccess={async (result) => {
+              const customerToUse = pendingCustomer || customer;
+              await checkPaymentStatus(result.orderId, customerToUse);
+            }}
+            onExpired={(orderId) => {
+              setPaymentStatusText(`Order ${orderId} expired. Please retry checkout.`);
+              setIsProcessing(false);
+            }}
+          />
+          <div className="fixed bottom-4 left-1/2 z-[70] w-[min(92vw,560px)] -translate-x-1/2 rounded-2xl border border-brand-sand/40 bg-white/95 p-4 shadow-soft-xl backdrop-blur">
+            <p className="text-xs text-brand-stone">
+              Paying: {activePayment.productName || "Item"} •{" "}
+              {formatPrice(activePayment.amount / 100)} • Merchant{" "}
+              {activePayment.merchantName || activePayment.merchantId || "Store"}
+            </p>
+            <p className="mt-1 text-[11px] text-brand-stone/80">
+              Track IDs: app {activePayment.appOrderId || "n/a"} • internal{" "}
+              {activePayment.internalOrderId || "n/a"} • seedhape{" "}
+              {activePayment.seedhapeOrderId || activePayment.id}
+            </p>
+            <p className="mt-2 text-xs text-brand-stone">{paymentStatusText}</p>
+          </div>
+        </>
+      )}
+      </div>
+    </SeedhaPeProvider>
   );
 };
 

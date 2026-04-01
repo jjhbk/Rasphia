@@ -50,7 +50,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="w-full">
-      <div className="relative flex items-end gap-2 px-4 py-3 rounded-2xl bg-white border border-brand-sand/60 shadow-soft-md transition-all focus-within:border-brand-terracotta/30 focus-within:shadow-soft-lg">
+      <div className="relative flex items-end gap-2 px-4 py-3 rounded-3xl bg-brand-cream/95 backdrop-blur-sm ring-1 ring-brand-sand/45 shadow-soft transition-all focus-within:ring-2 focus-within:ring-brand-terracotta/35 focus-within:shadow-soft-lg">
         <textarea
           ref={textareaRef}
           value={text}

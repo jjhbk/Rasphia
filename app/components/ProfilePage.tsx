@@ -49,11 +49,36 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
   onStartReview,
   onRemoveFromCart,
 }) => {
+  type UserServiceRequest = {
+    requestId: string;
+    requestNumber?: string | null;
+    orderId: string;
+    type: "refund" | "replacement" | "cancellation";
+    status: string;
+    reason: string;
+    details?: string | null;
+    createdAt: string;
+  };
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState<UserProfile>(user);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [serviceRequests, setServiceRequests] = useState<UserServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+  const [requestModal, setRequestModal] = useState<{
+    open: boolean;
+    orderId: string;
+    type: "refund" | "replacement" | "cancellation" | null;
+    reason: string;
+    details: string;
+  }>({
+    open: false,
+    orderId: "",
+    type: null,
+    reason: "",
+    details: "",
+  });
 
   useEffect(() => {
     const loadProfileAndOrders = async () => {
@@ -64,13 +89,30 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
         ]);
         const profileData = await profileRes.json();
         const ordersData = await ordersRes.json();
+        const serviceRequestsRes = await fetch("/api/orders/service-requests");
+        const serviceRequestsData = serviceRequestsRes.ok
+          ? await serviceRequestsRes.json()
+          : [];
         const normalizedOrders: Order[] = (ordersData || []).map((o: any) => ({
           ...o,
           id: o.orderId ?? o.order_id ?? o.id ?? o._id,
           products: Array.isArray(o.products) ? o.products : o.product ? [o.product] : Array.isArray(o.items) ? o.items : [],
         }));
+        const normalizedServiceRequests: UserServiceRequest[] = (serviceRequestsData || []).map(
+          (r: any) => ({
+            requestId: r.requestId || r.request_id,
+            requestNumber: r.requestNumber || r.request_number || null,
+            orderId: r.orderId || r.order_id,
+            type: r.type,
+            status: r.status,
+            reason: r.reason,
+            details: r.details || null,
+            createdAt: r.createdAt,
+          })
+        );
         if (profileData) setProfile(profileData);
         if (normalizedOrders) setOrders(normalizedOrders);
+        setServiceRequests(normalizedServiceRequests);
       } catch (err) {
         console.error("Error fetching profile/orders:", err);
       } finally {
@@ -93,20 +135,56 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     }
   };
 
-  const handleServiceRequest = async (orderId: string, type: "refund" | "replacement") => {
-    const reason = prompt(`Why are you requesting a ${type}?`);
-    if (!reason?.trim()) return;
+  const handleServiceRequest = async () => {
+    if (!requestModal.orderId || !requestModal.type || !requestModal.reason.trim()) return;
     try {
+      setIsSubmittingRequest(true);
       const res = await fetch("/api/orders/service-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId, type, reason: reason.trim() }),
+        body: JSON.stringify({
+          orderId: requestModal.orderId,
+          type: requestModal.type,
+          reason: requestModal.reason.trim(),
+          details: requestModal.details.trim() || undefined,
+        }),
       });
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d?.error || "Failed"); }
-      alert(`${type === "refund" ? "Refund" : "Replacement"} request submitted.`);
+      const created = await res.json();
+      setServiceRequests((prev) => [
+        {
+          requestId: created.requestId || created.request_id,
+          requestNumber: created.requestNumber || created.request_number || null,
+          orderId: created.orderId || created.order_id,
+          type: created.type,
+          status: created.status,
+          reason: created.reason,
+          details: created.details || null,
+          createdAt: created.createdAt || new Date().toISOString(),
+        },
+        ...prev,
+      ]);
+      setRequestModal({
+        open: false,
+        orderId: "",
+        type: null,
+        reason: "",
+        details: "",
+      });
+      alert(
+        `${
+          requestModal.type === "refund"
+            ? "Refund"
+            : requestModal.type === "replacement"
+            ? "Replacement"
+            : "Cancellation"
+        } request submitted.`
+      );
     } catch (err) {
       console.error("Service request error:", err);
       alert("Could not submit your request.");
+    } finally {
+      setIsSubmittingRequest(false);
     }
   };
 
@@ -295,15 +373,39 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             )}
                             {order.status === "Delivered" && (
                               <>
-                                <button onClick={() => handleServiceRequest(order.id, "refund")}
+                                <button onClick={() => setRequestModal({
+                                  open: true,
+                                  orderId: order.id,
+                                  type: "refund",
+                                  reason: "",
+                                  details: "",
+                                })}
                                   className="px-2.5 py-1 text-[10px] font-medium text-red-700 bg-red-50 border border-red-200 rounded-full hover:bg-red-100 transition-colors">
                                   Refund
                                 </button>
-                                <button onClick={() => handleServiceRequest(order.id, "replacement")}
+                                <button onClick={() => setRequestModal({
+                                  open: true,
+                                  orderId: order.id,
+                                  type: "replacement",
+                                  reason: "",
+                                  details: "",
+                                })}
                                   className="px-2.5 py-1 text-[10px] font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-full hover:bg-blue-100 transition-colors">
                                   Replace
                                 </button>
                               </>
+                            )}
+                            {["created", "paid", "Processing"].includes(order.status) && (
+                              <button onClick={() => setRequestModal({
+                                open: true,
+                                orderId: order.id,
+                                type: "cancellation",
+                                reason: "",
+                                details: "",
+                              })}
+                                className="px-2.5 py-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full hover:bg-amber-100 transition-colors">
+                                Cancel
+                              </button>
                             )}
                           </div>
                         </div>
@@ -318,9 +420,116 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 </div>
               )}
             </section>
+
+            <section>
+              <h2 className="text-base font-semibold text-brand-charcoal font-heading mb-4">
+                Refund / Replacement / Cancellation Requests
+              </h2>
+              {serviceRequests.length === 0 ? (
+                <div className="py-6 rounded-2xl border border-dashed border-brand-sand/50 bg-brand-parchment/20 text-center">
+                  <p className="text-sm text-brand-stone/60">No requests submitted yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {serviceRequests.map((req) => (
+                    <div
+                      key={req.requestId}
+                      className="rounded-xl border border-brand-sand/40 bg-white/70 p-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-mono text-brand-stone/70">
+                          {req.requestNumber || req.requestId}
+                        </p>
+                        <span className="rounded-full border border-brand-sand/50 px-2 py-0.5 text-[10px] uppercase text-brand-stone">
+                          {req.status}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-brand-stone">
+                        Order #{req.orderId} • {req.type}
+                      </p>
+                      <p className="mt-1 text-sm text-brand-charcoal">{req.reason}</p>
+                      {req.details ? (
+                        <p className="mt-1 text-xs text-brand-stone">{req.details}</p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           </div>
         </div>
       </div>
+
+      {requestModal.open ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-brand-warm-black/35 backdrop-blur-sm"
+            onClick={() =>
+              setRequestModal({
+                open: false,
+                orderId: "",
+                type: null,
+                reason: "",
+                details: "",
+              })
+            }
+          />
+          <div className="relative w-full max-w-md rounded-2xl border border-brand-sand/50 bg-white p-5 shadow-soft-xl">
+            <h3 className="font-heading text-lg text-brand-charcoal">
+              Request{" "}
+              {requestModal.type === "refund"
+                ? "Refund"
+                : requestModal.type === "replacement"
+                ? "Replacement"
+                : "Cancellation"}
+            </h3>
+            <p className="mt-1 text-xs text-brand-stone">Order #{requestModal.orderId}</p>
+            <textarea
+              rows={3}
+              value={requestModal.reason}
+              onChange={(e) =>
+                setRequestModal((prev) => ({ ...prev, reason: e.target.value }))
+              }
+              placeholder="Reason for your request"
+              className="mt-3 w-full rounded-xl border border-brand-sand/60 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-terracotta/20"
+            />
+            <textarea
+              rows={2}
+              value={requestModal.details}
+              onChange={(e) =>
+                setRequestModal((prev) => ({ ...prev, details: e.target.value }))
+              }
+              placeholder="Additional details (optional)"
+              className="mt-2 w-full rounded-xl border border-brand-sand/60 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-terracotta/20"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setRequestModal({
+                    open: false,
+                    orderId: "",
+                    type: null,
+                    reason: "",
+                    details: "",
+                  })
+                }
+                className="rounded-xl border border-brand-sand/50 px-3 py-1.5 text-xs text-brand-charcoal hover:bg-brand-cream"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingRequest || !requestModal.reason.trim()}
+                onClick={handleServiceRequest}
+                className="rounded-xl bg-brand-charcoal px-3 py-1.5 text-xs text-white hover:bg-brand-warm-black disabled:opacity-50"
+              >
+                {isSubmittingRequest ? "Submitting..." : "Submit Request"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <CartModal isOpen={isCartOpen} cart={cart} onClose={() => setIsCartOpen(false)}
         onRemoveFromCart={onRemoveFromCart} onCheckout={() => { setIsCartOpen(false); onCheckout(); }} />

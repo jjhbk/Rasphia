@@ -56,18 +56,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(requests, { status: 200 });
     }
 
-    const merchantProducts = await prisma.product.findMany({
-      where: { merchantEmail: access.email },
-      select: { id: true, name: true },
+    const merchant = await prisma.merchant.findFirst({
+      where: { email: access.email },
+      select: { id: true },
     });
-    const ownedIds = new Set(merchantProducts.map((p) => p.id));
-    const ownedNames = new Set(
-      merchantProducts
-        .map((p) => p.name)
-        .filter((n): n is string => typeof n === "string" && n.length > 0)
-    );
+    const merchantId = merchant?.id || null;
 
-    const requests = await prisma.orderServiceRequest.findMany({
+    const directRequests = await prisma.orderServiceRequest.findMany({
       include: {
         order: {
           select: {
@@ -80,11 +75,33 @@ export async function GET(req: NextRequest) {
         },
       },
       orderBy: { createdAt: "desc" },
-      take: 500,
+      where: merchantId
+        ? {
+            OR: [{ merchantId }, { merchantEmail: access.email }],
+          }
+        : { merchantEmail: access.email },
     });
 
-    const filtered = requests.filter((req) =>
-      canMerchantManageOrder(ownedIds, ownedNames, req.order?.products)
+    const legacyNeedsFallback = directRequests.filter((r) => !r.merchantId);
+    if (!legacyNeedsFallback.length) {
+      return NextResponse.json(directRequests, { status: 200 });
+    }
+
+    const merchantProducts = await prisma.product.findMany({
+      where: { merchantEmail: access.email },
+      select: { id: true, name: true },
+    });
+    const ownedIds = new Set(merchantProducts.map((p) => p.id));
+    const ownedNames = new Set(
+      merchantProducts
+        .map((p) => p.name)
+        .filter((n): n is string => typeof n === "string" && n.length > 0)
+    );
+
+    const filtered = directRequests.filter((req) =>
+      req.merchantId
+        ? req.merchantId === merchantId
+        : canMerchantManageOrder(ownedIds, ownedNames, req.order?.products)
     );
 
     return NextResponse.json(filtered, { status: 200 });
@@ -133,21 +150,34 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (access.role === "merchant") {
-      const merchantProducts = await prisma.product.findMany({
-        where: { merchantEmail: access.email },
-        select: { id: true, name: true },
+      const merchant = await prisma.merchant.findFirst({
+        where: { email: access.email },
+        select: { id: true },
       });
-      const ownedIds = new Set(merchantProducts.map((p) => p.id));
-      const ownedNames = new Set(
-        merchantProducts
-          .map((p) => p.name)
-          .filter((n): n is string => typeof n === "string" && n.length > 0)
-      );
-      if (!canMerchantManageOrder(ownedIds, ownedNames, target.order?.products)) {
+      const merchantId = merchant?.id || null;
+      if (target.merchantId && merchantId && target.merchantId !== merchantId) {
         return NextResponse.json(
           { error: "Forbidden: You cannot manage this service request" },
           { status: 403 }
         );
+      }
+      if (!target.merchantId) {
+        const merchantProducts = await prisma.product.findMany({
+          where: { merchantEmail: access.email },
+          select: { id: true, name: true },
+        });
+        const ownedIds = new Set(merchantProducts.map((p) => p.id));
+        const ownedNames = new Set(
+          merchantProducts
+            .map((p) => p.name)
+            .filter((n): n is string => typeof n === "string" && n.length > 0)
+        );
+        if (!canMerchantManageOrder(ownedIds, ownedNames, target.order?.products)) {
+          return NextResponse.json(
+            { error: "Forbidden: You cannot manage this service request" },
+            { status: 403 }
+          );
+        }
       }
     }
 
@@ -181,7 +211,11 @@ export async function PATCH(req: NextRequest) {
 
     if (parsedStatus === "completed") {
       const mappedOrderStatus =
-        target.type === "refund" ? "Refunded" : "Replacement";
+        target.type === "refund"
+          ? "Refunded"
+          : target.type === "cancellation"
+          ? "Cancelled"
+          : "Replacement";
       const orderHistory = Array.isArray(target.order?.statusHistory)
         ? (target.order?.statusHistory as Array<Record<string, unknown>>)
         : [];

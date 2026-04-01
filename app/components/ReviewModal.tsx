@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { Order } from "../types";
 import StarIcon from "./icons/StarIcon";
-import { X } from "lucide-react";
+import { ImagePlus, Trash2, X } from "lucide-react";
 
 interface ReviewModalProps {
   order: Order;
@@ -11,7 +11,7 @@ interface ReviewModalProps {
     rating: number,
     comment: string,
     imageUrls: string[]
-  ) => void;
+  ) => Promise<void>;
 }
 
 const ReviewModal: React.FC<ReviewModalProps> = ({ order, onClose, onSubmit }) => {
@@ -19,16 +19,74 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ order, onClose, onSubmit }) =
   const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState("");
   const [imageUrlInput, setImageUrlInput] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const selectedFilePreviews = useMemo(
+    () => selectedFiles.map((file) => URL.createObjectURL(file)),
+    [selectedFiles]
+  );
+
+  useEffect(() => {
+    return () => {
+      selectedFilePreviews.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [selectedFilePreviews]);
+
+  const uploadSelectedFiles = async () => {
+    if (!selectedFiles.length) return [];
+    setIsUploadingImages(true);
+    try {
+      const uploaded = await Promise.all(
+        selectedFiles.map(async (file) => {
+          const form = new FormData();
+          form.append("file", file);
+          const res = await fetch("/api/reviews/upload", {
+            method: "POST",
+            body: form,
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data?.url) {
+            throw new Error(data?.error || `Failed to upload ${file.name}`);
+          }
+          return String(data.url);
+        })
+      );
+      return uploaded;
+    } finally {
+      setIsUploadingImages(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (rating === 0) return;
-    const imageUrls = imageUrlInput.split("\n").map((v) => v.trim()).filter(Boolean);
-    onSubmit(order.id, rating, comment, imageUrls);
+    setSubmitError(null);
+    setIsSubmitting(true);
+    try {
+      const manualUrls = imageUrlInput
+        .split("\n")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      const uploadedUrls = await uploadSelectedFiles();
+      const allImageUrls = [...uploadedUrls, ...manualUrls];
+      await onSubmit(order.id, rating, comment, allImageUrls);
+      onClose();
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to submit review.";
+      setSubmitError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const productNames = (order.products || []).map((p) => p.name).join(", ");
   const activeRating = hoverRating || rating;
+
+  const isBusy = isSubmitting || isUploadingImages;
 
   return (
     <div
@@ -105,11 +163,65 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ order, onClose, onSubmit }) =
 
           {/* Image URLs */}
           <div>
+            <label className="block text-xs font-medium uppercase tracking-wider text-brand-stone/60 mb-2">
+              Upload photos <span className="normal-case text-brand-stone/40">(optional)</span>
+            </label>
+            <label className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand-parchment/40 border border-brand-sand/40 text-sm text-brand-charcoal cursor-pointer hover:bg-brand-parchment/60 transition-colors">
+              <ImagePlus className="h-4 w-4" />
+              Add images
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  if (!files.length) return;
+                  setSelectedFiles((prev) => [...prev, ...files].slice(0, 6));
+                  e.currentTarget.value = "";
+                }}
+              />
+            </label>
+            {!!selectedFiles.length && (
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {selectedFilePreviews.map((src, index) => (
+                  <div
+                    key={`${src}-${index}`}
+                    className="relative rounded-xl overflow-hidden border border-brand-sand/40 bg-white"
+                  >
+                    <img
+                      src={src}
+                      alt={`Review upload ${index + 1}`}
+                      className="h-20 w-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedFiles((prev) =>
+                          prev.filter((_, i) => i !== index)
+                        )
+                      }
+                      className="absolute top-1 right-1 h-6 w-6 rounded-full bg-white/90 border border-brand-sand/40 text-brand-stone hover:text-red-600 flex items-center justify-center"
+                      aria-label="Remove image"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Image URLs */}
+          <div>
             <label
               htmlFor="review-images"
               className="block text-xs font-medium uppercase tracking-wider text-brand-stone/60 mb-2"
             >
-              Photo URLs <span className="normal-case text-brand-stone/40">(optional, one per line)</span>
+              Photo URLs{" "}
+              <span className="normal-case text-brand-stone/40">
+                (optional, one per line)
+              </span>
             </label>
             <textarea
               id="review-images"
@@ -121,12 +233,18 @@ const ReviewModal: React.FC<ReviewModalProps> = ({ order, onClose, onSubmit }) =
             />
           </div>
 
+          {submitError && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {submitError}
+            </p>
+          )}
+
           <button
             type="submit"
-            disabled={rating === 0}
+            disabled={rating === 0 || isBusy}
             className="w-full py-3 rounded-xl bg-brand-charcoal text-brand-cream text-sm font-medium hover:bg-brand-warm-black transition-colors shadow-soft disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Submit review
+            {isBusy ? "Submitting..." : "Submit review"}
           </button>
         </form>
       </div>

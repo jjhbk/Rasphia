@@ -28,7 +28,15 @@ const CartModal: React.FC<CartModalProps> = ({
       minimumFractionDigits: 0,
     }).format(price);
 
-  const total = cart.reduce((sum, item) => sum + ((item.price as number) || 0), 0);
+  const itemCount = cart.reduce(
+    (sum, item) => sum + Math.max(1, Number(item.quantity || 1)),
+    0
+  );
+  const total = cart.reduce(
+    (sum, item) =>
+      sum + (((item.price as number) || 0) * Math.max(1, Number(item.quantity || 1))),
+    0
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 sm:p-6">
@@ -46,9 +54,9 @@ const CartModal: React.FC<CartModalProps> = ({
             <h2 className="text-sm font-semibold text-brand-charcoal">
               Your cart
             </h2>
-            {cart.length > 0 && (
+            {itemCount > 0 && (
               <span className="text-xs text-brand-stone/60">
-                · {cart.length} {cart.length === 1 ? "item" : "items"}
+                · {itemCount} {itemCount === 1 ? "item" : "items"}
               </span>
             )}
           </div>
@@ -92,6 +100,9 @@ const CartModal: React.FC<CartModalProps> = ({
                     </p>
                     <p className="text-sm font-semibold text-brand-charcoal mt-1">
                       {formatPrice(item.price as number)}
+                    </p>
+                    <p className="text-xs text-brand-stone/60 mt-0.5">
+                      Qty: {Math.max(1, Number(item.quantity || 1))}
                     </p>
                   </div>
                   <button

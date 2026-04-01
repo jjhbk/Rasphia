@@ -4,10 +4,55 @@ import { sendText } from "@/app/lib/whatsapp";
 
 export const runtime = "nodejs";
 
+function isLikelyLlmFailure(message: string) {
+  const m = String(message || "").toLowerCase();
+  return (
+    m.includes("429") ||
+    m.includes("quota") ||
+    m.includes("rate limit") ||
+    m.includes("gemini") ||
+    m.includes("openai") ||
+    m.includes("generatecontent") ||
+    m.includes("model") ||
+    m.includes("llm")
+  );
+}
+
+function buildWhatsAppUsageTemplate() {
+  return [
+    "*Rasphia Assistant Help*",
+    "I hit a temporary AI processing issue. You can continue using these commands:",
+    "",
+    "*User commands*",
+    "1) register userName=Rahul userEmail=rahul@example.com",
+    "2) discover products query=table lamp maxPrice=2000",
+    "3) shop acme-decor",
+    "4) buy productName=Canvas Lamp quantity=2",
+    "5) my orders",
+    "6) track order orderId=sp_ord_xxx",
+    "7) refund orderId=sp_ord_xxx reason=Received damaged item",
+    "8) replacement orderId=sp_ord_xxx reason=Wrong size",
+    "9) cancel order orderId=sp_ord_xxx reason=Ordered by mistake",
+    "",
+    "*Merchant commands*",
+    "1) register merchant businessName=Acme Decor email=a@b.com addressLine1=... addressLine2=... city=Hyderabad state=Telangana zipCode=500001 locationLink=https://maps.google.com/...",
+    "2) add product name=Canvas Lamp category=home price=1499 stockQuantity=20",
+    "3) stock query Canvas Lamp",
+    "4) stock update productName=Canvas Lamp stockQuantity=0",
+    "5) active orders",
+    "",
+    "Please retry your command now.",
+  ].join("\n");
+}
+
 type WhatsAppInbound = {
   entry?: Array<{
     changes?: Array<{
       value?: {
+        metadata?: {
+          display_phone_number?: string;
+          phone_number_id?: string;
+        };
         messages?: Array<{
           from?: string;
           id?: string;
@@ -58,6 +103,16 @@ export async function POST(req: NextRequest) {
     const diagnostics: Array<Record<string, string>> = [];
 
     for (const message of messages) {
+      const parentChange = body.entry
+        ?.flatMap((entry) => entry.changes || [])
+        .find((c) => (c.value?.messages || []).some((m) => m.id === message.id));
+      const recipientDisplayPhone = String(
+        parentChange?.value?.metadata?.display_phone_number || ""
+      ).trim();
+      const recipientPhoneNumberId = String(
+        parentChange?.value?.metadata?.phone_number_id || ""
+      ).trim();
+
       const from = String(message.from || "").trim();
       if (!from) {
         skipped += 1;
@@ -95,6 +150,8 @@ export async function POST(req: NextRequest) {
       try {
         const reply = await processMerchantWhatsAppMessage({
           fromPhone: from,
+          recipientPhone: recipientDisplayPhone || undefined,
+          recipientPhoneNumberId: recipientPhoneNumberId || undefined,
           text,
           messageId: message.id,
           mediaId: mediaId || undefined,
@@ -110,6 +167,32 @@ export async function POST(req: NextRequest) {
         });
       } catch (err: unknown) {
         const reason = err instanceof Error ? err.message : "unknown_error";
+        const likelyLlmFailure = isLikelyLlmFailure(reason);
+
+        if (likelyLlmFailure) {
+          try {
+            await sendText(from, buildWhatsAppUsageTemplate());
+            processed += 1;
+            diagnostics.push({
+              messageId: String(message.id || ""),
+              from,
+              status: "fallback_usage_sent",
+              reason,
+            });
+            continue;
+          } catch (fallbackErr: unknown) {
+            diagnostics.push({
+              messageId: String(message.id || ""),
+              from,
+              status: "fallback_send_failed",
+              reason:
+                fallbackErr instanceof Error
+                  ? fallbackErr.message
+                  : "fallback_send_failed",
+            });
+          }
+        }
+
         diagnostics.push({
           messageId: String(message.id || ""),
           from,
