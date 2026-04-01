@@ -122,6 +122,21 @@ function extractReason(message: string) {
   ).trim();
 }
 
+function resolvePublicBaseUrl(req: Request) {
+  const configured =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    process.env.NEXTAUTH_URL ||
+    process.env.RASPHIA_BASE_URL ||
+    "";
+  const base = String(configured || "").trim().replace(/\/+$/, "");
+  if (base) return base;
+  try {
+    return new URL(req.url).origin;
+  } catch {
+    return "";
+  }
+}
+
 function extractShippingAddress(message: string) {
   return (
     message.match(/\b(?:shippingAddress|shipping_address|address)\s*[:=]\s*(.+)$/i)?.[1] ||
@@ -549,6 +564,7 @@ export async function POST(
             email: userProfile.email,
             phone: String(userProfile.phone || "").trim(),
             address: shippingAddress,
+            paymentQrCode: seedhapeOrder.qrCode,
             channel: "storefront_chat",
             merchantSlug: slug,
           },
@@ -570,7 +586,18 @@ export async function POST(
         seedhapeOrder.upiUri,
         merchantConfig.baseUrl
       );
-      const androidIntent = links.androidIntents.gpay || links.androidIntents.phonepe;
+      const publicBaseUrl = resolvePublicBaseUrl(req);
+      const upiLauncher = publicBaseUrl
+        ? `${publicBaseUrl}/api/upi-launch?${new URLSearchParams({
+            upi: seedhapeOrder.upiUri,
+            orderId: seedhapeOrder.id,
+          }).toString()}`
+        : links.hostedStatusUrl;
+      const qrImageUrl = publicBaseUrl
+        ? `${publicBaseUrl}/api/upi-qr?${new URLSearchParams({
+            orderId: seedhapeOrder.id,
+          }).toString()}`
+        : "";
 
       return NextResponse.json(
         {
@@ -582,8 +609,8 @@ export async function POST(
             `*Amount:* ₹${totalRupees}`,
             "",
             "*Pay now:*",
-            seedhapeOrder.upiUri,
-            androidIntent || "",
+            upiLauncher,
+            ...(qrImageUrl ? ["", "*Scan or save QR image:*", qrImageUrl] : []),
             "",
             `After payment, reply with: \`track order orderId=${seedhapeOrder.id}\``,
           ]),

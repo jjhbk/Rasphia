@@ -36,6 +36,10 @@ export async function GET(req: NextRequest) {
   const safeGpay = escapeHtml(links.gpay);
   const safePhonepe = escapeHtml(links.phonepe);
   const safePaytm = escapeHtml(links.paytm);
+  const qrImageUrl = orderId
+    ? `/api/upi-qr?orderId=${encodeURIComponent(orderId)}`
+    : "";
+  const safeQrImageUrl = escapeHtml(qrImageUrl);
 
   const html = `<!doctype html>
 <html lang="en">
@@ -52,6 +56,8 @@ export async function GET(req: NextRequest) {
     .btn { display: block; text-decoration: none; text-align: center; border-radius: 12px; padding: 12px 14px; font-weight: 600; margin-top: 10px; }
     .primary { background: #111827; color: #fff; }
     .secondary { background: #fff; color: #111827; border: 1px solid #d1d5db; }
+    .qr { margin-top: 14px; text-align: center; }
+    .qr img { width: 280px; max-width: 100%; border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; background: #f9fafb; border: 1px solid #e5e7eb; padding: 8px; border-radius: 8px; }
   </style>
 </head>
@@ -65,6 +71,16 @@ export async function GET(req: NextRequest) {
       <a class="btn secondary" href="${safeGpay}">Open Google Pay</a>
       <a class="btn secondary" href="${safePhonepe}">Open PhonePe</a>
       <a class="btn secondary" href="${safePaytm}">Open Paytm</a>
+
+      ${
+        safeQrImageUrl
+          ? `<div class="qr">
+        <p>Scan this QR from any UPI app</p>
+        <img src="${safeQrImageUrl}" alt="UPI QR code" />
+        <a class="btn secondary" href="${safeQrImageUrl}" download>Download QR Image</a>
+      </div>`
+          : ""
+      }
 
       <p style="margin-top:14px;">Fallback UPI URL</p>
       <div class="mono">${safeUpi}</div>
@@ -81,4 +97,3 @@ export async function GET(req: NextRequest) {
     },
   });
 }
-

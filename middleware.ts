@@ -16,6 +16,7 @@ export function middleware(req: NextRequest) {
     "/api/razorpay-webhook",
     "/api/seedhape-webhook",
     "/api/upi-launch",
+    "/api/upi-qr",
     "/api/contact",
   ];
 

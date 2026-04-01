@@ -179,7 +179,7 @@ const REQUIRED_BY_INTENT: Record<WaIntent, string[]> = {
   user_discover_merchants: [],
   user_order_create: ["productName", "upiVerifiedName"],
   user_order_query: [],
-  user_payment_confirm: ["orderId"],
+  user_payment_confirm: [],
   user_refund_request: ["orderId", "reason"],
   user_replacement_request: ["orderId", "reason"],
   user_cancellation_request: ["orderId", "reason"],
@@ -1405,6 +1405,13 @@ function buildUpiChooserLink(upiUri: string, orderId: string) {
   return `${base}/api/upi-launch?${params.toString()}`;
 }
 
+function buildUpiQrImageLink(orderId: string) {
+  const base = resolvePublicBaseUrl();
+  if (!base || !orderId) return "";
+  const params = new URLSearchParams({ orderId });
+  return `${base}/api/upi-qr?${params.toString()}`;
+}
+
 async function getSavedAddressesForUser(user: {
   email: string;
   address?: string | null;
@@ -1851,6 +1858,7 @@ async function handleUserOrderCreate(
         phone: String(user.phone || "").trim(),
         address: shippingAddress,
         upiVerifiedName: upiVerifiedName || null,
+        paymentQrCode: seedhapeOrder.qrCode,
         channel: "whatsapp",
       },
       statusHistory: [
@@ -1878,9 +1886,9 @@ async function handleUserOrderCreate(
     seedhapeOrder.upiUri,
     merchantConfig.baseUrl
   );
-  const androidIntent = links.androidIntents.gpay || links.androidIntents.phonepe;
-  const appLinks = buildUpiAppLinks(seedhapeOrder.upiUri);
   const upiChooserLink = buildUpiChooserLink(seedhapeOrder.upiUri, seedhapeOrder.id);
+  const qrImageLink = buildUpiQrImageLink(seedhapeOrder.id);
+  const primaryPayLink = upiChooserLink || links.hostedStatusUrl;
   const lines = [
     `Order created: ${seedhapeOrder.id}`,
     `App order ID: ${createdOrder.receipt || "n/a"}`,
@@ -1891,21 +1899,11 @@ async function handleUserOrderCreate(
     `UPI verified name: ${upiVerifiedName}`,
     `Delivery address: ${shippingAddress}`,
     "",
-    "Pay now (recommended):",
-    upiChooserLink || links.hostedStatusUrl,
-    "",
-    "SeedhaPe payment page:",
-    links.hostedStatusUrl,
-    "",
-    "Raw UPI link (fallback):",
-    seedhapeOrder.upiUri,
+    "Pay now:",
+    primaryPayLink,
   ];
-  if (appLinks.gpay) lines.push(appLinks.gpay);
-  if (appLinks.phonepe) lines.push(appLinks.phonepe);
-  if (appLinks.paytm) lines.push(appLinks.paytm);
-  if (androidIntent) {
-    lines.push("", "Android intent:");
-    lines.push(androidIntent);
+  if (qrImageLink) {
+    lines.push("", "Scan or save QR image:", qrImageLink);
   }
   lines.push(
     "",
@@ -1924,18 +1922,71 @@ async function handleUserPaymentConfirm(
   user: { email: string; name?: string | null },
   draft: Record<string, unknown>
 ) {
-  const missing = missingRequired("user_payment_confirm", draft);
-  if (missing.length) {
-    const checklist = buildIntentChecklist("user_payment_confirm", draft);
+  const orderId = String(draft.orderId || "").trim();
+  if (!orderId) {
+    const orders = await prisma.order.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 150,
+      select: {
+        orderId: true,
+        status: true,
+        amount: true,
+        merchantId: true,
+        customer: true,
+      },
+    });
+
+    const pendingOrders = orders.filter((order) => {
+      const email = customerEmailFromOrderCustomer(order.customer);
+      if (email !== user.email.toLowerCase()) return false;
+      const status = String(order.status || "").toLowerCase();
+      return status === "created" || status === "pending";
+    });
+
+    if (!pendingOrders.length) {
+      return {
+        done: true,
+        reply:
+          "No pending payment orders found. Share `confirm payment orderId=<orderId>` if you want to check a specific order.",
+        nextIntent: undefined,
+        nextDraft: {},
+      };
+    }
+
+    const merchantIds = Array.from(
+      new Set(
+        pendingOrders
+          .map((order) => String(order.merchantId || "").trim())
+          .filter((id) => id.length > 0)
+      )
+    );
+    const merchants = merchantIds.length
+      ? await prisma.merchant.findMany({
+          where: { id: { in: merchantIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const merchantNameById = new Map(merchants.map((m) => [m.id, m.name]));
+    const lines = [
+      "Pending payment orders:",
+      ...pendingOrders.slice(0, 10).map((order, index) => {
+        const merchantName =
+          merchantNameById.get(String(order.merchantId || "").trim()) ||
+          String(order.merchantId || "Store");
+        return `${index + 1}. ${order.orderId} • ₹${order.amount} • ${merchantName}`;
+      }),
+      "",
+      "Reply with: confirm payment orderId=<orderId>",
+    ];
+
     return {
       done: false,
-      reply: `${FIELD_PROMPTS[missing[0]] || "Please share the order ID."}${checklist}`,
+      reply: lines.join("\n"),
       nextIntent: "user_payment_confirm" as WaIntent,
-      nextDraft: draft,
+      nextDraft: {},
     };
   }
 
-  const orderId = String(draft.orderId || "").trim();
   const order = await prisma.order.findUnique({ where: { orderId } });
   if (!order) {
     return {

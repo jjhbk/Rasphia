@@ -317,6 +317,7 @@ export async function POST(req: Request) {
             city: customer.city,
             state: customer.state,
             zipCode: customer.zipCode,
+            paymentQrCode: seedhapeOrder.qrCode,
           },
           trackingNumber: null,
           shippingProvider: null,
