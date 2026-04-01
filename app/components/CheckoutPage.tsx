@@ -70,7 +70,6 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
     null
   );
   const [isSeedhapeModalOpen, setIsSeedhapeModalOpen] = useState(false);
-  const [completionNotice, setCompletionNotice] = useState("");
   const [pendingCustomer, setPendingCustomer] = useState<CheckoutCustomer | null>(
     null
   );
@@ -190,7 +189,6 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       setIsSeedhapeModalOpen(true);
       pendingPaymentsRef.current = rest;
       setPendingCustomer(normalizedCustomer);
-      setCompletionNotice("");
       setPaymentStatusText(
         `Order created (1/${orders.length}). Complete payment in SeedhaPe.`
       );
@@ -230,23 +228,15 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
         return;
       }
 
-      setCompletionNotice(
-        `Payment complete for order ${orderId}. Finalizing your order...`
-      );
-      setPaymentStatusText(
-        "Payment verified. Finalizing order..."
-      );
+      setPaymentStatusText("Payment verified. Finalizing order...");
       setIsSeedhapeModalOpen(false);
       pendingPaymentsRef.current = [];
-      window.setTimeout(() => {
-        setCompletionNotice("");
-        setPendingCustomer(null);
-        setIsProcessing(false);
-        if (normalizedCustomer) {
-          onPlaceOrder(normalizedCustomer, `seedhape_${orderId}`);
-        }
-        setActivePayment(null);
-      }, 1200);
+      setPendingCustomer(null);
+      setIsProcessing(false);
+      if (normalizedCustomer) {
+        onPlaceOrder(normalizedCustomer, `seedhape_${orderId}`);
+      }
+      setActivePayment(null);
       return;
     }
     if (verify.status === "expired") {
@@ -260,9 +250,6 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       setIsSeedhapeModalOpen(false);
       setPaymentStatusText(
         "Payment marked as disputed by provider. Please contact support before retrying."
-      );
-      setCompletionNotice(
-        "This payment is disputed. Do not place this order until dispute is resolved."
       );
       setIsProcessing(false);
       return;
@@ -456,8 +443,18 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
               onSuccess={async (result) => {
                 if (successHandledRef.current.has(result.orderId)) return;
                 successHandledRef.current.add(result.orderId);
+                setIsSeedhapeModalOpen(false);
+                setPaymentStatusText("Payment successful. Verifying confirmation...");
                 const customerToUse = pendingCustomer || customer;
-                await checkPaymentStatus(result.orderId, customerToUse);
+                try {
+                  await checkPaymentStatus(result.orderId, customerToUse);
+                } catch (err) {
+                  console.error("Payment verify error after success:", err);
+                  setPaymentStatusText(
+                    "Payment completed, but verification failed. Please check order status in profile."
+                  );
+                  setIsProcessing(false);
+                }
               }}
               onExpired={(orderId) => {
                 setIsSeedhapeModalOpen(false);
@@ -480,11 +477,6 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
             <p className="mt-2 text-xs text-brand-stone">{paymentStatusText}</p>
           </div>
         </>
-      )}
-      {!!completionNotice && (
-        <div className="fixed bottom-4 left-1/2 z-[70] w-[min(92vw,560px)] -translate-x-1/2 rounded-2xl border border-green-200 bg-white/95 p-4 shadow-soft-xl backdrop-blur">
-          <p className="text-sm font-medium text-green-700">{completionNotice}</p>
-        </div>
       )}
       </div>
     </SeedhaPeProvider>

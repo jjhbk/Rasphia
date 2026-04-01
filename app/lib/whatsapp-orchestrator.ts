@@ -1386,6 +1386,25 @@ function buildUpiAppLinks(upiUri: string) {
   };
 }
 
+function resolvePublicBaseUrl() {
+  const configured =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    process.env.NEXTAUTH_URL ||
+    process.env.RASPHIA_BASE_URL ||
+    "";
+  return String(configured || "").trim().replace(/\/+$/, "");
+}
+
+function buildUpiChooserLink(upiUri: string, orderId: string) {
+  const base = resolvePublicBaseUrl();
+  if (!base || !upiUri.startsWith("upi://")) return "";
+  const params = new URLSearchParams({
+    upi: upiUri,
+    orderId,
+  });
+  return `${base}/api/upi-launch?${params.toString()}`;
+}
+
 async function getSavedAddressesForUser(user: {
   email: string;
   address?: string | null;
@@ -1861,6 +1880,7 @@ async function handleUserOrderCreate(
   );
   const androidIntent = links.androidIntents.gpay || links.androidIntents.phonepe;
   const appLinks = buildUpiAppLinks(seedhapeOrder.upiUri);
+  const upiChooserLink = buildUpiChooserLink(seedhapeOrder.upiUri, seedhapeOrder.id);
   const lines = [
     `Order created: ${seedhapeOrder.id}`,
     `App order ID: ${createdOrder.receipt || "n/a"}`,
@@ -1872,9 +1892,12 @@ async function handleUserOrderCreate(
     `Delivery address: ${shippingAddress}`,
     "",
     "Pay now (recommended):",
+    upiChooserLink || links.hostedStatusUrl,
+    "",
+    "SeedhaPe payment page:",
     links.hostedStatusUrl,
     "",
-    "UPI links:",
+    "Raw UPI link (fallback):",
     seedhapeOrder.upiUri,
   ];
   if (appLinks.gpay) lines.push(appLinks.gpay);
