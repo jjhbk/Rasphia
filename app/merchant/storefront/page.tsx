@@ -138,6 +138,9 @@ export default function MerchantStorefrontPage() {
   const [isRotatingSecret, setIsRotatingSecret] = useState(false);
   const [seedhapeSuccess, setSeedhapeSuccess] = useState<string | null>(null);
   const [webhookCopied, setWebhookCopied] = useState(false);
+  const [rotatedWebhookSecret, setRotatedWebhookSecret] = useState<string | null>(
+    null
+  );
 
   const publicStoreUrl = useMemo(() => {
     if (!form.slug) return "";
@@ -411,6 +414,7 @@ export default function MerchantStorefrontPage() {
       setIsRotatingSecret(true);
       setSeedhapeError(null);
       setSeedhapeSuccess(null);
+      setRotatedWebhookSecret(null);
       const res = await fetch("/api/merchant/seedhape", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -419,7 +423,13 @@ export default function MerchantStorefrontPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to rotate webhook secret");
       setSeedhape(data.seedhape as MerchantSeedhapeSettings);
-      setSeedhapeSuccess("Webhook secret rotated successfully.");
+      const generated = String(data?.rotated?.generatedWebhookSecret || "").trim();
+      if (generated) {
+        setRotatedWebhookSecret(generated);
+        setSeedhapeSuccess("Webhook secret rotated successfully. Copy and paste it in SeedhaPe.");
+      } else {
+        setSeedhapeSuccess("Webhook secret rotated successfully.");
+      }
     } catch (e: unknown) {
       const msg =
         e instanceof Error ? e.message : "Failed to rotate webhook secret";
@@ -706,6 +716,33 @@ export default function MerchantStorefrontPage() {
             <p className="mt-4 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-sm text-emerald-700">
               {seedhapeSuccess}
             </p>
+          )}
+          {rotatedWebhookSecret && (
+            <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+              <p className="text-xs text-emerald-800">New Webhook Secret (shown once)</p>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="text"
+                  value={rotatedWebhookSecret}
+                  readOnly
+                  className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs text-emerald-900"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(rotatedWebhookSecret);
+                      setSeedhapeSuccess("Webhook secret copied.");
+                    } catch {
+                      setSeedhapeError("Could not copy webhook secret. Please copy it manually.");
+                    }
+                  }}
+                  className="rounded-full border border-emerald-300 bg-white px-4 py-2 text-xs text-emerald-800 hover:bg-emerald-100"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
           )}
 
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -67,6 +67,9 @@ export async function PUT(req: NextRequest) {
     await ensureMerchantSeedhapeDefaults(merchantId);
 
     const rotateWebhookSecret = Boolean(body.rotateWebhookSecret);
+    const rotatedWebhookSecret = rotateWebhookSecret
+      ? generateRandomSecret(32)
+      : null;
 
     await setMerchantSeedhapeConfig({
       merchantId,
@@ -75,7 +78,7 @@ export async function PUT(req: NextRequest) {
           ? String(body.seedhapeApiKey || "")
           : undefined,
       webhookSecret: rotateWebhookSecret
-        ? generateRandomSecret(32)
+        ? String(rotatedWebhookSecret || "")
         : body.seedhapeWebhookSecret !== undefined
         ? String(body.seedhapeWebhookSecret || "")
         : undefined,
@@ -91,6 +94,7 @@ export async function PUT(req: NextRequest) {
         seedhape: { ...summary, webhookUrl },
         rotated: {
           webhookSecret: rotateWebhookSecret,
+          generatedWebhookSecret: rotatedWebhookSecret,
         },
       },
       { status: 200 }

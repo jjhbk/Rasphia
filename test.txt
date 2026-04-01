@@ -69,10 +69,22 @@ with a dermatologists-backed blend of Niacinamide, Vitamin B5 and Hydrating Glyc
 sensitive skin. Ideal for Dry to Normal, Sensitive Skin, Cetaphil Gentle Skin Cleanser is • Paraben-Free • Sulphate-Free • 
 Fragrance Free • Hypoallergenic • Non Comedogenic: Won't Clog Pores
 
-
+https://rasphia.com/api/seedhape-webhook?merchantId=cmndfzraq0000lcw6tq115yx4
         
-      
+SECRET='klYlLC911GYUY7rW_avbhX95wgZmrT6_QVnClZwXH5k'
+URL='http://localhost:3000/api/seedhape-webhook?merchantId=cmndfzraq0000lcw6tq115yx4'
+
+BODY='{"event":"order.verified","data":{"orderId":"sp_ord_test_123","status":"VERIFIED","metadata":{"merchantId":"cmndfzraq0000lcw6tq115yx4}}}'
+
+SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" -hex | sed 's/^.* //')
+
+curl -i -X POST "$URL" \
+  -H 'Content-Type: application/json' \
+  -H "X-SeedhaPe-Signature: sha256=$SIG" \
+  -H 'X-SeedhaPe-Test: true' \
+  --data "$BODY"
 
 
+
       
-    
+    https://rasphia.com/api/seedhape-webhook?merchantId=cmndfzraq0000lcw6tq115yx4

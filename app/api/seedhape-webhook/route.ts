@@ -46,6 +46,13 @@ function getSignature(req: NextRequest) {
   return candidates.find((v) => String(v || "").trim().length > 0)?.trim() || "";
 }
 
+function redactSignature(signature: string) {
+  const value = String(signature || "").trim();
+  if (!value) return "none";
+  if (value.length <= 16) return `${value.slice(0, 4)}...`;
+  return `${value.slice(0, 8)}...${value.slice(-6)}`;
+}
+
 function getGlobalWebhookSecrets() {
   const candidates = [
     process.env.SEEDHAPE_WEBHOOK_SECRET,
@@ -176,6 +183,10 @@ export async function POST(req: NextRequest) {
     const raw = await req.text();
     const signature = getSignature(req);
     if (!signature) {
+      console.error("[seedhape-webhook] Missing signature header", {
+        hasTestHeader: Boolean(req.headers.get("x-seedhape-test")),
+        userAgent: req.headers.get("user-agent") || "unknown",
+      });
       return NextResponse.json({ error: "Missing signature" }, { status: 401 });
     }
 
@@ -210,7 +221,24 @@ export async function POST(req: NextRequest) {
       merchantId: merchantId || undefined,
       includeAllMerchants: !merchantId,
     });
-    if (!candidateSecrets.length || !verifyAgainstCandidates(raw, signature, candidateSecrets)) {
+    const verified =
+      candidateSecrets.length > 0 &&
+      verifyAgainstCandidates(raw, signature, candidateSecrets);
+    if (!verified) {
+      console.error("[seedhape-webhook] Signature verification failed", {
+        eventType,
+        orderId: orderId || null,
+        externalOrderId: externalOrderId || null,
+        merchantFromOrder: order?.merchantId || null,
+        merchantFromPayload: merchantFromPayload || null,
+        merchantFromQuery: merchantFromQuery || null,
+        merchantFromHeader: merchantFromHeader || null,
+        resolvedMerchantId: merchantId || null,
+        candidateSecretCount: candidateSecrets.length,
+        signaturePreview: redactSignature(signature),
+        hasTestHeader: Boolean(req.headers.get("x-seedhape-test")),
+        userAgent: req.headers.get("user-agent") || "unknown",
+      });
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 

@@ -14,6 +14,7 @@ export function middleware(req: NextRequest) {
     "/api/whatsapp/send-otp",
     "/api/whatsapp/verify-otp",
     "/api/razorpay-webhook",
+    "/api/seedhape-webhook",
     "/api/contact",
   ];
 
