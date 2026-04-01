@@ -144,7 +144,11 @@ function formatWhatsAppMarkdown(text: string) {
     .map((line) => {
       const trimmed = line.trim();
       if (!trimmed) return "";
-      if (/^https?:\/\//i.test(trimmed) || /^intent:\/\//i.test(trimmed)) {
+      if (
+        /^https?:\/\//i.test(trimmed) ||
+        /^intent:\/\//i.test(trimmed) ||
+        /^upi:\/\//i.test(trimmed)
+      ) {
         return trimmed;
       }
       const afterPaymentMatch = /^After payment,\s*reply:\s*(.+)$/i.exec(trimmed);
@@ -173,7 +177,7 @@ const REQUIRED_BY_INTENT: Record<WaIntent, string[]> = {
   user_persona_update: ["personaText"],
   user_discover_products: [],
   user_discover_merchants: [],
-  user_order_create: ["productName"],
+  user_order_create: ["productName", "upiVerifiedName"],
   user_order_query: [],
   user_payment_confirm: ["orderId"],
   user_refund_request: ["orderId", "reason"],
@@ -224,6 +228,8 @@ const FIELD_PROMPTS: Record<string, string> = {
   personaTags: "Optionally share persona tags separated by commas.",
   query: "Please share what you want to discover.",
   quantity: "Optionally share quantity (default is 1).",
+  upiVerifiedName:
+    "Please share your UPI verified name exactly as shown in your UPI app.",
   maxPrice: "Optionally share a max price.",
   tag: "Optionally share a tag (for example: gift, decor, skincare).",
   businessName: "Please share your business name.",
@@ -256,6 +262,7 @@ function prettyFieldName(field: string) {
     personaTags: "Persona Tags",
     query: "Search Query",
     quantity: "Quantity",
+    upiVerifiedName: "UPI Verified Name",
     maxPrice: "Max Price",
     tag: "Tag",
     city: "City",
@@ -322,7 +329,7 @@ function buildUnclearIntentTemplate(merchantStatus?: string) {
     "Example: my orders",
     "Example: track order orderId=ORD123",
     "6) Create an order and pay",
-    "Example: buy productName=Canvas Lamp quantity=2",
+    "Example: buy productName=Canvas Lamp quantity=2 upiVerifiedName=Rahul Kumar",
     "7) Confirm payment",
     "Example: confirm payment orderId=sp_ord_ab12cd34ef56",
     "8) Request refund",
@@ -391,7 +398,7 @@ function buildInitialUsageInstructions(args: {
     "3a) Enter merchant chat context",
     "Example: shop acme-decor",
     "4) Create order + get payment link",
-    "Example: buy productName=Canvas Lamp quantity=2",
+    "Example: buy productName=Canvas Lamp quantity=2 upiVerifiedName=Rahul Kumar",
     "5) Confirm payment",
     "Example: confirm payment orderId=sp_ord_ab12cd34ef56",
     "6) Track orders",
@@ -794,6 +801,7 @@ async function inferIntent(
     "personaTags",
     "query",
     "quantity",
+    "upiVerifiedName",
     "maxPrice",
     "tag",
     "businessName",
@@ -837,6 +845,7 @@ Return strict JSON with shape:
     "personaTags": string|null,
     "query": string|null,
     "quantity": number|null,
+    "upiVerifiedName": string|null,
     "maxPrice": number|null,
     "tag": string|null,
     "businessName": string|null,
@@ -1591,6 +1600,7 @@ async function handleUserOrderCreate(
 
   const productName = String(draft.productName || draft.name || "").trim();
   const quantity = pickPositiveInt(draft.quantity, 1);
+  const upiVerifiedName = String(draft.upiVerifiedName || "").trim();
   const product = await prisma.product.findFirst({
     where: {
       name: { contains: productName, mode: "insensitive" },
@@ -1653,7 +1663,7 @@ async function handleUserOrderCreate(
       amount: totalPaise,
       description: `WhatsApp order: ${product.name} x${quantity}`,
       externalOrderId,
-      expectedSenderName: String(user.name || "").trim() || undefined,
+      expectedSenderName: upiVerifiedName || String(user.name || "").trim() || undefined,
       customerEmail: user.email,
       customerPhone: String(user.phone || "").trim() || undefined,
       expiresInMinutes: 30,
@@ -1696,6 +1706,7 @@ async function handleUserOrderCreate(
         email: user.email,
         phone: String(user.phone || "").trim(),
         address: String(user.address || "").trim(),
+        upiVerifiedName: upiVerifiedName || null,
         channel: "whatsapp",
       },
       statusHistory: [
@@ -1724,6 +1735,7 @@ async function handleUserOrderCreate(
     `Merchant: ${merchant?.name || merchantId}`,
     `Item: ${product.name} x${quantity}`,
     `Amount: ₹${totalRupees}`,
+    `UPI verified name: ${upiVerifiedName}`,
     "",
     "Pay now:",
     seedhapeOrder.upiUri,

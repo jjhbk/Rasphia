@@ -884,16 +884,25 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
 
   if (isProfileVisible)
     return (
-      <ProfilePage
-        user={currentUser}
-        cart={cart}
-        onBack={handleHideProfile}
-        onAddToCart={handleAddToCart}
-        onCheckout={handleCheckoutFromCart}
-        onToggleWishlist={handleToggleWishlist}
-        onStartReview={handleStartReview}
-        onRemoveFromCart={handleRemoveFromCart}
-      />
+      <>
+        <ProfilePage
+          user={currentUser}
+          cart={cart}
+          onBack={handleHideProfile}
+          onAddToCart={handleAddToCart}
+          onCheckout={handleCheckoutFromCart}
+          onToggleWishlist={handleToggleWishlist}
+          onStartReview={handleStartReview}
+          onRemoveFromCart={handleRemoveFromCart}
+        />
+        {reviewingOrder && (
+          <ReviewModal
+            order={reviewingOrder}
+            onClose={handleCloseReview}
+            onSubmit={handleAddReview}
+          />
+        )}
+      </>
     );
 
   return (

@@ -332,6 +332,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     const trackingUrl = (order as any).trackingUrl as string | undefined;
                     const shippingProvider = (order as any).shippingProvider as string | undefined;
                     const estimatedDelivery = (order as any).estimatedDelivery as string | undefined;
+                    const normalizedOrderStatus = String(order.status || "").trim().toLowerCase();
+                    const isDelivered = normalizedOrderStatus === "delivered";
+                    const canCancel = ["created", "paid", "processing"].includes(
+                      normalizedOrderStatus
+                    );
+
                     return (
                       <div key={order.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 bg-white/60 border border-brand-sand/30 rounded-2xl hover:shadow-soft transition-all">
                         <div className="h-14 w-14 rounded-xl overflow-hidden flex-shrink-0 border border-brand-sand/20">
@@ -365,13 +371,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             {formatPrice(items.reduce((sum, p) => sum + (p.price || 0) * (p.quantity || 1), 0))}
                           </p>
                           <div className="flex gap-1.5 flex-wrap justify-end">
-                            {order.status === "Delivered" && !order.isReviewed && (
+                            {isDelivered && !order.isReviewed && (
                               <button onClick={() => onStartReview(order)}
                                 className="px-2.5 py-1 text-[10px] font-medium text-brand-terracotta bg-brand-parchment border border-brand-sand/40 rounded-full hover:bg-brand-sand/30 transition-colors">
                                 Review
                               </button>
                             )}
-                            {order.status === "Delivered" && (
+                            {isDelivered && (
                               <>
                                 <button onClick={() => setRequestModal({
                                   open: true,
@@ -395,7 +401,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                 </button>
                               </>
                             )}
-                            {["created", "paid", "Processing"].includes(order.status) && (
+                            {canCancel && (
                               <button onClick={() => setRequestModal({
                                 open: true,
                                 orderId: order.id,

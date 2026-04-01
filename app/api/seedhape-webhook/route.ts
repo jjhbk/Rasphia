@@ -12,9 +12,38 @@ function safeEqualString(a: string, b: string) {
   return crypto.timingSafeEqual(ab, bb);
 }
 
+function normalizeSignature(value: string) {
+  return String(value || "")
+    .trim()
+    .replace(/^sha256=/i, "")
+    .trim();
+}
+
 function verifySignature(raw: string, secret: string, signature: string) {
-  const digest = crypto.createHmac("sha256", secret).update(raw).digest("hex");
-  return safeEqualString(digest, signature.trim());
+  const normalized = normalizeSignature(signature);
+  if (!normalized) return false;
+
+  const hmac = crypto.createHmac("sha256", secret).update(raw);
+  const digestHex = hmac.digest("hex");
+  const digestBase64 = crypto
+    .createHmac("sha256", secret)
+    .update(raw)
+    .digest("base64");
+
+  return (
+    safeEqualString(digestHex, normalized) ||
+    safeEqualString(digestBase64, normalized)
+  );
+}
+
+function getSignature(req: NextRequest) {
+  const candidates = [
+    req.headers.get("x-seedhape-signature"),
+    req.headers.get("x-signature"),
+    req.headers.get("x-webhook-signature"),
+    req.headers.get("x-seedhape-hmac-sha256"),
+  ];
+  return candidates.find((v) => String(v || "").trim().length > 0)?.trim() || "";
 }
 
 function pickOrderInfo(payload: any) {
@@ -52,7 +81,7 @@ function pickOrderInfo(payload: any) {
 export async function POST(req: NextRequest) {
   try {
     const raw = await req.text();
-    const signature = String(req.headers.get("x-seedhape-signature") || "").trim();
+    const signature = getSignature(req);
     if (!signature) {
       return NextResponse.json({ error: "Missing signature" }, { status: 401 });
     }
