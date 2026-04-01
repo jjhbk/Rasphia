@@ -210,7 +210,7 @@ const REQUIRED_BY_INTENT: Record<WaIntent, string[]> = {
 const OPTIONAL_BY_INTENT: Partial<Record<WaIntent, string[]>> = {
   user_discover_products: ["query", "category", "maxPrice", "tag", "merchantSlug"],
   user_discover_merchants: ["query", "city"],
-  user_order_create: ["quantity", "merchantSlug"],
+  user_order_create: ["quantity", "merchantSlug", "shippingAddress", "addressChoice"],
   user_order_query: ["orderId", "activeOnly", "merchantSlug"],
   user_refund_request: ["details"],
   user_replacement_request: ["details"],
@@ -230,6 +230,10 @@ const FIELD_PROMPTS: Record<string, string> = {
   quantity: "Optionally share quantity (default is 1).",
   upiVerifiedName:
     "Please share your UPI verified name exactly as shown in your UPI app.",
+  shippingAddress:
+    "Please share your full delivery address for this order.",
+  addressChoice:
+    "Select a saved address by number (for example: addressOption=1), or share shippingAddress=...",
   maxPrice: "Optionally share a max price.",
   tag: "Optionally share a tag (for example: gift, decor, skincare).",
   businessName: "Please share your business name.",
@@ -263,6 +267,8 @@ function prettyFieldName(field: string) {
     query: "Search Query",
     quantity: "Quantity",
     upiVerifiedName: "UPI Verified Name",
+    shippingAddress: "Shipping Address",
+    addressChoice: "Address Option",
     maxPrice: "Max Price",
     tag: "Tag",
     city: "City",
@@ -329,7 +335,8 @@ function buildUnclearIntentTemplate(merchantStatus?: string) {
     "Example: my orders",
     "Example: track order orderId=ORD123",
     "6) Create an order and pay",
-    "Example: buy productName=Canvas Lamp quantity=2 upiVerifiedName=Rahul Kumar",
+    "Example: buy productName=Canvas Lamp quantity=2 upiVerifiedName=Rahul Kumar shippingAddress=Flat 4B, MG Road, Hyderabad 500001",
+    "If saved addresses are shown, select with: addressOption=1",
     "7) Confirm payment",
     "Example: confirm payment orderId=sp_ord_ab12cd34ef56",
     "8) Request refund",
@@ -398,7 +405,8 @@ function buildInitialUsageInstructions(args: {
     "3a) Enter merchant chat context",
     "Example: shop acme-decor",
     "4) Create order + get payment link",
-    "Example: buy productName=Canvas Lamp quantity=2 upiVerifiedName=Rahul Kumar",
+    "Example: buy productName=Canvas Lamp quantity=2 upiVerifiedName=Rahul Kumar shippingAddress=Flat 4B, MG Road, Hyderabad 500001",
+    "If saved addresses are shown, select with: addressOption=1",
     "5) Confirm payment",
     "Example: confirm payment orderId=sp_ord_ab12cd34ef56",
     "6) Track orders",
@@ -736,9 +744,25 @@ function fallbackIntent(message: string): IntentParse {
     text.includes("order product")
   ) {
     const qty = text.match(/(?:qty|quantity|x)\s*[:=]?\s*(\d{1,3})/)?.[1];
+    const optionMatch = text.match(
+      /(?:addressoption|addresschoice|use\s+address)\s*[:=]?\s*(\d{1,2})/i
+    )?.[1];
+    const productName =
+      text.match(/(?:productname|product|item|name)\s*[:=]\s*([^,\n]+)/i)?.[1] || "";
+    const upiVerifiedName =
+      text.match(/(?:upiverifiedname|upi\s*name|verified\s*name)\s*[:=]\s*([^,\n]+)/i)?.[1] ||
+      "";
+    const shippingAddress =
+      text.match(/(?:shippingaddress|address)\s*[:=]\s*(.+)$/i)?.[1] || "";
     return {
       intent: "user_order_create",
-      fields: qty ? { quantity: Number(qty) } : {},
+      fields: {
+        ...(qty ? { quantity: Number(qty) } : {}),
+        ...(optionMatch ? { addressChoice: Number(optionMatch) } : {}),
+        ...(productName ? { productName: productName.trim() } : {}),
+        ...(upiVerifiedName ? { upiVerifiedName: upiVerifiedName.trim() } : {}),
+        ...(shippingAddress ? { shippingAddress: shippingAddress.trim() } : {}),
+      },
     };
   }
   if (text.includes("wishlist") && (text.includes("view") || text.includes("show"))) {
@@ -802,6 +826,8 @@ async function inferIntent(
     "query",
     "quantity",
     "upiVerifiedName",
+    "shippingAddress",
+    "addressChoice",
     "maxPrice",
     "tag",
     "businessName",
@@ -846,6 +872,8 @@ Return strict JSON with shape:
     "query": string|null,
     "quantity": number|null,
     "upiVerifiedName": string|null,
+    "shippingAddress": string|null,
+    "addressChoice": number|null,
     "maxPrice": number|null,
     "tag": string|null,
     "businessName": string|null,
@@ -1338,6 +1366,52 @@ function pickPositiveInt(value: unknown, fallback = 1) {
   return Math.max(1, Math.floor(parsed));
 }
 
+function pickAddressChoice(value: unknown) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  const n = Math.floor(parsed);
+  if (n < 1) return null;
+  return n;
+}
+
+async function getSavedAddressesForUser(user: {
+  email: string;
+  address?: string | null;
+}) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const push = (value: unknown) => {
+    const v = String(value || "").trim();
+    if (!v) return;
+    const key = v.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(v);
+  };
+
+  push(user.address);
+  if (!user.email) return out;
+
+  const recentOrders = await prisma.order.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 80,
+    select: { customer: true },
+  });
+
+  for (const order of recentOrders) {
+    if (!order.customer || typeof order.customer !== "object" || Array.isArray(order.customer)) {
+      continue;
+    }
+    const customer = order.customer as Record<string, unknown>;
+    const email = String(customer.email || "").trim().toLowerCase();
+    if (email !== user.email.toLowerCase()) continue;
+    push(customer.address);
+    if (out.length >= 5) break;
+  }
+
+  return out;
+}
+
 const TERMINAL_SERVICE_REQUEST_STATUSES = new Set(["completed", "rejected"]);
 const REFUND_ELIGIBLE_ORDER_STATUSES = new Set([
   "paid",
@@ -1601,6 +1675,14 @@ async function handleUserOrderCreate(
   const productName = String(draft.productName || draft.name || "").trim();
   const quantity = pickPositiveInt(draft.quantity, 1);
   const upiVerifiedName = String(draft.upiVerifiedName || "").trim();
+  const directShippingAddress = String(draft.shippingAddress || "").trim();
+  const addressChoice = pickAddressChoice(draft.addressChoice);
+  const savedAddresses = await getSavedAddressesForUser(user);
+  const chosenSavedAddress =
+    addressChoice && addressChoice <= savedAddresses.length
+      ? savedAddresses[addressChoice - 1]
+      : "";
+  const shippingAddress = directShippingAddress || chosenSavedAddress;
   const product = await prisma.product.findFirst({
     where: {
       name: { contains: productName, mode: "insensitive" },
@@ -1616,6 +1698,37 @@ async function handleUserOrderCreate(
       reply: `No available product found matching "${productName}".`,
       nextIntent: undefined,
       nextDraft: {},
+    };
+  }
+
+  if (!shippingAddress) {
+    const checklist = buildIntentChecklist("user_order_create", draft);
+    const savedBlock = savedAddresses.length
+      ? [
+          "Saved addresses:",
+          ...savedAddresses.map((addr, idx) => `${idx + 1}) ${addr}`),
+          "Select one with: addressOption=1",
+          "",
+        ].join("\n")
+      : "";
+    return {
+      done: false,
+      reply: [
+        "Delivery address is required before creating the order.",
+        savedBlock,
+        "You can either:",
+        "1) Select a saved address: addressOption=<number>",
+        "2) Provide a new address: shippingAddress=<full address>",
+        "",
+        "Required address format:",
+        "House/Flat, Street/Area, City, State, PIN",
+        "Example: shippingAddress=Flat 4B, MG Road, Hyderabad, Telangana, 500001",
+        checklist,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      nextIntent: "user_order_create" as WaIntent,
+      nextDraft: draft,
     };
   }
 
@@ -1705,7 +1818,7 @@ async function handleUserOrderCreate(
         name: String(user.name || "").trim(),
         email: user.email,
         phone: String(user.phone || "").trim(),
-        address: String(user.address || "").trim(),
+        address: shippingAddress,
         upiVerifiedName: upiVerifiedName || null,
         channel: "whatsapp",
       },
@@ -1722,6 +1835,13 @@ async function handleUserOrderCreate(
     },
   });
 
+  if (user.email) {
+    await prisma.userProfile.updateMany({
+      where: { email: user.email },
+      data: { address: shippingAddress, updatedAt: new Date() },
+    });
+  }
+
   const links = buildSeedhapePaymentLinks(
     seedhapeOrder.id,
     seedhapeOrder.upiUri,
@@ -1736,6 +1856,7 @@ async function handleUserOrderCreate(
     `Item: ${product.name} x${quantity}`,
     `Amount: ₹${totalRupees}`,
     `UPI verified name: ${upiVerifiedName}`,
+    `Delivery address: ${shippingAddress}`,
     "",
     "Pay now:",
     seedhapeOrder.upiUri,

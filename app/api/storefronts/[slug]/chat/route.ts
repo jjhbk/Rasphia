@@ -39,6 +39,27 @@ function normalizeEmail(value: unknown) {
   return String(value || "").trim().toLowerCase();
 }
 
+function phoneVariants(input: string) {
+  const raw = String(input || "").trim();
+  const digits = raw.replace(/[^\d]/g, "");
+  const variants = new Set<string>();
+  if (raw) variants.add(raw);
+  if (digits) {
+    variants.add(digits);
+    variants.add(`+${digits}`);
+  }
+  if (digits.length === 12 && digits.startsWith("91")) {
+    const local = digits.slice(2);
+    variants.add(local);
+    variants.add(`+${local}`);
+  }
+  if (digits.length === 10) {
+    variants.add(`91${digits}`);
+    variants.add(`+91${digits}`);
+  }
+  return Array.from(variants).filter(Boolean);
+}
+
 function formatStorefrontMessage(lines: string[]) {
   return lines.filter(Boolean).join("\n");
 }
@@ -56,7 +77,7 @@ function buildStorefrontFirstMessageGuide(args: {
     "1) *Discover products*",
     "Example: discover products query=table lamp maxPrice=2000",
     "2) *Place order*",
-    "Example: buy product=Canvas Lamp qty=2",
+    "Example: buy product=Canvas Lamp qty=2 address=Flat 4B, MG Road, Hyderabad 500001",
     "3) *Track order / status*",
     "Example: my orders",
     "Example: track order orderId=sp_ord_ab12cd34ef56",
@@ -97,6 +118,13 @@ function extractReason(message: string) {
   return (
     message.match(/\breason\s*[:=]\s*(.+)$/i)?.[1] ||
     message.match(/\b(?:refund|replace(?:ment)?|cancel(?:lation)?)\b\s+(.+)$/i)?.[1] ||
+    ""
+  ).trim();
+}
+
+function extractShippingAddress(message: string) {
+  return (
+    message.match(/\b(?:shippingAddress|shipping_address|address)\s*[:=]\s*(.+)$/i)?.[1] ||
     ""
   ).trim();
 }
@@ -147,6 +175,23 @@ async function findUserProfileByEmail(email: string) {
   if (!email) return null;
   return prisma.userProfile.findUnique({
     where: { email },
+    select: { email: true, name: true, phone: true, address: true },
+  });
+}
+
+async function findUserProfileByIdentity(email: string, phone: string) {
+  const normalizedEmail = normalizeEmail(email);
+  if (normalizedEmail) {
+    const byEmail = await findUserProfileByEmail(normalizedEmail);
+    if (byEmail) return byEmail;
+  }
+
+  const variants = phoneVariants(phone);
+  if (!variants.length) return null;
+  return prisma.userProfile.findFirst({
+    where: {
+      OR: variants.map((v) => ({ phone: v })),
+    },
     select: { email: true, name: true, phone: true, address: true },
   });
 }
@@ -327,7 +372,37 @@ export async function POST(
 
     const normalizedMessage = message.toLowerCase();
     const userEmail = normalizeEmail(body?.userEmail);
-    const userProfile = await findUserProfileByEmail(userEmail);
+    const userPhone = String(body?.userPhone || body?.phone || body?.fromPhone || "").trim();
+    const userProfile = await findUserProfileByIdentity(userEmail, userPhone);
+
+    const needsUserIdentity =
+      isCreateOrderIntent(message) ||
+      isRefundIntent(message) ||
+      isReplacementIntent(message) ||
+      isCancellationIntent(message) ||
+      isActiveOrdersIntent(message) ||
+      isOrderDetailsIntent(message) ||
+      isMyOrdersIntent(message);
+
+    if (needsUserIdentity && !userProfile) {
+      return NextResponse.json(
+        {
+          text: formatStorefrontMessage([
+            "*Account required before continuing*",
+            "I could not find an account for this phone/email.",
+            "Please create your account first by sharing:",
+            "1) Name",
+            "2) Email",
+            "3) Phone number",
+            "",
+            "Example:",
+            "register name=Rahul email=rahul@example.com phone=+919876543210",
+          ]),
+          suggestedProducts: [],
+        },
+        { status: 200 }
+      );
+    }
     const isFirstMessage = history.length === 0;
 
     if (isFirstMessage && isGuideIntent(message)) {
@@ -354,6 +429,29 @@ export async function POST(
           },
           { status: 200 }
         );
+      }
+
+      const shippingAddress =
+        extractShippingAddress(message) || String(userProfile.address || "").trim();
+      if (!shippingAddress) {
+        return NextResponse.json(
+          {
+            text: formatStorefrontMessage([
+              "Please share your full delivery address before placing the order.",
+              "Example:",
+              "buy product=Canvas Lamp qty=2 address=Flat 4B, MG Road, Hyderabad 500001",
+            ]),
+            suggestedProducts: [],
+          },
+          { status: 200 }
+        );
+      }
+
+      if (!String(userProfile.address || "").trim() && userProfile.email) {
+        await prisma.userProfile.update({
+          where: { email: userProfile.email },
+          data: { address: shippingAddress, updatedAt: new Date() },
+        });
       }
 
       const productName = resolveProductNameFromMessage(message);
@@ -450,7 +548,7 @@ export async function POST(
             name: String(userProfile.name || "").trim(),
             email: userProfile.email,
             phone: String(userProfile.phone || "").trim(),
-            address: String(userProfile.address || "").trim(),
+            address: shippingAddress,
             channel: "storefront_chat",
             merchantSlug: slug,
           },
