@@ -35,7 +35,9 @@ export async function GET(req: NextRequest) {
     const merchantId = await resolveMerchantId(req);
     const ensured = await ensureMerchantSeedhapeDefaults(merchantId);
     const summary = await getMerchantSeedhapePublicSummary(merchantId);
-    const webhookUrl = `${req.nextUrl.origin}/api/seedhape-webhook`;
+    const webhookUrl = `${req.nextUrl.origin}/api/seedhape-webhook?merchantId=${encodeURIComponent(
+      merchantId
+    )}`;
 
     return NextResponse.json(
       {
@@ -80,7 +82,9 @@ export async function PUT(req: NextRequest) {
     });
 
     const summary = await getMerchantSeedhapePublicSummary(merchantId);
-    const webhookUrl = `${req.nextUrl.origin}/api/seedhape-webhook`;
+    const webhookUrl = `${req.nextUrl.origin}/api/seedhape-webhook?merchantId=${encodeURIComponent(
+      merchantId
+    )}`;
 
     return NextResponse.json(
       {

@@ -71,7 +71,6 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   );
   const [isSeedhapeModalOpen, setIsSeedhapeModalOpen] = useState(false);
   const [completionNotice, setCompletionNotice] = useState("");
-  const [awaitingManualClose, setAwaitingManualClose] = useState(false);
   const [pendingCustomer, setPendingCustomer] = useState<CheckoutCustomer | null>(
     null
   );
@@ -191,7 +190,6 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       setIsSeedhapeModalOpen(true);
       pendingPaymentsRef.current = rest;
       setPendingCustomer(normalizedCustomer);
-      setAwaitingManualClose(false);
       setCompletionNotice("");
       setPaymentStatusText(
         `Order created (1/${orders.length}). Complete payment in SeedhaPe.`
@@ -233,15 +231,22 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       }
 
       setCompletionNotice(
-        `Payment complete for order ${orderId}. Please click Complete Order to finish.`
+        `Payment complete for order ${orderId}. Finalizing your order...`
       );
       setPaymentStatusText(
-        "Payment verified. Review status and click Complete Order when ready."
+        "Payment verified. Finalizing order..."
       );
       setIsSeedhapeModalOpen(false);
       pendingPaymentsRef.current = [];
-      setAwaitingManualClose(true);
-      setIsProcessing(false);
+      window.setTimeout(() => {
+        setCompletionNotice("");
+        setPendingCustomer(null);
+        setIsProcessing(false);
+        if (normalizedCustomer) {
+          onPlaceOrder(normalizedCustomer, `seedhape_${orderId}`);
+        }
+        setActivePayment(null);
+      }, 1200);
       return;
     }
     if (verify.status === "expired") {
@@ -259,7 +264,6 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       setCompletionNotice(
         "This payment is disputed. Do not place this order until dispute is resolved."
       );
-      setAwaitingManualClose(false);
       setIsProcessing(false);
       return;
     }
@@ -446,7 +450,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
               onClose={() => {
                 setIsSeedhapeModalOpen(false);
                 setPaymentStatusText(
-                  "Payment window closed. Re-open or tap Check Payment Status."
+                  "Payment window closed."
                 );
               }}
               onSuccess={async (result) => {
@@ -474,61 +478,12 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
               {activePayment.seedhapeOrderId || activePayment.id}
             </p>
             <p className="mt-2 text-xs text-brand-stone">{paymentStatusText}</p>
-            {!awaitingManualClose && (
-              <div className="mt-3 flex items-center justify-end gap-2">
-                {!isSeedhapeModalOpen && (
-                  <>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-brand-sand px-3 py-1.5 text-xs font-medium text-brand-charcoal hover:bg-brand-parchment transition-colors"
-                      onClick={() => {
-                        const customerToUse = pendingCustomer || customer;
-                        checkPaymentStatus(activePayment.id, customerToUse).catch((err) => {
-                          console.error("Manual payment verify error:", err);
-                        });
-                      }}
-                    >
-                      Check Payment Status
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg bg-brand-charcoal px-3 py-1.5 text-xs font-medium text-brand-cream hover:bg-brand-warm-black transition-colors"
-                      onClick={() => setIsSeedhapeModalOpen(true)}
-                    >
-                      Re-open Payment
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
           </div>
         </>
       )}
       {!!completionNotice && (
         <div className="fixed bottom-4 left-1/2 z-[70] w-[min(92vw,560px)] -translate-x-1/2 rounded-2xl border border-green-200 bg-white/95 p-4 shadow-soft-xl backdrop-blur">
           <p className="text-sm font-medium text-green-700">{completionNotice}</p>
-          {awaitingManualClose && (
-            <div className="mt-3 flex justify-end">
-              <button
-                type="button"
-                className="rounded-lg bg-brand-charcoal px-3 py-2 text-xs font-medium text-brand-cream hover:bg-brand-warm-black transition-colors"
-                onClick={() => {
-                  if (!activePayment) return;
-                  const customerToUse = pendingCustomer || customer;
-                  onPlaceOrder(
-                    customerToUse,
-                    `seedhape_${activePayment.seedhapeOrderId || activePayment.id}`
-                  );
-                  setCompletionNotice("");
-                  setAwaitingManualClose(false);
-                  setPendingCustomer(null);
-                  setActivePayment(null);
-                }}
-              >
-                Complete Order
-              </button>
-            </div>
-          )}
         </div>
       )}
       </div>

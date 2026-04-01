@@ -137,6 +137,7 @@ export default function MerchantStorefrontPage() {
   const [isSavingSeedhape, setIsSavingSeedhape] = useState(false);
   const [isRotatingSecret, setIsRotatingSecret] = useState(false);
   const [seedhapeSuccess, setSeedhapeSuccess] = useState<string | null>(null);
+  const [webhookCopied, setWebhookCopied] = useState(false);
 
   const publicStoreUrl = useMemo(() => {
     if (!form.slug) return "";
@@ -347,7 +348,24 @@ export default function MerchantStorefrontPage() {
     }
   };
 
-  const webhookUrl = seedhape?.webhookUrl || `${origin || ""}/api/seedhape-webhook`;
+  const webhookUrl =
+    seedhape?.webhookUrl ||
+    `${origin || ""}/api/seedhape-webhook${
+      storefront?.id
+        ? `?merchantId=${encodeURIComponent(storefront.id)}`
+        : ""
+    }`;
+
+  const handleCopyWebhookUrl = async () => {
+    if (!webhookUrl) return;
+    try {
+      await navigator.clipboard.writeText(webhookUrl);
+      setWebhookCopied(true);
+      window.setTimeout(() => setWebhookCopied(false), 1400);
+    } catch {
+      setSeedhapeError("Could not copy webhook URL. Please copy it manually.");
+    }
+  };
 
   const saveSeedhapeSettings = async () => {
     try {
@@ -745,9 +763,24 @@ export default function MerchantStorefrontPage() {
             </button>
           </div>
 
-          <p className="mt-3 text-xs text-brand-stone break-all">
-            Common webhook URL: {webhookUrl}
-          </p>
+          <div className="mt-3">
+            <label className="text-xs text-brand-stone">Webhook URL</label>
+            <div className="mt-1 flex items-center gap-2">
+              <input
+                type="text"
+                value={webhookUrl}
+                readOnly
+                className="w-full rounded-xl border border-brand-sand/60 bg-brand-parchment/40 px-3 py-2 text-xs text-brand-charcoal"
+              />
+              <button
+                type="button"
+                onClick={handleCopyWebhookUrl}
+                className="rounded-full border border-brand-sand/60 bg-white px-4 py-2 text-xs text-brand-charcoal hover:bg-brand-cream"
+              >
+                {webhookCopied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </div>
           <p className="mt-1 text-xs text-brand-stone break-all">
             Common SeedhaPe API base URL: {seedhape?.baseUrl || "Not configured"}
           </p>
