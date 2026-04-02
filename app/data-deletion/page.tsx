@@ -33,10 +33,10 @@ export default function DataDeletionPage() {
           <p className="text-brand-stone text-sm leading-relaxed">
             Email us at{" "}
             <a
-              href="mailto:support@rasphia.com?subject=Data%20Deletion%20Request"
+              href="mailto:rasphia.ai@gmail.com?subject=Data%20Deletion%20Request"
               className="text-brand-terracotta hover:underline font-medium"
             >
-              support@rasphia.com
+              rasphia.ai@gmail.com
             </a>{" "}
             using the subject line <strong>Data Deletion Request</strong>.
           </p>
@@ -90,10 +90,10 @@ export default function DataDeletionPage() {
           <p className="text-brand-stone text-sm">
             Questions about deletion requests:{" "}
             <a
-              href="mailto:support@rasphia.com"
+              href="mailto:rasphia.ai@gmail.com"
               className="text-brand-terracotta hover:underline font-medium"
             >
-              support@rasphia.com
+              rasphia.ai@gmail.com
             </a>
           </p>
         </div>

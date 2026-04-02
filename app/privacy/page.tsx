@@ -73,10 +73,10 @@ export default function PrivacyPolicyPage() {
           <p className="text-brand-stone text-sm">
             For any privacy concerns, reach us at{" "}
             <a
-              href="mailto:support@rasphia.com"
+              href="mailto:rasphia.ai@gmail.com"
               className="text-brand-terracotta hover:underline font-medium"
             >
-              support@rasphia.com
+              rasphia.ai@gmail.com
             </a>
           </p>
         </div>
