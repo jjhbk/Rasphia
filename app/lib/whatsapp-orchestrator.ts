@@ -455,6 +455,34 @@ function buildInitialUsageInstructions(args: {
   ].join("\n");
 }
 
+function buildRoleSpecificQuickGuide(role: "merchant" | "user") {
+  if (role === "merchant") {
+    return [
+      "*Merchant Quick Guide*",
+      "1) Add product: add product name=... category=... price=... stockQuantity=...",
+      "2) Update product: update product productName=... price=... stockQuantity=...",
+      "3) Check stock: stock query <product name>",
+      "4) Active orders: active orders",
+      "5) Update order: update order status orderId=... status=Shipped",
+      "6) Bulk CSV help: bulk upload help",
+      "7) Restart chat: clear context",
+      "8) Switch role: switch to user",
+    ].join("\n");
+  }
+
+  return [
+    "*User Quick Guide*",
+    "1) Register: register userName=... userEmail=...",
+    "2) Discover: discover products query=... maxPrice=...",
+    "3) Buy: buy productName=... quantity=... upiVerifiedName=... shippingAddress=...",
+    "4) My orders: my orders",
+    "5) Track one: track order orderId=...",
+    "6) Service request: refund/replacement/cancel orderId=... reason=...",
+    "7) Restart chat: clear context",
+    "8) Switch role: switch to merchant",
+  ].join("\n");
+}
+
 function normalizePhone(input: string) {
   const digits = String(input || "").replace(/[^\d]/g, "");
   if (!digits) return "";
@@ -3117,11 +3145,7 @@ export async function processMerchantWhatsAppMessage(input: {
 
   if (!session.lastPrompt && shouldSendInitialGuide(inboundContextText)) {
     const reply = roleFromProfiles
-      ? buildInitialUsageInstructions({
-          merchantStatus: merchant?.status,
-          hasUserProfile: Boolean(userProfile),
-          hasMerchantProfile: Boolean(merchant),
-        })
+      ? buildRoleSpecificQuickGuide(roleFromProfiles)
       : buildRoleConfirmationPrompt({
           hasMerchantProfile: Boolean(merchant),
           hasUserProfile: Boolean(userProfile),
@@ -3621,7 +3645,12 @@ export async function processMerchantWhatsAppMessage(input: {
         ? "You are in USER mode. Merchant actions are blocked here. Reply 'switch to merchant' if you want merchant flow."
         : mediaUrl
         ? `Image received and attached. ${merchant?.status === "approved" ? "Tell me product details like name/category/price/stock." : "Please continue with registration details."}`
-        : buildUnclearIntentTemplate(merchant?.status),
+        : effectiveRole
+        ? buildRoleSpecificQuickGuide(effectiveRole)
+        : buildRoleConfirmationPrompt({
+            hasMerchantProfile: Boolean(merchant),
+            hasUserProfile: Boolean(userProfile),
+          }),
       nextIntent: mediaUrl
         ? merchant?.status === "approved"
           ? "product_upload"
@@ -3920,27 +3949,8 @@ export async function buildRoleAwareWhatsAppUsageTemplate(fromPhone: string) {
       : null;
   const role = sessionData?.activeRole;
 
-  const merchantTemplate = [
-    "*Merchant Quick Guide*",
-    "1) Add product: add product name=... category=... price=... stockQuantity=...",
-    "2) Update product: update product productName=... price=... stockQuantity=...",
-    "3) Check stock: stock query <product name>",
-    "4) Active orders: active orders",
-    "5) Update order: update order status orderId=... status=Shipped",
-    "6) Bulk CSV help: bulk upload help",
-    "7) Restart chat: clear context",
-  ].join("\n");
-
-  const userTemplate = [
-    "*User Quick Guide*",
-    "1) Register: register userName=... userEmail=...",
-    "2) Discover: discover products query=... maxPrice=...",
-    "3) Buy: buy productName=... quantity=... upiVerifiedName=... shippingAddress=...",
-    "4) My orders: my orders",
-    "5) Track one: track order orderId=...",
-    "6) Service request: refund/replacement/cancel orderId=... reason=...",
-    "7) Restart chat: clear context",
-  ].join("\n");
+  const merchantTemplate = buildRoleSpecificQuickGuide("merchant");
+  const userTemplate = buildRoleSpecificQuickGuide("user");
 
   if (role === "merchant") return merchantTemplate;
   if (role === "user") return userTemplate;
