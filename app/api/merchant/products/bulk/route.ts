@@ -111,9 +111,20 @@ function parseStringArray(value: string): string[] {
   }
 
   return input
-    .split(",")
+    .split(/[,\n;|]/)
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+}
+
+function parseLooseValue(raw: string): unknown {
+  const value = raw.trim();
+  if (!value) return "";
+  const lower = value.toLowerCase();
+  if (lower === "true") return true;
+  if (lower === "false") return false;
+  const maybeNumber = Number(value);
+  if (Number.isFinite(maybeNumber)) return maybeNumber;
+  return value;
 }
 
 function parseObject(value: string): Record<string, unknown> {
@@ -127,6 +138,21 @@ function parseObject(value: string): Record<string, unknown> {
   } catch {
     // no-op
   }
+
+  const out: Record<string, unknown> = {};
+  const pairs = input
+    .split(/[;\n|]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  for (const pair of pairs) {
+    const idx = pair.indexOf(":");
+    if (idx < 1) continue;
+    const key = pair.slice(0, idx).trim();
+    const rawValue = pair.slice(idx + 1).trim();
+    if (!key) continue;
+    out[key] = parseLooseValue(rawValue);
+  }
+  if (Object.keys(out).length > 0) return out;
   return {};
 }
 
@@ -310,38 +336,36 @@ export async function POST(req: NextRequest) {
 
     const createdIds: string[] = [];
 
-    await prisma.$transaction(async (tx) => {
-      for (const product of validProducts) {
-        const created = await tx.product.create({
-          data: {
-            merchantId: merchant.id,
-            merchantEmail: merchant.email,
-            name: product.name,
-            brand: product.brand,
-            description: product.description,
-            category: product.category,
-            price: product.price,
-            imageUrl: product.imageUrl,
-            tags: product.tags,
-            occasion: product.occasion,
-            recipient: product.recipient,
-            story: product.story,
-            affiliateLink: product.affiliateLink,
-            attributes: product.attributes as Prisma.InputJsonValue,
-            styleTags: product.styleTags,
-            colorPalette: product.colorPalette,
-            materials: product.materials,
-            stockQuantity: product.stockQuantity,
-            isAvailable: product.isAvailable,
-            embedding: Prisma.JsonNull,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-          select: { id: true },
-        });
-        createdIds.push(created.id);
-      }
-    });
+    for (const product of validProducts) {
+      const created = await prisma.product.create({
+        data: {
+          merchantId: merchant.id,
+          merchantEmail: merchant.email,
+          name: product.name,
+          brand: product.brand,
+          description: product.description,
+          category: product.category,
+          price: product.price,
+          imageUrl: product.imageUrl,
+          tags: product.tags,
+          occasion: product.occasion,
+          recipient: product.recipient,
+          story: product.story,
+          affiliateLink: product.affiliateLink,
+          attributes: product.attributes as Prisma.InputJsonValue,
+          styleTags: product.styleTags,
+          colorPalette: product.colorPalette,
+          materials: product.materials,
+          stockQuantity: product.stockQuantity,
+          isAvailable: product.isAvailable,
+          embedding: Prisma.JsonNull,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        select: { id: true },
+      });
+      createdIds.push(created.id);
+    }
 
     createdIds.forEach((id) => {
       generateProductEmbedding(id).catch(() => {});

@@ -377,6 +377,7 @@ function buildUnclearIntentTemplate(merchantStatus?: string) {
     "Notes:",
     "- I auto-detect whether this number is acting as a user or merchant from your message + registration state.",
     "- For merchant-scoped user flows, set merchant context first: shop <merchant-slug>.",
+    "- To reset chat and session context: clear context",
     "- For sensitive actions (stock=0, order status change), I will ask YES/NO confirmation.",
     "- You can also send a product image; I will attach it to product upload/update draft.",
     "",
@@ -445,6 +446,7 @@ function buildInitialUsageInstructions(args: {
     "NOTES",
     "- For sensitive actions, I will ask YES/NO confirmation.",
     "- To use merchant-scoped user flows, first set context: shop <merchant-slug>. Use 'clear merchant' to exit.",
+    "- To restart WhatsApp context from scratch: clear context",
     "- You can send product images and I will attach them to product drafts.",
     `- ${userStatusLine}`,
     `- ${merchantStatusLine}`,
@@ -570,6 +572,26 @@ function extractMerchantSlugFromText(text: string) {
 function shouldClearMerchantContext(text: string) {
   const t = String(text || "").trim().toLowerCase();
   return /\b(clear|exit|leave|reset)\s+(merchant|shop|store)\b/.test(t);
+}
+
+function shouldResetWhatsAppContext(text: string) {
+  const t = String(text || "").trim().toLowerCase();
+  if (!t) return false;
+  if (
+    [
+      "clear context",
+      "reset context",
+      "restart chat",
+      "reset chat",
+      "clear chat",
+      "restart session",
+      "reset session",
+      "start over",
+    ].includes(t)
+  ) {
+    return true;
+  }
+  return /\b(clear|reset|restart)\b.*\b(chat|context|session)\b/.test(t);
 }
 
 async function resolveMerchantContext(args: {
@@ -2350,8 +2372,8 @@ async function handleMerchantBulkUploadHelp(merchant: {
 
   const base = resolvePublicBaseUrl();
   const storefrontUrl = base
-    ? `${base}/merchant/storefront#bulk-product-upload`
-    : "/merchant/storefront#bulk-product-upload";
+    ? `${base}/admin#bulk-product-upload`
+    : "/admin#bulk-product-upload";
   const templateUrl = base
     ? `${base}/templates/merchant-products-bulk-upload-sample.csv`
     : "/templates/merchant-products-bulk-upload-sample.csv";
@@ -3047,6 +3069,30 @@ export async function processMerchantWhatsAppMessage(input: {
       messageId: input.messageId,
       intent: session.activeIntent,
     });
+  }
+
+  if (shouldResetWhatsAppContext(inboundContextText)) {
+    await prisma.whatsappChatMessage.deleteMany({
+      where: { sessionId },
+    });
+    const reply =
+      "Context cleared and session restarted.\nReply USER or MERCHANT to continue.";
+    const formattedReply = formatWhatsAppMarkdown(reply);
+    await saveSession(phone, {
+      activeRole: undefined,
+      activeIntent: undefined,
+      draft: {},
+      activeMerchantId: undefined,
+      activeMerchantSlug: undefined,
+      activeMerchantName: undefined,
+      lastPrompt: formattedReply,
+      processedMessageIds: input.messageId ? [input.messageId] : [],
+      pendingRoleSelection: true,
+      pendingConfirmation: null,
+    });
+    await appendConversationMessage(sessionId, "assistant", formattedReply);
+    await pruneConversation(sessionId);
+    return formattedReply;
   }
 
   if (shouldClearMerchantContext(inboundContextText)) {
@@ -3882,6 +3928,7 @@ export async function buildRoleAwareWhatsAppUsageTemplate(fromPhone: string) {
     "4) Active orders: active orders",
     "5) Update order: update order status orderId=... status=Shipped",
     "6) Bulk CSV help: bulk upload help",
+    "7) Restart chat: clear context",
   ].join("\n");
 
   const userTemplate = [
@@ -3892,6 +3939,7 @@ export async function buildRoleAwareWhatsAppUsageTemplate(fromPhone: string) {
     "4) My orders: my orders",
     "5) Track one: track order orderId=...",
     "6) Service request: refund/replacement/cancel orderId=... reason=...",
+    "7) Restart chat: clear context",
   ].join("\n");
 
   if (role === "merchant") return merchantTemplate;
