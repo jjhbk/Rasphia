@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Navbar from "@/app/components/Navbar";
 
 export const metadata: Metadata = {
   title: "Terms of Service | Rasphia",
@@ -75,6 +76,7 @@ export default function TermsOfServicePage() {
 
   return (
     <div className="min-h-screen bg-brand-cream text-brand-charcoal font-body">
+      <Navbar />
       <div className="relative overflow-hidden bg-brand-parchment border-b border-brand-sand/40">
         <div className="absolute inset-0 bg-gradient-to-br from-brand-parchment via-brand-cream to-brand-sand/20 pointer-events-none" />
         <div className="relative mx-auto max-w-4xl px-6 py-20 lg:px-8">

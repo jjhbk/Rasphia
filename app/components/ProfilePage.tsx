@@ -3,7 +3,18 @@ import React, { useEffect, useState } from "react";
 import type { UserProfile, Order, Product, OrderStatus } from "../types";
 import CartModal from "./CartModal";
 import ProductCard from "./ProductCard";
-import { ArrowLeft, User, Package, Heart, ShoppingCart } from "lucide-react";
+import {
+  ArrowLeft,
+  User,
+  Package,
+  Heart,
+  ShoppingCart,
+  Settings,
+  RotateCcw,
+  Edit3,
+  Check,
+  X,
+} from "lucide-react";
 import BrandLogo from "./brand/BrandLogo";
 
 interface ProfilePageProps {
@@ -17,10 +28,12 @@ interface ProfilePageProps {
   onRemoveFromCart: (product: Product) => void;
 }
 
+type Tab = "profile" | "orders" | "wishlist" | "requests";
+
 const statusStyles: Record<OrderStatus, string> = {
   created:     "bg-brand-parchment text-brand-stone border-brand-sand/50",
   paid:        "bg-green-50 text-green-700 border-green-200",
-  Processing:  "bg-brand-parchment text-brand-terracotta border-brand-clay/30",
+  Processing:  "bg-amber-50 text-amber-700 border-amber-200",
   Shipped:     "bg-blue-50 text-blue-700 border-blue-200",
   Delivered:   "bg-green-50 text-green-700 border-green-200",
   Paid:        "bg-green-50 text-green-700 border-green-200",
@@ -59,6 +72,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     details?: string | null;
     createdAt: string;
   };
+
+  const [activeTab, setActiveTab] = useState<Tab>("profile");
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState<UserProfile>(user);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -72,13 +87,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     type: "refund" | "replacement" | "cancellation" | null;
     reason: string;
     details: string;
-  }>({
-    open: false,
-    orderId: "",
-    type: null,
-    reason: "",
-    details: "",
-  });
+  }>({ open: false, orderId: "", type: null, reason: "", details: "" });
 
   useEffect(() => {
     const loadProfileAndOrders = async () => {
@@ -90,13 +99,18 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
         const profileData = await profileRes.json();
         const ordersData = await ordersRes.json();
         const serviceRequestsRes = await fetch("/api/orders/service-requests");
-        const serviceRequestsData = serviceRequestsRes.ok
-          ? await serviceRequestsRes.json()
-          : [];
+        const serviceRequestsData = serviceRequestsRes.ok ? await serviceRequestsRes.json() : [];
+
         const normalizedOrders: Order[] = (ordersData || []).map((o: any) => ({
           ...o,
           id: o.orderId ?? o.order_id ?? o.id ?? o._id,
-          products: Array.isArray(o.products) ? o.products : o.product ? [o.product] : Array.isArray(o.items) ? o.items : [],
+          products: Array.isArray(o.products)
+            ? o.products
+            : o.product
+            ? [o.product]
+            : Array.isArray(o.items)
+            ? o.items
+            : [],
         }));
         const normalizedServiceRequests: UserServiceRequest[] = (serviceRequestsData || []).map(
           (r: any) => ({
@@ -110,6 +124,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
             createdAt: r.createdAt,
           })
         );
+
         if (profileData) setProfile(profileData);
         if (normalizedOrders) setOrders(normalizedOrders);
         setServiceRequests(normalizedServiceRequests);
@@ -149,7 +164,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
           details: requestModal.details.trim() || undefined,
         }),
       });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d?.error || "Failed"); }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d?.error || "Failed");
+      }
       const created = await res.json();
       setServiceRequests((prev) => [
         {
@@ -164,13 +182,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
         },
         ...prev,
       ]);
-      setRequestModal({
-        open: false,
-        orderId: "",
-        type: null,
-        reason: "",
-        details: "",
-      });
+      setRequestModal({ open: false, orderId: "", type: null, reason: "", details: "" });
       alert(
         `${
           requestModal.type === "refund"
@@ -189,7 +201,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
   };
 
   const formatPrice = (price: number) =>
-    new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0 }).format(price);
+    new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      minimumFractionDigits: 0,
+    }).format(price);
 
   if (loading)
     return (
@@ -201,153 +217,241 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
       </div>
     );
 
-  const inputClass = "w-full px-3 py-2 rounded-xl bg-brand-parchment/50 border border-brand-sand/50 text-sm text-brand-charcoal focus:outline-none focus:border-brand-terracotta/40 focus:ring-2 focus:ring-brand-terracotta/10 transition-all";
-  const sectionIcon = "h-8 w-8 flex items-center justify-center rounded-xl flex-shrink-0";
+  const inputClass =
+    "w-full px-3 py-2 rounded-xl bg-white border border-brand-sand/60 text-sm text-brand-charcoal focus:outline-none focus:border-brand-terracotta/50 focus:ring-2 focus:ring-brand-terracotta/10 transition-all";
+
+  const tabs: { id: Tab; label: string; icon: React.ReactNode; count?: number }[] = [
+    { id: "profile", label: "Profile", icon: <User className="h-4 w-4" /> },
+    { id: "orders", label: "Orders", icon: <Package className="h-4 w-4" />, count: orders.length || undefined },
+    { id: "wishlist", label: "Wishlist", icon: <Heart className="h-4 w-4" />, count: profile.wishlist?.length || undefined },
+    { id: "requests", label: "Requests", icon: <RotateCcw className="h-4 w-4" />, count: serviceRequests.length || undefined },
+  ];
+
+  // --- Summary stats ---
+  const totalSpend = orders.reduce(
+    (sum, o) =>
+      sum +
+      ((o as any).products ?? []).reduce(
+        (s: number, p: Product) => s + (p.price || 0) * (p.quantity || 1),
+        0
+      ),
+    0
+  );
 
   return (
-    <div className="relative h-screen w-full bg-brand-cream overflow-hidden p-2 sm:p-3 font-body">
-      <div className="absolute inset-0 bg-brand-hero -z-10" />
+    <div className="relative h-screen w-full bg-brand-hero overflow-hidden font-body">
+      <div className="absolute inset-0 -z-10">
+        <div className="absolute -top-20 right-[-5%] h-80 w-80 rounded-full bg-brand-clay/15 blur-[90px]" />
+        <div className="absolute bottom-[-10%] left-[10%] h-60 w-60 rounded-full bg-brand-sage/12 blur-[80px]" />
+      </div>
 
-      <div className="w-full max-w-5xl mx-auto h-full bg-white/80 backdrop-blur-xl border border-brand-sand/30 rounded-3xl shadow-soft-md overflow-hidden flex flex-col">
+      <div className="h-full w-full max-w-5xl mx-auto flex flex-col p-2 sm:p-3">
         {/* Header */}
-        <header className="flex-shrink-0 h-14 px-5 flex items-center justify-between border-b border-brand-sand/30 bg-white/50 backdrop-blur-md">
+        <header className="flex-shrink-0 h-14 px-4 flex items-center justify-between bg-white/70 backdrop-blur-xl border border-brand-sand/40 rounded-2xl mb-3 shadow-soft">
           <div className="flex items-center gap-3">
             <button
               onClick={onBack}
-              className="p-2 rounded-xl hover:bg-brand-parchment text-brand-stone hover:text-brand-charcoal transition-colors"
+              className="h-8 w-8 flex items-center justify-center rounded-xl hover:bg-brand-parchment text-brand-stone hover:text-brand-charcoal transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
-            <h1 className="text-sm font-semibold text-brand-charcoal font-heading">
-              My Profile
-            </h1>
+            <BrandLogo size={24} showWordmark wordmarkClassName="text-[13px] font-semibold hidden sm:block" />
+            <span className="text-brand-sand/60 hidden sm:block">·</span>
+            <h1 className="text-sm font-semibold text-brand-charcoal font-heading">My Account</h1>
           </div>
-          {!isEditing && (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="px-4 py-1.5 rounded-xl bg-brand-charcoal text-brand-cream text-xs font-medium hover:bg-brand-warm-black transition-colors"
-            >
-              Edit details
-            </button>
-          )}
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="relative h-9 w-9 flex items-center justify-center rounded-xl bg-white border border-brand-sand/50 text-brand-stone hover:text-brand-charcoal hover:bg-brand-parchment transition-colors shadow-soft"
+            aria-label="View cart"
+          >
+            <ShoppingCart className="h-4 w-4" />
+            {cart.length > 0 && (
+              <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 rounded-full bg-brand-coral text-white text-[9px] font-bold flex items-center justify-center">
+                {cart.length}
+              </span>
+            )}
+          </button>
         </header>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-5 sm:p-8">
-          <div className="max-w-4xl mx-auto space-y-8">
-            {/* Personal info */}
-            <section>
-              <div className="flex items-center gap-3 mb-5">
-                <div className={`${sectionIcon} bg-brand-parchment text-brand-terracotta`}>
-                  <User className="h-4 w-4" />
-                </div>
-                <h2 className="text-base font-semibold text-brand-charcoal font-heading">
-                  Personal information
-                </h2>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white/50 border border-brand-sand/30 p-5 rounded-2xl">
-                {["name", "email", "phone", "address"].map((field) => (
-                  <div key={field} className="space-y-1.5">
-                    <label className="text-[10px] uppercase tracking-widest font-medium text-brand-stone/60">
-                      {field === "email" ? "Email address" : field}
-                    </label>
-                    {isEditing ? (
-                      field === "address" ? (
-                        <textarea rows={2} value={profile.address}
-                          onChange={(e) => setProfile({ ...profile, address: e.target.value })}
-                          className={`${inputClass} resize-none`} />
-                      ) : (
-                        <input
-                          value={profile[field as keyof UserProfile] as string}
-                          onChange={(e) => setProfile({ ...profile, [field]: e.target.value })}
-                          className={inputClass}
-                        />
-                      )
-                    ) : (
-                      <div className="px-3 py-2 rounded-xl bg-brand-parchment/40 border border-brand-sand/30 text-sm text-brand-charcoal min-h-[38px] flex items-center">
-                        {(profile[field as keyof UserProfile] as string) || (
-                          <span className="text-brand-stone/40 italic font-normal text-xs">Not set</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {isEditing && (
-                <div className="mt-4 flex justify-end gap-2">
-                  <button onClick={() => setIsEditing(false)}
-                    className="px-4 py-1.5 text-xs font-medium text-brand-stone hover:bg-brand-parchment rounded-xl transition-colors">
-                    Cancel
-                  </button>
-                  <button onClick={handleSave}
-                    className="px-4 py-1.5 text-xs font-medium text-brand-cream bg-brand-charcoal hover:bg-brand-warm-black rounded-xl transition-colors shadow-soft">
-                    Save changes
-                  </button>
-                </div>
-              )}
-            </section>
+        {/* Main content */}
+        <div className="flex-1 overflow-hidden flex flex-col bg-white/75 backdrop-blur-xl border border-brand-sand/30 rounded-2xl shadow-soft-md">
 
-            {/* Wishlist */}
-            <section>
-              <div className="flex items-center gap-3 mb-5">
-                <div className={`${sectionIcon} bg-brand-parchment text-brand-coral`}>
-                  <Heart className="h-4 w-4" />
-                </div>
-                <h2 className="text-base font-semibold text-brand-charcoal font-heading">
-                  Wishlist
-                </h2>
+          {/* User hero band */}
+          <div className="flex-shrink-0 px-6 py-5 border-b border-brand-sand/30 bg-gradient-to-r from-brand-parchment/60 to-transparent flex items-center gap-4">
+            <div className="h-14 w-14 rounded-2xl bg-brand-terracotta/10 border border-brand-sand/40 flex items-center justify-center flex-shrink-0 shadow-soft">
+              {(profile as any).profileImage ? (
+                <img src={(profile as any).profileImage} className="h-full w-full object-cover rounded-2xl" alt="avatar" />
+              ) : (
+                <span className="text-xl font-semibold text-brand-terracotta font-heading">
+                  {(profile.name?.[0] ?? profile.email?.[0] ?? "?").toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <h2 className="font-heading text-lg text-brand-charcoal truncate">{profile.name || "Your Account"}</h2>
+              <p className="text-xs text-brand-stone truncate">{profile.email}</p>
+            </div>
+            <div className="ml-auto hidden sm:flex items-center gap-4">
+              <div className="text-center">
+                <p className="font-heading text-xl text-brand-charcoal">{orders.length}</p>
+                <p className="text-[10px] text-brand-stone uppercase tracking-widest">Orders</p>
               </div>
-              {profile.wishlist?.length ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {profile.wishlist.map((product) => (
-                    <ProductCard key={product.name} product={product}
-                      onAddToCart={onAddToCart} wishlist={profile.wishlist}
-                      onToggleWishlist={onToggleWishlist} />
+              <div className="h-8 w-px bg-brand-sand/40" />
+              <div className="text-center">
+                <p className="font-heading text-xl text-brand-charcoal">{profile.wishlist?.length ?? 0}</p>
+                <p className="text-[10px] text-brand-stone uppercase tracking-widest">Wishlist</p>
+              </div>
+              <div className="h-8 w-px bg-brand-sand/40" />
+              <div className="text-center">
+                <p className="font-heading text-xl text-brand-terracotta">{formatPrice(totalSpend)}</p>
+                <p className="text-[10px] text-brand-stone uppercase tracking-widest">Spent</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Tab bar */}
+          <div className="flex-shrink-0 flex border-b border-brand-sand/30 bg-white/40 px-2 gap-0.5 overflow-x-auto">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? "border-brand-terracotta text-brand-charcoal"
+                    : "border-transparent text-brand-stone hover:text-brand-charcoal hover:bg-brand-parchment/40"
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+                {tab.count !== undefined && tab.count > 0 && (
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                    activeTab === tab.id ? "bg-brand-terracotta/10 text-brand-terracotta" : "bg-brand-sand/40 text-brand-stone"
+                  }`}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+
+            {/* ── PROFILE TAB ── */}
+            {activeTab === "profile" && (
+              <div className="max-w-2xl space-y-5">
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="font-heading text-base text-brand-charcoal flex items-center gap-2">
+                    <Settings className="h-4 w-4 text-brand-stone" />
+                    Personal information
+                  </h3>
+                  {!isEditing && (
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-brand-charcoal bg-brand-parchment border border-brand-sand/50 rounded-xl hover:bg-brand-sand/30 transition-colors"
+                    >
+                      <Edit3 className="h-3.5 w-3.5" />
+                      Edit
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-5 bg-white/60 border border-brand-sand/30 rounded-2xl">
+                  {(["name", "email", "phone", "address"] as const).map((field) => (
+                    <div key={field} className={field === "address" ? "sm:col-span-2" : ""}>
+                      <label className="text-[10px] uppercase tracking-widest font-semibold text-brand-stone/60 block mb-1.5">
+                        {field === "email" ? "Email address" : field}
+                      </label>
+                      {isEditing ? (
+                        field === "address" ? (
+                          <textarea
+                            rows={2}
+                            value={profile.address}
+                            onChange={(e) => setProfile({ ...profile, address: e.target.value })}
+                            className={`${inputClass} resize-none`}
+                          />
+                        ) : (
+                          <input
+                            value={profile[field as keyof UserProfile] as string}
+                            onChange={(e) => setProfile({ ...profile, [field]: e.target.value })}
+                            className={inputClass}
+                          />
+                        )
+                      ) : (
+                        <div className="px-3 py-2 rounded-xl bg-brand-parchment/40 border border-brand-sand/30 text-sm text-brand-charcoal min-h-[38px] flex items-center">
+                          {(profile[field as keyof UserProfile] as string) || (
+                            <span className="text-brand-stone/40 italic text-xs">Not set</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
-              ) : (
-                <div className="py-10 rounded-2xl border border-dashed border-brand-sand/50 bg-brand-parchment/20 text-center">
-                  <Heart className="h-8 w-8 text-brand-sand mx-auto mb-2" />
-                  <p className="text-sm text-brand-stone/60">Your wishlist is empty.</p>
-                </div>
-              )}
-            </section>
 
-            {/* Orders */}
-            <section className="pb-6">
-              <div className="flex items-center gap-3 mb-5">
-                <div className={`${sectionIcon} bg-brand-parchment text-brand-sage`}>
-                  <Package className="h-4 w-4" />
-                </div>
-                <h2 className="text-base font-semibold text-brand-charcoal font-heading">
-                  Order history
-                </h2>
+                {isEditing && (
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setIsEditing(false)}
+                      className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-brand-stone border border-brand-sand/50 rounded-xl hover:bg-brand-parchment transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-brand-charcoal rounded-xl hover:bg-brand-warm-black transition-colors shadow-soft"
+                    >
+                      <Check className="h-4 w-4" />
+                      Save changes
+                    </button>
+                  </div>
+                )}
               </div>
-              {orders.length ? (
-                <div className="space-y-3">
-                  {orders.map((order) => {
-                    const items: Product[] = (order as any).products ?? ((order as any).product ? [(order as any).product] : []);
+            )}
+
+            {/* ── ORDERS TAB ── */}
+            {activeTab === "orders" && (
+              <div className="space-y-3">
+                {orders.length === 0 ? (
+                  <div className="py-16 text-center">
+                    <div className="h-16 w-16 rounded-2xl bg-brand-parchment/60 border border-brand-sand/40 flex items-center justify-center mx-auto mb-4">
+                      <Package className="h-7 w-7 text-brand-sand" />
+                    </div>
+                    <p className="font-medium text-brand-charcoal">No orders yet</p>
+                    <p className="text-sm text-brand-stone mt-1">Your purchases will appear here.</p>
+                  </div>
+                ) : (
+                  orders.map((order) => {
+                    const items: Product[] =
+                      (order as any).products ??
+                      ((order as any).product ? [(order as any).product] : []);
                     const firstProduct = items[0] || {};
                     const trackingNumber = (order as any).trackingNumber as string | undefined;
                     const trackingUrl = (order as any).trackingUrl as string | undefined;
                     const shippingProvider = (order as any).shippingProvider as string | undefined;
                     const estimatedDelivery = (order as any).estimatedDelivery as string | undefined;
-                    const normalizedOrderStatus = String(order.status || "").trim().toLowerCase();
-                    const isDelivered = normalizedOrderStatus === "delivered";
-                    const canCancel = ["created", "paid", "processing"].includes(
-                      normalizedOrderStatus
-                    );
+                    const normalizedStatus = String(order.status || "").trim().toLowerCase();
+                    const isDelivered = normalizedStatus === "delivered";
+                    const canCancel = ["created", "paid", "processing"].includes(normalizedStatus);
 
                     return (
-                      <div key={order.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 bg-white/60 border border-brand-sand/30 rounded-2xl hover:shadow-soft transition-all">
-                        <div className="h-14 w-14 rounded-xl overflow-hidden flex-shrink-0 border border-brand-sand/20">
-                          <img src={firstProduct.imageUrl || "/placeholder.png"} alt={firstProduct.name || "Product"}
-                            className="w-full h-full object-cover" />
+                      <div
+                        key={order.id}
+                        className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 bg-white/70 border border-brand-sand/30 rounded-2xl hover:shadow-soft transition-all"
+                      >
+                        <div className="h-16 w-16 rounded-xl overflow-hidden flex-shrink-0 border border-brand-sand/20 bg-brand-parchment/40">
+                          <img
+                            src={firstProduct.imageUrl || "/placeholder.png"}
+                            alt={firstProduct.name || "Product"}
+                            className="w-full h-full object-cover"
+                          />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <h3 className="text-sm font-medium text-brand-charcoal truncate">
-                              {items.length > 1 ? `${firstProduct.name} + ${items.length - 1} more` : firstProduct.name}
+                            <h3 className="text-sm font-semibold text-brand-charcoal truncate">
+                              {items.length > 1
+                                ? `${firstProduct.name} + ${items.length - 1} more`
+                                : firstProduct.name}
                             </h3>
                             <OrderStatusBadge status={order.status} />
                           </div>
@@ -356,60 +460,98 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             <div className="mt-1.5 text-xs text-brand-stone/70 space-y-0.5">
                               {shippingProvider && <p>Carrier: {shippingProvider}</p>}
                               {trackingNumber && (
-                                <p>Tracking: {trackingUrl ? (
-                                  <a href={trackingUrl} target="_blank" rel="noreferrer" className="text-brand-terracotta underline">{trackingNumber}</a>
-                                ) : trackingNumber}</p>
+                                <p>
+                                  Tracking:{" "}
+                                  {trackingUrl ? (
+                                    <a
+                                      href={trackingUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-brand-terracotta underline"
+                                    >
+                                      {trackingNumber}
+                                    </a>
+                                  ) : (
+                                    trackingNumber
+                                  )}
+                                </p>
                               )}
                               {estimatedDelivery && (
-                                <p>ETA: {new Date(estimatedDelivery).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                                <p>
+                                  ETA:{" "}
+                                  {new Date(estimatedDelivery).toLocaleDateString("en-IN", {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                  })}
+                                </p>
                               )}
                             </div>
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-2 flex-shrink-0">
                           <p className="font-semibold text-brand-charcoal text-base">
-                            {formatPrice(items.reduce((sum, p) => sum + (p.price || 0) * (p.quantity || 1), 0))}
+                            {formatPrice(
+                              items.reduce(
+                                (sum, p) => sum + (p.price || 0) * (p.quantity || 1),
+                                0
+                              )
+                            )}
                           </p>
                           <div className="flex gap-1.5 flex-wrap justify-end">
                             {isDelivered && !order.isReviewed && (
-                              <button onClick={() => onStartReview(order)}
-                                className="px-2.5 py-1 text-[10px] font-medium text-brand-terracotta bg-brand-parchment border border-brand-sand/40 rounded-full hover:bg-brand-sand/30 transition-colors">
+                              <button
+                                onClick={() => onStartReview(order)}
+                                className="px-2.5 py-1 text-[10px] font-medium text-brand-terracotta bg-brand-parchment border border-brand-sand/40 rounded-full hover:bg-brand-sand/30 transition-colors"
+                              >
                                 Review
                               </button>
                             )}
                             {isDelivered && (
                               <>
-                                <button onClick={() => setRequestModal({
-                                  open: true,
-                                  orderId: order.id,
-                                  type: "refund",
-                                  reason: "",
-                                  details: "",
-                                })}
-                                  className="px-2.5 py-1 text-[10px] font-medium text-red-700 bg-red-50 border border-red-200 rounded-full hover:bg-red-100 transition-colors">
+                                <button
+                                  onClick={() =>
+                                    setRequestModal({
+                                      open: true,
+                                      orderId: order.id,
+                                      type: "refund",
+                                      reason: "",
+                                      details: "",
+                                    })
+                                  }
+                                  className="px-2.5 py-1 text-[10px] font-medium text-red-700 bg-red-50 border border-red-200 rounded-full hover:bg-red-100 transition-colors"
+                                >
                                   Refund
                                 </button>
-                                <button onClick={() => setRequestModal({
-                                  open: true,
-                                  orderId: order.id,
-                                  type: "replacement",
-                                  reason: "",
-                                  details: "",
-                                })}
-                                  className="px-2.5 py-1 text-[10px] font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-full hover:bg-blue-100 transition-colors">
+                                <button
+                                  onClick={() =>
+                                    setRequestModal({
+                                      open: true,
+                                      orderId: order.id,
+                                      type: "replacement",
+                                      reason: "",
+                                      details: "",
+                                    })
+                                  }
+                                  className="px-2.5 py-1 text-[10px] font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-full hover:bg-blue-100 transition-colors"
+                                >
                                   Replace
                                 </button>
                               </>
                             )}
                             {canCancel && (
-                              <button onClick={() => setRequestModal({
-                                open: true,
-                                orderId: order.id,
-                                type: "cancellation",
-                                reason: "",
-                                details: "",
-                              })}
-                                className="px-2.5 py-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full hover:bg-amber-100 transition-colors">
+                              <button
+                                onClick={() =>
+                                  setRequestModal({
+                                    open: true,
+                                    orderId: order.id,
+                                    type: "cancellation",
+                                    reason: "",
+                                    details: "",
+                                  })
+                                }
+                                className="px-2.5 py-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full hover:bg-amber-100 transition-colors"
+                              >
                                 Cancel
                               </button>
                             )}
@@ -417,71 +559,106 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                         </div>
                       </div>
                     );
-                  })}
-                </div>
-              ) : (
-                <div className="py-10 rounded-2xl border border-dashed border-brand-sand/50 bg-brand-parchment/20 text-center">
-                  <Package className="h-8 w-8 text-brand-sand mx-auto mb-2" />
-                  <p className="text-sm text-brand-stone/60">No orders yet.</p>
-                </div>
-              )}
-            </section>
+                  })
+                )}
+              </div>
+            )}
 
-            <section>
-              <h2 className="text-base font-semibold text-brand-charcoal font-heading mb-4">
-                Refund / Replacement / Cancellation Requests
-              </h2>
-              {serviceRequests.length === 0 ? (
-                <div className="py-6 rounded-2xl border border-dashed border-brand-sand/50 bg-brand-parchment/20 text-center">
-                  <p className="text-sm text-brand-stone/60">No requests submitted yet.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {serviceRequests.map((req) => (
+            {/* ── WISHLIST TAB ── */}
+            {activeTab === "wishlist" && (
+              <div>
+                {profile.wishlist?.length ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {profile.wishlist.map((product) => (
+                      <ProductCard
+                        key={product.name}
+                        product={product}
+                        onAddToCart={onAddToCart}
+                        wishlist={profile.wishlist}
+                        onToggleWishlist={onToggleWishlist}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-16 text-center">
+                    <div className="h-16 w-16 rounded-2xl bg-brand-parchment/60 border border-brand-sand/40 flex items-center justify-center mx-auto mb-4">
+                      <Heart className="h-7 w-7 text-brand-sand" />
+                    </div>
+                    <p className="font-medium text-brand-charcoal">Wishlist is empty</p>
+                    <p className="text-sm text-brand-stone mt-1">Save products you love for later.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── REQUESTS TAB ── */}
+            {activeTab === "requests" && (
+              <div className="space-y-3">
+                {serviceRequests.length === 0 ? (
+                  <div className="py-16 text-center">
+                    <div className="h-16 w-16 rounded-2xl bg-brand-parchment/60 border border-brand-sand/40 flex items-center justify-center mx-auto mb-4">
+                      <RotateCcw className="h-7 w-7 text-brand-sand" />
+                    </div>
+                    <p className="font-medium text-brand-charcoal">No requests yet</p>
+                    <p className="text-sm text-brand-stone mt-1">Refund, replacement and cancellation requests appear here.</p>
+                  </div>
+                ) : (
+                  serviceRequests.map((req) => (
                     <div
                       key={req.requestId}
-                      className="rounded-xl border border-brand-sand/40 bg-white/70 p-3"
+                      className="p-4 bg-white/70 border border-brand-sand/30 rounded-2xl"
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs font-mono text-brand-stone/70">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 text-[10px] uppercase tracking-wider font-semibold rounded-full border ${
+                            req.type === "refund"
+                              ? "bg-red-50 text-red-700 border-red-200"
+                              : req.type === "replacement"
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : "bg-amber-50 text-amber-700 border-amber-200"
+                          }`}>
+                            {req.type}
+                          </span>
+                          <span className="rounded-full border border-brand-sand/50 px-2 py-0.5 text-[10px] uppercase text-brand-stone bg-brand-parchment/40">
+                            {req.status}
+                          </span>
+                        </div>
+                        <p className="text-[10px] font-mono text-brand-stone/60">
                           {req.requestNumber || req.requestId}
                         </p>
-                        <span className="rounded-full border border-brand-sand/50 px-2 py-0.5 text-[10px] uppercase text-brand-stone">
-                          {req.status}
-                        </span>
                       </div>
-                      <p className="mt-1 text-xs text-brand-stone">
-                        Order #{req.orderId} • {req.type}
+                      <p className="text-xs text-brand-stone mb-1">
+                        Order <span className="font-mono">#{req.orderId}</span>
                       </p>
-                      <p className="mt-1 text-sm text-brand-charcoal">{req.reason}</p>
-                      {req.details ? (
+                      <p className="text-sm text-brand-charcoal">{req.reason}</p>
+                      {req.details && (
                         <p className="mt-1 text-xs text-brand-stone">{req.details}</p>
-                      ) : null}
+                      )}
+                      <p className="mt-2 text-[10px] text-brand-stone/50">
+                        {new Date(req.createdAt).toLocaleDateString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </p>
                     </div>
-                  ))}
-                </div>
-              )}
-            </section>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {requestModal.open ? (
+      {/* Service Request Modal */}
+      {requestModal.open && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-brand-warm-black/35 backdrop-blur-sm"
-            onClick={() =>
-              setRequestModal({
-                open: false,
-                orderId: "",
-                type: null,
-                reason: "",
-                details: "",
-              })
-            }
+            onClick={() => setRequestModal({ open: false, orderId: "", type: null, reason: "", details: "" })}
           />
-          <div className="relative w-full max-w-md rounded-2xl border border-brand-sand/50 bg-white p-5 shadow-soft-xl">
-            <h3 className="font-heading text-lg text-brand-charcoal">
+          <div className="relative w-full max-w-md rounded-2xl border border-brand-sand/40 bg-white p-6 shadow-soft-xl animate-scale-in">
+            <h3 className="font-heading text-lg text-brand-charcoal mb-1">
               Request{" "}
               {requestModal.type === "refund"
                 ? "Refund"
@@ -489,38 +666,26 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 ? "Replacement"
                 : "Cancellation"}
             </h3>
-            <p className="mt-1 text-xs text-brand-stone">Order #{requestModal.orderId}</p>
+            <p className="text-xs text-brand-stone mb-4">Order #{requestModal.orderId}</p>
             <textarea
               rows={3}
               value={requestModal.reason}
-              onChange={(e) =>
-                setRequestModal((prev) => ({ ...prev, reason: e.target.value }))
-              }
+              onChange={(e) => setRequestModal((prev) => ({ ...prev, reason: e.target.value }))}
               placeholder="Reason for your request"
-              className="mt-3 w-full rounded-xl border border-brand-sand/60 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-terracotta/20"
+              className="w-full rounded-xl border border-brand-sand/60 bg-white px-3 py-2 text-sm text-brand-charcoal outline-none focus:ring-2 focus:ring-brand-terracotta/20 resize-none"
             />
             <textarea
               rows={2}
               value={requestModal.details}
-              onChange={(e) =>
-                setRequestModal((prev) => ({ ...prev, details: e.target.value }))
-              }
+              onChange={(e) => setRequestModal((prev) => ({ ...prev, details: e.target.value }))}
               placeholder="Additional details (optional)"
-              className="mt-2 w-full rounded-xl border border-brand-sand/60 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-terracotta/20"
+              className="mt-2 w-full rounded-xl border border-brand-sand/60 bg-white px-3 py-2 text-sm text-brand-charcoal outline-none focus:ring-2 focus:ring-brand-terracotta/20 resize-none"
             />
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() =>
-                  setRequestModal({
-                    open: false,
-                    orderId: "",
-                    type: null,
-                    reason: "",
-                    details: "",
-                  })
-                }
-                className="rounded-xl border border-brand-sand/50 px-3 py-1.5 text-xs text-brand-charcoal hover:bg-brand-cream"
+                onClick={() => setRequestModal({ open: false, orderId: "", type: null, reason: "", details: "" })}
+                className="px-4 py-2 rounded-xl border border-brand-sand/50 text-sm text-brand-charcoal hover:bg-brand-cream transition-colors"
               >
                 Cancel
               </button>
@@ -528,21 +693,31 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 type="button"
                 disabled={isSubmittingRequest || !requestModal.reason.trim()}
                 onClick={handleServiceRequest}
-                className="rounded-xl bg-brand-charcoal px-3 py-1.5 text-xs text-white hover:bg-brand-warm-black disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-brand-charcoal text-sm text-white hover:bg-brand-warm-black disabled:opacity-50 transition-colors shadow-soft"
               >
-                {isSubmittingRequest ? "Submitting..." : "Submit Request"}
+                {isSubmittingRequest ? "Submitting…" : "Submit Request"}
               </button>
             </div>
           </div>
         </div>
-      ) : null}
+      )}
 
-      <CartModal isOpen={isCartOpen} cart={cart} onClose={() => setIsCartOpen(false)}
-        onRemoveFromCart={onRemoveFromCart} onCheckout={() => { setIsCartOpen(false); onCheckout(); }} />
+      <CartModal
+        isOpen={isCartOpen}
+        cart={cart}
+        onClose={() => setIsCartOpen(false)}
+        onRemoveFromCart={onRemoveFromCart}
+        onCheckout={() => {
+          setIsCartOpen(false);
+          onCheckout();
+        }}
+      />
 
-      <button onClick={() => setIsCartOpen(true)}
-        className="fixed z-50 right-6 bottom-6 h-13 w-13 flex items-center justify-center rounded-2xl bg-brand-charcoal border border-brand-warm-black shadow-soft-lg hover:bg-brand-warm-black transition-colors text-brand-cream"
-        aria-label="View cart">
+      <button
+        onClick={() => setIsCartOpen(true)}
+        className="fixed z-50 right-6 bottom-6 h-12 w-12 flex items-center justify-center rounded-2xl bg-brand-charcoal border border-brand-warm-black shadow-soft-lg hover:bg-brand-warm-black transition-colors text-brand-cream"
+        aria-label="View cart"
+      >
         <ShoppingCart className="h-5 w-5" />
         {cart.length > 0 && (
           <span className="absolute -top-1 -right-1 bg-brand-coral text-white text-[10px] font-bold min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full">

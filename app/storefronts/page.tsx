@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Search, MapPin, ShoppingBag, ArrowRight, Store } from "lucide-react";
 import BrandLogo from "@/app/components/brand/BrandLogo";
-import BrandBanner from "@/app/components/brand/BrandBanner";
+import Navbar from "@/app/components/Navbar";
 
 type Store = {
   id: string;
@@ -36,100 +37,185 @@ export default function StorefrontIndexPage() {
   }, [query]);
 
   return (
-    <div className="min-h-screen bg-brand-hero p-4 md:p-8 font-body">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <BrandBanner className="hidden md:block" />
+    <div className="min-h-screen bg-brand-cream font-body">
+      <Navbar />
 
-        <div className="rounded-3xl border border-brand-sand/40 bg-white/80 backdrop-blur-xl p-6 md:p-8 shadow-soft-lg">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <BrandLogo size={40} showWordmark wordmarkClassName="text-lg" />
-              <p className="mt-4 text-xs uppercase tracking-[0.22em] text-brand-stone">
-                Merchant Storefronts
-              </p>
-              <h1 className="text-3xl md:text-5xl font-heading text-brand-charcoal mt-2">
-                Discover Independent Stores
+      {/* Hero Header */}
+      <div className="bg-brand-hero border-b border-brand-sand/30">
+        <div className="mx-auto max-w-6xl px-4 md:px-8 py-12 md:py-16">
+          <div className="flex flex-wrap items-end justify-between gap-6">
+            <div className="animate-fade-up">
+              <span className="text-xs uppercase tracking-[0.2em] text-brand-stone font-medium">
+                Rasphia Marketplace
+              </span>
+              <h1 className="mt-2 font-heading text-3xl md:text-5xl text-brand-charcoal leading-tight">
+                Discover Independent
+                <br />
+                <span className="text-brand-terracotta">Boutiques</span>
               </h1>
-              <p className="mt-2 text-sm text-brand-stone max-w-2xl">
-                Browse curated merchant boutiques, filter products, and chat with
-                store-specific assistants.
+              <p className="mt-3 text-sm text-brand-stone max-w-md">
+                Curated merchant stores, each with their own vibe. Browse products, chat with store AI, and find something made for you.
               </p>
             </div>
-            <Link
-              href="/"
-              className="rounded-full border border-brand-sand/70 bg-white px-4 py-2 text-sm text-brand-charcoal hover:bg-brand-parchment transition-colors"
-            >
-              Back Home
-            </Link>
+            <div className="animate-fade-up delay-150">
+              <div className="flex items-center gap-2 text-sm text-brand-stone">
+                <Store className="h-4 w-4 text-brand-terracotta" />
+                <span>{stores.length > 0 ? `${stores.length} stores` : "Loading…"}</span>
+              </div>
+            </div>
           </div>
 
-          <div className="mt-6">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by merchant name, style, or vibe"
-              className="w-full rounded-2xl border border-brand-sand/60 bg-white px-4 py-3 text-sm text-brand-charcoal outline-none focus:ring-2 focus:ring-brand-terracotta/20"
-            />
+          {/* Search */}
+          <div className="mt-8 max-w-2xl animate-fade-up delay-150">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-brand-stone/50" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by name, style, city, or vibe…"
+                className="w-full rounded-2xl border border-brand-sand/60 bg-white/90 backdrop-blur pl-11 pr-4 py-3.5 text-sm text-brand-charcoal outline-none focus:ring-2 focus:ring-brand-terracotta/20 focus:border-brand-terracotta/40 shadow-soft transition-all placeholder-brand-stone/50"
+              />
+            </div>
           </div>
         </div>
+      </div>
 
+      {/* Store Grid */}
+      <div className="mx-auto max-w-6xl px-4 md:px-8 py-10 space-y-6">
         {loading ? (
-          <p className="text-center text-brand-stone mt-8">Loading storefronts...</p>
-        ) : stores.length === 0 ? (
-          <div className="mt-8 rounded-3xl border border-brand-sand/40 bg-white/70 p-8 text-center text-brand-stone">
-            No storefronts found.
-          </div>
-        ) : (
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {stores.map((store) => (
-              <Link
-                key={store.id}
-                href={`/storefronts/${store.slug}`}
-                className="group overflow-hidden rounded-3xl border border-brand-sand/40 bg-white/80 backdrop-blur-xl shadow-soft-md transition hover:-translate-y-1"
-              >
-                <div className="h-36 bg-brand-parchment">
-                  {store.coverImageUrl ? (
-                    <img
-                      src={store.coverImageUrl}
-                      alt={store.name}
-                      className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                    />
-                  ) : null}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="rounded-3xl overflow-hidden border border-brand-sand/30 bg-white animate-fade-in">
+                <div className="skeleton h-36 w-full" />
+                <div className="p-5 space-y-3">
+                  <div className="skeleton h-5 w-2/3" />
+                  <div className="skeleton h-3.5 w-1/3" />
+                  <div className="skeleton h-3.5 w-full" />
+                  <div className="skeleton h-3.5 w-4/5" />
                 </div>
-                <div className="px-5 pb-5">
-                  <div className="mt-3 h-16 w-16 rounded-2xl border-4 border-white bg-brand-cream overflow-hidden shadow-soft">
-                    {store.logoUrl ? (
-                      <img
-                        src={store.logoUrl}
-                        alt={`${store.name} logo`}
-                        className="block h-full w-full object-fill bg-white"
-                      />
-                    ) : (
-                      <BrandLogo size={48} className="h-full w-full items-center justify-center" />
-                    )}
-                  </div>
-                  <h2 className="mt-3 text-2xl font-heading text-brand-charcoal">
-                    {store.name}
-                  </h2>
-                  <p className="mt-1 text-xs text-brand-stone uppercase tracking-wider">
-                    {[store.city, store.state].filter(Boolean).join(", ") ||
-                      "Online Boutique"}
-                  </p>
-                  <p className="mt-3 text-sm text-brand-stone line-clamp-3">
-                    {store.storefrontDescription ||
-                      "Discover this merchant's latest product collection."}
-                  </p>
-                  <div className="mt-4 flex items-center justify-between text-sm">
-                    <span className="rounded-full bg-brand-parchment border border-brand-sand/60 px-3 py-1 text-brand-terracotta">
-                      {store._count?.catalog || 0} products
-                    </span>
-                    <span className="text-brand-charcoal">Visit Store</span>
-                  </div>
-                </div>
-              </Link>
+              </div>
             ))}
           </div>
+        ) : stores.length === 0 ? (
+          <div className="glass-card p-12 text-center animate-scale-in">
+            <Store className="h-12 w-12 text-brand-sand mx-auto mb-3" />
+            <p className="font-heading text-xl text-brand-charcoal mb-1">No stores found</p>
+            <p className="text-sm text-brand-stone">
+              {query
+                ? `No results for "${query}". Try a different search.`
+                : "No storefronts are available yet."}
+            </p>
+            {query && (
+              <button
+                onClick={() => setQuery("")}
+                className="btn btn-secondary btn-sm mt-4"
+              >
+                Clear search
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            <p className="text-xs text-brand-stone">
+              {stores.length} {stores.length === 1 ? "storefront" : "storefronts"}
+              {query ? ` matching "${query}"` : ""}
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {stores.map((store, i) => (
+                <Link
+                  key={store.id}
+                  href={`/storefronts/${store.slug}`}
+                  className="group hover-lift block overflow-hidden rounded-3xl border border-brand-sand/40 bg-white shadow-soft animate-fade-up"
+                  style={{ animationDelay: `${i * 50}ms` }}
+                >
+                  {/* Cover */}
+                  <div className="relative h-40 bg-brand-parchment overflow-hidden">
+                    {store.coverImageUrl ? (
+                      <img
+                        src={store.coverImageUrl}
+                        alt={store.name}
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="h-full w-full bg-gradient-to-br from-brand-parchment to-brand-sand flex items-center justify-center">
+                        <Store className="h-10 w-10 text-brand-clay/50" />
+                      </div>
+                    )}
+                    {/* Product count badge */}
+                    <div className="absolute top-3 right-3">
+                      <span className="badge badge-neutral bg-white/90 backdrop-blur">
+                        <ShoppingBag className="h-3 w-3" />
+                        {store._count?.catalog ?? 0} products
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Card body */}
+                  <div className="px-5 pb-5">
+                    {/* Logo */}
+                    <div className="mt-[-20px] mb-3 relative z-10">
+                      <div className="h-14 w-14 rounded-2xl border-2 border-white bg-white overflow-hidden shadow-soft-md">
+                        {store.logoUrl ? (
+                          <img
+                            src={store.logoUrl}
+                            alt={`${store.name} logo`}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-full w-full bg-brand-parchment flex items-center justify-center">
+                            <BrandLogo size={28} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <h2 className="text-xl font-heading text-brand-charcoal group-hover:text-brand-terracotta transition-colors">
+                      {store.name}
+                    </h2>
+
+                    {(store.city || store.state) && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <MapPin className="h-3 w-3 text-brand-stone/60" />
+                        <p className="text-xs text-brand-stone">
+                          {[store.city, store.state].filter(Boolean).join(", ")}
+                        </p>
+                      </div>
+                    )}
+
+                    <p className="mt-2.5 text-sm text-brand-stone line-clamp-2">
+                      {store.storefrontDescription ||
+                        "Discover this merchant's latest product collection."}
+                    </p>
+
+                    <div className="mt-4 flex items-center justify-between">
+                      <span className="text-xs text-brand-stone/60">
+                        {store._count?.catalog ?? 0} products listed
+                      </span>
+                      <span className="flex items-center gap-1 text-sm font-medium text-brand-terracotta group-hover:gap-2 transition-all">
+                        Visit store
+                        <ArrowRight className="h-4 w-4" />
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </>
         )}
+
+        {/* CTA for merchants */}
+        <div className="mt-12 glass-card p-8 flex flex-col md:flex-row items-center justify-between gap-6 animate-fade-up">
+          <div>
+            <h3 className="font-heading text-2xl text-brand-charcoal">Own a brand?</h3>
+            <p className="text-sm text-brand-stone mt-1">
+              Join Rasphia as a merchant. Get your own storefront, AI chatbot, and access to persona-matched customers.
+            </p>
+          </div>
+          <Link href="/merchant/onboarding" className="btn btn-primary flex-shrink-0">
+            Apply as Merchant
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
       </div>
     </div>
   );

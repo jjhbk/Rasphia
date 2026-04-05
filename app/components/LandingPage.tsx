@@ -7,6 +7,7 @@ import {
   UserRound,
 } from "lucide-react";
 import SocialLinks from "./SocialLinks";
+import BrandLogo from "./brand/BrandLogo";
 
 interface LandingPageProps {
   onLogin: () => void;
@@ -136,18 +137,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
 
         <div className="relative mx-auto max-w-6xl px-6 py-8 lg:px-8">
           <nav className="flex flex-wrap items-center justify-between gap-4 rounded-full border border-white/50 bg-white/50 px-5 py-3 shadow-[0_10px_40px_rgba(0,0,0,0.05)] backdrop-blur">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-stone-900 to-stone-700 text-xl font-semibold text-[#F8F4EF]">
-                R
-              </div>
-              <div>
-                <p className="font-['Playfair_Display',serif] text-lg uppercase tracking-[0.5em] text-stone-700">
-                  Rasphia
-                </p>
-                <p className="text-xs tracking-[0.4em] text-stone-400">
-                  AI Shopping Layer
-                </p>
-              </div>
+            <div className="flex items-center gap-2">
+              <BrandLogo size={34} showWordmark wordmarkClassName="text-base font-semibold text-brand-charcoal" />
             </div>
 
             <div className="hidden md:flex items-center gap-6 text-sm text-stone-600">

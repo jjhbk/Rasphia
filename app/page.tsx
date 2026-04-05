@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
@@ -8,6 +9,11 @@ import {
   PanelRightClose,
   PanelRightOpen,
   ShoppingCart,
+  ChevronDown,
+  User,
+  LogOut,
+  LayoutDashboard,
+  Store,
 } from "lucide-react";
 import ChatWindow from "./components/ChatWindow";
 import ChatInput from "./components/ChatInput";
@@ -16,7 +22,7 @@ import CheckoutPage from "./components/CheckoutPage";
 import ProfilePage from "./components/ProfilePage";
 import ReviewModal from "./components/ReviewModal";
 import SignInPopup from "./components/SignInPopup";
-import ProfileIcon from "./components/icons/ProfileIcon";
+
 import ChatSidebar from "@/app/components/ChatSidebar";
 import AnalysisSidebar from "./components/analysis/AnalysisSidebar";
 import AnalysisUploadModal from "./components/analysis/AnalysisUploadModal";
@@ -130,6 +136,19 @@ const App: React.FC = () => {
   // add local state to App:
   const [personaOpenType, setPersonaOpenType] = useState<string | null>(null);
   const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleOutsideClick(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
   const iconOnlyButtonClass =
     "h-11 w-11 p-0 inline-flex items-center justify-center rounded-xl";
   const [cartFeedbackPulse, setCartFeedbackPulse] = useState(false);
@@ -974,18 +993,15 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <a
+              <Link
                 href="/storefronts"
-                className="hidden md:inline-flex px-3 py-1.5 rounded-full text-xs font-medium text-brand-charcoal bg-white border border-brand-sand/60 hover:bg-brand-parchment transition-colors"
+                className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-brand-charcoal bg-white border border-brand-sand/60 hover:bg-brand-parchment transition-colors"
               >
+                <Store className="h-3 w-3" />
                 Explore Stores
-              </a>
-              <a
-                href="/merchant/onboarding"
-                className="hidden md:inline-flex px-3 py-1.5 rounded-full text-xs font-medium text-brand-terracotta bg-brand-parchment border border-brand-sand/50 hover:bg-brand-sand/50 transition-colors"
-              >
-                For Merchants
-              </a>
+              </Link>
+
+              {/* Cart */}
               <button
                 onClick={() => setIsCartOpen(true)}
                 className={`${iconOnlyButtonClass} relative bg-white border border-brand-sand/50 text-brand-stone shadow-soft hover:shadow-soft-md hover:text-brand-charcoal transition-all ${
@@ -1006,18 +1022,78 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
                   </span>
                 )}
               </button>
-              <button
-                onClick={handleLogout}
-                className="hidden sm:block px-3 py-1.5 rounded-xl text-xs font-medium text-brand-stone hover:bg-brand-parchment hover:text-brand-charcoal transition-colors"
-              >
-                Sign out
-              </button>
-              <button
-                onClick={handleShowProfile}
-                className={`${iconOnlyButtonClass} bg-white border border-brand-sand/50 text-brand-stone shadow-soft hover:shadow-soft-md hover:text-brand-charcoal hover:scale-105 transition-all`}
-              >
-                <ProfileIcon />
-              </button>
+
+              {/* User avatar dropdown */}
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setUserMenuOpen((v) => !v)}
+                  className="flex items-center gap-2 rounded-xl px-2 py-1.5 bg-white border border-brand-sand/50 shadow-soft hover:bg-brand-parchment/60 hover:border-brand-sand transition-colors"
+                >
+                  {session?.user?.image ? (
+                    <img
+                      src={session.user.image}
+                      alt={session.user.name ?? "User"}
+                      className="h-7 w-7 rounded-full border border-brand-sand/40 object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <span className="h-7 w-7 rounded-full bg-brand-terracotta/10 text-brand-terracotta text-xs font-semibold flex items-center justify-center flex-shrink-0">
+                      {(session?.user?.name?.[0] ?? session?.user?.email?.[0] ?? "?").toUpperCase()}
+                    </span>
+                  )}
+                  <span className="hidden sm:block text-xs font-medium text-brand-charcoal max-w-[100px] truncate">
+                    {session?.user?.name?.split(" ")[0] ?? session?.user?.email}
+                  </span>
+                  <ChevronDown className={`h-3.5 w-3.5 text-brand-stone transition-transform flex-shrink-0 ${userMenuOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {userMenuOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-52 bg-white/90 backdrop-blur-xl border border-brand-sand/40 rounded-2xl shadow-[0_16px_40px_rgba(30,22,18,0.18)] py-1 z-50 animate-scale-in">
+                    <div className="px-4 py-3 border-b border-brand-sand/30">
+                      <p className="text-sm font-semibold text-brand-charcoal truncate">
+                        {session?.user?.name ?? "Guest"}
+                      </p>
+                      <p className="text-xs text-brand-stone truncate mt-0.5">
+                        {session?.user?.email}
+                      </p>
+                    </div>
+                    <div className="py-1">
+                      <button
+                        onClick={() => { setUserMenuOpen(false); handleShowProfile(); }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-brand-stone hover:text-brand-charcoal hover:bg-brand-parchment/60 transition-colors text-left"
+                      >
+                        <User className="h-4 w-4" />
+                        My Profile
+                      </button>
+                      <Link
+                        href="/storefronts"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-4 py-2 text-sm text-brand-stone hover:text-brand-charcoal hover:bg-brand-parchment/60 transition-colors"
+                      >
+                        <Store className="h-4 w-4" />
+                        Explore Stores
+                      </Link>
+                      <Link
+                        href="/merchant/onboarding"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-4 py-2 text-sm text-brand-stone hover:text-brand-charcoal hover:bg-brand-parchment/60 transition-colors"
+                      >
+                        <LayoutDashboard className="h-4 w-4" />
+                        Become a Merchant
+                      </Link>
+                    </div>
+                    <div className="border-t border-brand-sand/30 py-1">
+                      <button
+                        onClick={() => { setUserMenuOpen(false); handleLogout(); }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-brand-stone hover:text-red-600 hover:bg-red-50/60 transition-colors text-left"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        Sign out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <button
                 onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
                 className={`${iconOnlyButtonClass} hover:bg-brand-parchment text-brand-stone hover:text-brand-charcoal transition-colors`}

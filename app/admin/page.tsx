@@ -3,8 +3,29 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
-import { UploadCloud } from "lucide-react";
+import {
+  UploadCloud,
+  Package,
+  ShoppingBag,
+  Users,
+  ImageIcon,
+  FileSpreadsheet,
+  LayoutGrid,
+  ChevronRight,
+  Copy,
+  Check,
+  ArrowLeft,
+  ExternalLink,
+  Pencil,
+  Trash2,
+  Plus,
+  AlertCircle,
+  ClipboardList,
+  Store,
+  RefreshCw,
+} from "lucide-react";
 import AdminProductForm from "../components/AdminProductForm";
+import Navbar from "../components/Navbar";
 import { Product } from "../types";
 
 type AccessResponse = {
@@ -108,6 +129,19 @@ const SERVICE_REQUEST_STATUSES = [
   "completed",
 ];
 
+function getOrderStatusClass(status: string): string {
+  const s = status.toLowerCase();
+  if (s === "delivered") return "status-delivered";
+  if (s === "shipped") return "status-shipped";
+  if (s === "paid") return "status-paid";
+  if (s === "processing") return "status-processing";
+  if (s === "cancelled") return "status-cancelled";
+  if (s === "refunded") return "status-refunded";
+  return "status-created";
+}
+
+type Section = "products" | "orders" | "service" | "merchants" | "images" | "bulk";
+
 export default function ManagementDashboard() {
   const { status: sessionStatus } = useSession();
   const [access, setAccess] = useState<AccessResponse | null>(null);
@@ -148,6 +182,7 @@ export default function ManagementDashboard() {
   const [isUploadingProductImage, setIsUploadingProductImage] = useState(false);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [imageCopiedId, setImageCopiedId] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<Section>("products");
 
   useEffect(() => {
     if (sessionStatus !== "authenticated") return;
@@ -532,612 +567,1015 @@ export default function ManagementDashboard() {
     }
   };
 
-  const inputClass = "border border-brand-sand/50 rounded-lg px-2 py-1 text-xs bg-white text-brand-charcoal focus:outline-none focus:border-brand-terracotta/40";
   const handleSignOut = async () => {
     await signOut({ callbackUrl: "/" });
   };
 
+  const inputClass =
+    "border border-brand-sand/50 rounded-lg px-2 py-1 text-xs bg-white text-brand-charcoal focus:outline-none focus:border-brand-terracotta/40";
+
+  /* ── Loading / access gates ── */
   if (sessionStatus === "loading" || !access)
     return (
-      <div className="min-h-screen bg-brand-cream flex items-center justify-center font-body">
-        <p className="text-sm text-brand-stone">Loading…</p>
-      </div>
+      <>
+        <Navbar />
+        <div className="min-h-screen bg-brand-cream flex items-center justify-center font-body">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 rounded-full border-2 border-brand-terracotta/30 border-t-brand-terracotta animate-spin" />
+            <p className="text-sm text-brand-stone">Loading dashboard…</p>
+          </div>
+        </div>
+      </>
     );
 
   if (!access.authenticated) {
     return (
-      <div className="min-h-screen bg-brand-cream flex items-center justify-center font-body">
-        <p className="text-brand-stone">Please sign in to continue.</p>
-      </div>
+      <>
+        <Navbar />
+        <div className="min-h-screen bg-brand-cream flex items-center justify-center font-body">
+          <div className="glass-card p-8 text-center max-w-sm mx-auto animate-scale-in">
+            <AlertCircle className="h-10 w-10 text-brand-terracotta mx-auto mb-3" />
+            <p className="text-brand-charcoal font-medium">Sign in required</p>
+            <p className="text-brand-stone text-sm mt-1">
+              Please sign in to access the dashboard.
+            </p>
+          </div>
+        </div>
+      </>
     );
   }
 
   if (access.access === "none") {
     return (
-      <div className="min-h-screen bg-brand-cream flex items-center justify-center font-body">
-        <div className="text-center space-y-3">
-          <p className="text-brand-stone">You do not have management access yet.</p>
-          <Link href="/merchant/onboarding" className="text-brand-terracotta underline text-sm">
-            Apply as Merchant
-          </Link>
+      <>
+        <Navbar />
+        <div className="min-h-screen bg-brand-cream flex items-center justify-center font-body">
+          <div className="glass-card p-8 text-center max-w-sm mx-auto animate-scale-in">
+            <Store className="h-10 w-10 text-brand-stone mx-auto mb-3" />
+            <p className="text-brand-charcoal font-medium">No management access</p>
+            <p className="text-brand-stone text-sm mt-1 mb-4">
+              You don&apos;t have admin or merchant access yet.
+            </p>
+            <Link
+              href="/merchant/onboarding"
+              className="btn btn-primary text-sm"
+            >
+              Apply as Merchant
+            </Link>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   if (access.access === "merchant_pending") {
     return (
-      <div className="min-h-screen bg-brand-cream flex items-center justify-center font-body">
-        <div className="text-center space-y-3">
-          <p className="text-brand-terracotta font-medium">
-            Your merchant account is pending admin approval.
-          </p>
-          <Link href="/merchant/onboarding" className="text-brand-terracotta underline text-sm">
-            View / Update Application
-          </Link>
+      <>
+        <Navbar />
+        <div className="min-h-screen bg-brand-cream flex items-center justify-center font-body">
+          <div className="glass-card p-8 text-center max-w-sm mx-auto animate-scale-in">
+            <div className="w-12 h-12 rounded-full bg-brand-mustard/10 flex items-center justify-center mx-auto mb-3">
+              <RefreshCw className="h-6 w-6 text-brand-mustard" />
+            </div>
+            <p className="text-brand-charcoal font-semibold">Application pending</p>
+            <p className="text-brand-stone text-sm mt-1 mb-4">
+              Your merchant account is awaiting admin approval. We&apos;ll notify you soon.
+            </p>
+            <Link
+              href="/merchant/onboarding"
+              className="btn btn-secondary text-sm"
+            >
+              View Application
+            </Link>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   const isAdmin = access.access === "admin";
 
+  /* ── Sidebar nav config ── */
+  type SidebarItem = {
+    id: Section;
+    label: string;
+    icon: React.ReactNode;
+    badge?: number;
+    adminOnly?: boolean;
+    merchantOnly?: boolean;
+  };
+
+  const sidebarItems = ([
+    {
+      id: "products" as Section,
+      label: "Products",
+      icon: <Package className="h-4 w-4" />,
+      badge: products.length,
+    },
+    {
+      id: "orders" as Section,
+      label: "Orders",
+      icon: <ShoppingBag className="h-4 w-4" />,
+      badge: orders.length,
+    },
+    {
+      id: "service" as Section,
+      label: "Service Requests",
+      icon: <ClipboardList className="h-4 w-4" />,
+      badge: serviceRequests.filter((r) => r.status === "requested").length || undefined,
+    },
+    {
+      id: "merchants" as Section,
+      label: "Merchants",
+      icon: <Users className="h-4 w-4" />,
+      badge: pendingMerchants.length || undefined,
+      adminOnly: true,
+    },
+    {
+      id: "images" as Section,
+      label: "Image Library",
+      icon: <ImageIcon className="h-4 w-4" />,
+      badge: imageTotal || undefined,
+      merchantOnly: true,
+    },
+    {
+      id: "bulk" as Section,
+      label: "Bulk Upload",
+      icon: <FileSpreadsheet className="h-4 w-4" />,
+      merchantOnly: true,
+    },
+  ] as SidebarItem[]).filter((item) => {
+    if (item.adminOnly && !isAdmin) return false;
+    if (item.merchantOnly && isAdmin) return false;
+    return true;
+  });
+
   return (
-    <div className="min-h-screen bg-brand-cream p-6 font-body">
-      <div className="max-w-7xl mx-auto bg-white/80 backdrop-blur-xl rounded-3xl border border-brand-sand/30 shadow-soft-md p-6 md:p-8">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <Link
-            href="/"
-            className="rounded-full border border-brand-sand/60 bg-white px-4 py-2 text-sm text-brand-charcoal hover:bg-brand-cream"
-          >
-            Rasphia Home
-          </Link>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="rounded-full border border-brand-sand/60 bg-white px-4 py-2 text-sm text-brand-charcoal hover:bg-brand-cream"
-          >
-            Sign out
-          </button>
-        </div>
-
-        <div className="text-center mb-8">
-          <h1 className="font-heading text-3xl text-brand-charcoal mb-1">
-            {isAdmin ? "Admin Dashboard" : "Merchant Dashboard"}
-          </h1>
-          <p className="text-brand-stone text-sm">Manage products and orders.</p>
-        </div>
-
-        {!isAdmin && (
-          <div className="mb-6 rounded-2xl border border-brand-sand/40 bg-brand-parchment/50 p-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm text-brand-charcoal font-medium">
-                Build your public merchant storefront and payment setup
+    <>
+      <Navbar />
+      <div className="flex min-h-screen bg-brand-cream font-body">
+        {/* ─── Sidebar ─── */}
+        <aside className="dash-sidebar sticky top-[64px] self-start hidden md:flex">
+          {/* Role badge */}
+          <div className="px-3 mb-3">
+            <span className={`badge ${isAdmin ? "badge-primary" : "badge-accent"}`}>
+              {isAdmin ? "Admin" : "Merchant"}
+            </span>
+            {access.merchant && (
+              <p className="text-xs text-brand-stone mt-1.5 truncate font-medium">
+                {access.merchant.name}
               </p>
-              <p className="text-xs text-brand-stone mt-0.5">
-                Add branding, chatbot welcome message, and SeedhaPe payment credentials.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
+            )}
+          </div>
+
+          <span className="dash-nav-section">Management</span>
+
+          {sidebarItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveSection(item.id)}
+              className={`dash-nav-item ${activeSection === item.id ? "dash-nav-item-active" : ""}`}
+            >
+              {item.icon}
+              <span className="flex-1 text-left">{item.label}</span>
+              {item.badge !== undefined && item.badge > 0 && (
+                <span className={`badge ${item.id === "service" ? "badge-warning" : "badge-neutral"} text-[10px]`}>
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          ))}
+
+          <div className="mt-auto pt-4 border-t border-brand-sand/30 space-y-1">
+            {!isAdmin && (
               <Link
                 href="/merchant/storefront"
-                className="px-4 py-2 rounded-xl bg-brand-charcoal text-brand-cream text-sm hover:bg-brand-warm-black transition-colors"
+                className="dash-nav-item text-brand-terracotta hover:text-brand-coral"
               >
+                <Store className="h-4 w-4" />
                 Storefront Settings
               </Link>
-              <Link
-                href="/merchant/storefront#seedhape-payments"
-                className="px-4 py-2 rounded-xl border border-brand-sand/60 bg-white text-brand-charcoal text-sm hover:bg-brand-cream transition-colors"
-              >
-                SeedhaPe Settings
-              </Link>
-            </div>
+            )}
+            <Link href="/" className="dash-nav-item">
+              <ArrowLeft className="h-4 w-4" />
+              Back to Home
+            </Link>
+            <button onClick={handleSignOut} className="dash-nav-item w-full text-left text-red-500 hover:bg-red-50 hover:text-red-600">
+              Sign out
+            </button>
           </div>
-        )}
+        </aside>
 
-        {error && (
-          <p className="text-red-600 text-center mb-4 text-sm font-medium">{error}</p>
-        )}
-
-        {isAdmin && (
-          <section className="mb-8 border border-brand-sand/30 rounded-2xl p-5 bg-brand-parchment/30">
-            <h2 className="font-heading text-lg text-brand-charcoal mb-4">
-              Pending Merchant Approvals
-            </h2>
-            {pendingMerchants.length === 0 ? (
-              <p className="text-brand-stone text-sm">No pending applications.</p>
-            ) : (
-              <div className="space-y-3">
-                {pendingMerchants.map((m) => (
-                  <div
-                    key={m.id}
-                    className="bg-white border border-brand-sand/30 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3"
-                  >
-                    <div className="text-sm">
-                      <p className="font-medium text-brand-charcoal">{m.name}</p>
-                      <p className="text-brand-stone">{m.email}</p>
-                      <p className="text-brand-stone">{m.phone}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleMerchantAction(m.id, "approve")}
-                        className="px-3 py-1.5 rounded-lg bg-green-50 text-green-700 text-xs border border-green-200 hover:bg-green-100 transition-colors"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => handleMerchantAction(m.id, "reject")}
-                        className="px-3 py-1.5 rounded-lg bg-red-50 text-red-700 text-xs border border-red-200 hover:bg-red-100 transition-colors"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-
-        {!isAdding && !editingProduct && (
-          <button
-            onClick={() => setIsAdding(true)}
-            className="bg-brand-charcoal text-brand-cream px-4 py-2 rounded-xl text-sm font-medium mb-6 hover:bg-brand-warm-black transition-colors shadow-soft"
-          >
-            Add Product
-          </button>
-        )}
-
-        {(isAdding || editingProduct) && (
-          <AdminProductForm
-            product={editingProduct}
-            onSave={handleSave}
-            onCancel={() => {
-              setIsAdding(false);
-              setEditingProduct(null);
-            }}
-          />
-        )}
-
-        <section className="mb-10">
-          <h2 className="font-heading text-lg text-brand-charcoal mb-4">Managed Products</h2>
-          {isLoadingProducts ? (
-            <p className="text-brand-stone text-sm">Loading products…</p>
-          ) : products.length === 0 ? (
-            <p className="text-brand-stone text-sm">No products found.</p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {products.map((p) => (
-                <div
-                  key={p._id}
-                  className="border border-brand-sand/30 rounded-2xl p-4 flex flex-col gap-2 bg-white shadow-soft"
-                >
-                  <img
-                    src={p.imageUrl}
-                    alt={p.name}
-                    className="w-full h-40 object-cover rounded-xl"
-                  />
-                  <h3 className="text-sm font-semibold text-brand-charcoal">{p.name}</h3>
-                  <p className="text-xs text-brand-stone">{p.brand}</p>
-                  <p className="text-brand-terracotta font-semibold text-sm">
-                    ₹{(p.price as number).toFixed(2)}
-                  </p>
-                  <div className="flex justify-between mt-2">
-                    <button
-                      onClick={() => setEditingProduct(p)}
-                      className="px-3 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(p._id!)}
-                      className="px-3 py-1 text-xs bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {!isAdmin && (
-          <section
-            id="bulk-product-upload"
-            className="mb-6 rounded-2xl border border-brand-sand/40 bg-brand-parchment/50 p-4"
-          >
-            <p className="text-sm font-semibold text-brand-charcoal">
-              Bulk Product Upload (CSV)
-            </p>
-            <p className="mt-1 text-xs text-brand-stone">
-              Download template, preview CSV, then import valid rows.
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <a
-                href="/templates/merchant-products-bulk-upload-sample.csv"
-                download
-                className="rounded-lg border border-brand-sand/60 bg-white px-3 py-1.5 text-xs text-brand-charcoal hover:bg-brand-cream"
-              >
-                Download Template
-              </a>
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-brand-sand/60 bg-white px-3 py-1.5 text-xs text-brand-charcoal hover:bg-brand-cream">
-                Choose CSV
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null;
-                    setBulkCsvFile(file);
-                    setBulkError(null);
-                  }}
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => submitBulkCsv(true)}
-                disabled={bulkIsPreviewing || bulkIsImporting || !bulkCsvFile}
-                className="rounded-lg border border-brand-sand/60 bg-white px-3 py-1.5 text-xs text-brand-charcoal hover:bg-brand-cream disabled:opacity-50"
-              >
-                {bulkIsPreviewing ? "Previewing..." : "Preview CSV"}
-              </button>
-              <button
-                type="button"
-                onClick={() => submitBulkCsv(false)}
-                disabled={
-                  bulkIsPreviewing ||
-                  bulkIsImporting ||
-                  !bulkCsvFile ||
-                  !bulkSummary ||
-                  bulkSummary.validRows < 1
-                }
-                className="rounded-lg bg-brand-charcoal px-3 py-1.5 text-xs text-white hover:bg-brand-warm-black disabled:opacity-50"
-              >
-                {bulkIsImporting ? "Importing..." : "Import Valid Rows"}
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-brand-stone">
-              {bulkCsvFile ? `Selected: ${bulkCsvFile.name}` : "No CSV selected yet."}
-            </p>
-            {bulkError && (
-              <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                {bulkError}
-              </p>
-            )}
-            {bulkSummary && (
-              <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
-                <div className="rounded-lg border border-brand-sand/50 bg-white px-3 py-2 text-xs">
-                  <p className="text-brand-stone">Total Rows</p>
-                  <p className="font-semibold text-brand-charcoal">{bulkSummary.totalRows}</p>
-                </div>
-                <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs">
-                  <p className="text-green-700">Valid Rows</p>
-                  <p className="font-semibold text-green-800">{bulkSummary.validRows}</p>
-                </div>
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
-                  <p className="text-amber-700">Invalid Rows</p>
-                  <p className="font-semibold text-amber-800">{bulkSummary.invalidRows}</p>
-                </div>
-                <div className="rounded-lg border border-brand-sand/50 bg-white px-3 py-2 text-xs">
-                  <p className="text-brand-stone">
-                    {bulkSummary.dryRun ? "Ready to Import" : "Created"}
-                  </p>
-                  <p className="font-semibold text-brand-charcoal">
-                    {bulkSummary.dryRun
-                      ? bulkSummary.validRows
-                      : Number(bulkSummary.createdCount || 0)}
-                  </p>
-                </div>
-              </div>
-            )}
-            {bulkPreviewRows.length > 0 && (
-              <div className="mt-3 overflow-x-auto rounded-xl border border-brand-sand/40 bg-white">
-                <table className="min-w-full table-fixed text-xs">
-                  <thead className="bg-brand-cream/60">
-                    <tr>
-                      {["Name", "Category", "Price", "Stock", "Image URL"].map((h) => (
-                        <th
-                          key={h}
-                          className="px-2 py-2 text-left font-medium uppercase tracking-wide text-brand-stone"
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bulkPreviewRows.slice(0, 8).map((row, idx) => (
-                      <tr key={`${row.name}-${idx}`} className="border-t border-brand-sand/20">
-                        <td className="px-2 py-2 text-brand-charcoal break-words">{row.name}</td>
-                        <td className="px-2 py-2 text-brand-charcoal break-words">{row.category}</td>
-                        <td className="px-2 py-2 text-brand-charcoal">₹{row.price}</td>
-                        <td className="px-2 py-2 text-brand-charcoal">{row.stockQuantity}</td>
-                        <td className="max-w-[220px] truncate px-2 py-2 text-brand-stone break-all">
-                          {row.imageUrl}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            {bulkRowErrors.length > 0 && (
-              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
-                <p className="text-xs font-medium text-amber-800">Row Errors</p>
-                <div className="mt-2 max-h-44 overflow-auto space-y-1">
-                  {bulkRowErrors.slice(0, 20).map((err, idx) => (
-                    <p key={`${err.row}-${err.field}-${idx}`} className="text-xs text-amber-900">
-                      Row {err.row} • {err.field}: {err.message}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            )}
-          </section>
-        )}
-
-        {!isAdmin && (
-          <section className="mb-8 rounded-3xl border border-brand-sand/40 bg-white/70 p-4 md:p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* ─── Main Content ─── */}
+        <main className="flex-1 min-w-0 p-4 md:p-6 lg:p-8 space-y-6">
+          {/* Page Header */}
+          <div className="animate-fade-up">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
               <div>
-                <h2 className="text-lg font-medium text-brand-charcoal">Product Image Library</h2>
-                <p className="mt-1 text-sm text-brand-stone">
-                  Upload product images to get public blob URLs. Images are stored with
-                  lossless compression and listed below.
+                <h1 className="font-heading text-2xl md:text-3xl text-brand-charcoal">
+                  {isAdmin ? "Admin Dashboard" : "Merchant Dashboard"}
+                </h1>
+                <p className="text-brand-stone text-sm mt-0.5">
+                  {isAdmin
+                    ? "Manage all products, orders, and merchants."
+                    : "Manage your products, orders, and storefront."}
                 </p>
               </div>
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-black/70 bg-black px-4 py-2 text-sm font-semibold text-white shadow-md hover:bg-neutral-800">
-                <UploadCloud className="h-4 w-4 text-white" />
-                <span>{isUploadingProductImage ? "Uploading Image..." : "Upload Product Image"}</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const input = e.currentTarget;
-                    const file = input.files?.[0];
-                    if (!file) return;
-                    input.value = "";
-                    await handleUploadProductImage(file);
-                  }}
-                />
-              </label>
+              {/* Mobile section nav */}
+              <div className="flex md:hidden gap-2 flex-wrap">
+                <select
+                  value={activeSection}
+                  onChange={(e) => setActiveSection(e.target.value as Section)}
+                  className="border border-brand-sand/50 rounded-xl px-3 py-2 text-sm bg-white text-brand-charcoal"
+                >
+                  {sidebarItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            {imageUploadError && (
-              <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {imageUploadError}
-              </p>
+            {/* Stats Row */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+              <StatCard label="Products" value={products.length} icon={<Package className="h-4 w-4 text-brand-terracotta" />} />
+              <StatCard label="Orders" value={orders.length} icon={<ShoppingBag className="h-4 w-4 text-brand-sage" />} />
+              <StatCard
+                label="Service Requests"
+                value={serviceRequests.length}
+                icon={<ClipboardList className="h-4 w-4 text-brand-mustard" />}
+              />
+              {isAdmin ? (
+                <StatCard
+                  label="Pending Merchants"
+                  value={pendingMerchants.length}
+                  icon={<Users className="h-4 w-4 text-brand-coral" />}
+                  highlight={pendingMerchants.length > 0}
+                />
+              ) : (
+                <StatCard label="Uploaded Images" value={imageTotal} icon={<ImageIcon className="h-4 w-4 text-brand-stone" />} />
+              )}
+            </div>
+
+            {/* Merchant storefront banner */}
+            {!isAdmin && (
+              <div className="panel animate-fade-up delay-75 mb-6">
+                <div className="panel-header">
+                  <div className="flex items-center gap-2">
+                    <Store className="h-4 w-4 text-brand-terracotta" />
+                    <span className="text-sm font-semibold text-brand-charcoal">Your Public Storefront</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Link href="/merchant/storefront" className="btn btn-primary btn-sm">
+                      Storefront Settings
+                    </Link>
+                    <Link href="/merchant/storefront#seedhape-payments" className="btn btn-secondary btn-sm">
+                      SeedhaPe
+                    </Link>
+                  </div>
+                </div>
+                <div className="panel-body py-3">
+                  <p className="text-xs text-brand-stone">
+                    Customize your store branding, chatbot, and payment credentials.
+                  </p>
+                </div>
+              </div>
             )}
+          </div>
 
-            <p className="mt-3 text-xs text-brand-stone">
-              {isLoadingImages ? "Loading image history..." : `Total uploaded images: ${imageTotal}`}
-            </p>
+          {error && (
+            <div className="alert alert-danger animate-fade-in">
+              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              {error}
+            </div>
+          )}
 
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {imageAssets.map((asset) => (
-                <article
-                  key={asset.id}
-                  className="overflow-hidden rounded-2xl border border-brand-sand/50 bg-white"
-                >
-                  <img
-                    src={asset.url}
-                    alt={asset.originalName}
-                    loading="lazy"
-                    className="h-40 w-full object-cover bg-brand-parchment/50"
-                  />
-                  <div className="space-y-1 px-3 py-3">
-                    <p className="truncate text-sm font-medium text-brand-charcoal">
-                      {asset.originalName}
-                    </p>
-                    <p className="text-xs text-brand-stone">
-                      {formatBytes(asset.sizeBytes)}
-                      {asset.width && asset.height ? ` • ${asset.width}x${asset.height}` : ""}
-                    </p>
-                    <p className="text-xs text-brand-stone">
-                      {new Date(asset.createdAt).toLocaleString()}
-                    </p>
-                    <p className="truncate text-xs text-brand-stone">{asset.url}</p>
+          {/* ── Products Section ── */}
+          {activeSection === "products" && (
+            <section className="animate-fade-up space-y-4">
+              <div className="section-header">
+                <h2 className="section-title">Managed Products</h2>
+                {!isAdding && !editingProduct && (
+                  <button
+                    onClick={() => setIsAdding(true)}
+                    className="btn btn-primary btn-sm"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Product
+                  </button>
+                )}
+              </div>
+
+              {(isAdding || editingProduct) && (
+                <div className="panel animate-scale-in">
+                  <div className="panel-header">
+                    <h3 className="text-sm font-semibold text-brand-charcoal">
+                      {editingProduct ? "Edit Product" : "New Product"}
+                    </h3>
                     <button
-                      type="button"
-                      onClick={() => handleCopyImageUrl(asset)}
-                      className="mt-1 rounded-lg border border-brand-sand/60 px-3 py-1.5 text-xs text-brand-charcoal hover:bg-brand-cream"
+                      onClick={() => { setIsAdding(false); setEditingProduct(null); }}
+                      className="btn btn-ghost btn-sm"
                     >
-                      {imageCopiedId === asset.id ? "Copied" : "Copy URL"}
+                      Cancel
                     </button>
                   </div>
-                </article>
-              ))}
-            </div>
+                  <div className="panel-body">
+                    <AdminProductForm
+                      product={editingProduct}
+                      onSave={handleSave}
+                      onCancel={() => { setIsAdding(false); setEditingProduct(null); }}
+                    />
+                  </div>
+                </div>
+              )}
 
-            {!isLoadingImages && !imageAssets.length && (
-              <p className="mt-4 text-sm text-brand-stone">No images uploaded yet.</p>
-            )}
-
-            <div className="mt-5 flex items-center justify-between">
-              <button
-                type="button"
-                disabled={imagePage <= 1}
-                onClick={() => setImagePage((p) => Math.max(1, p - 1))}
-                className="rounded-lg border border-brand-sand/60 bg-white px-3 py-1.5 text-xs text-brand-charcoal hover:bg-brand-cream disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <p className="text-xs text-brand-stone">
-                Page {imagePage} of {imageTotalPages}
-              </p>
-              <button
-                type="button"
-                disabled={imagePage >= imageTotalPages}
-                onClick={() => setImagePage((p) => Math.min(imageTotalPages, p + 1))}
-                className="rounded-lg border border-brand-sand/60 bg-white px-3 py-1.5 text-xs text-brand-charcoal hover:bg-brand-cream disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          </section>
-        )}
-
-        <section>
-          <h2 className="font-heading text-lg text-brand-charcoal mb-4">Managed Orders</h2>
-          {orderUpdateFeedback && (
-            <div
-              className={`mb-3 rounded-xl border px-3 py-2 text-xs ${
-                orderUpdateFeedback.type === "success"
-                  ? "border-green-200 bg-green-50 text-green-700"
-                  : "border-red-200 bg-red-50 text-red-700"
-              }`}
-            >
-              {orderUpdateFeedback.message}
-            </div>
-          )}
-          {isLoadingOrders ? (
-            <p className="text-brand-stone text-sm">Loading orders…</p>
-          ) : orders.length === 0 ? (
-            <p className="text-brand-stone text-sm">No orders found.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full border border-brand-sand/30 text-sm rounded-xl overflow-hidden">
-                <thead className="bg-brand-parchment/50">
-                  <tr>
-                    {["Order ID", "Customer", "Amount", "Status", "Shipping"].map((h) => (
-                      <th key={h} className="text-left px-3 py-2.5 border-b border-brand-sand/30 text-xs uppercase tracking-widest font-medium text-brand-stone/70">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((o) => (
-                    <tr key={o.id} className="border-b border-brand-sand/20 hover:bg-brand-cream/40 transition-colors">
-                      <td className="px-3 py-2.5 font-mono text-xs text-brand-stone/70">{o.id}</td>
-                      <td className="px-3 py-2.5 text-brand-charcoal">
-                        {o.customer?.name || "-"}
-                        <br />
-                        <span className="text-xs text-brand-stone">{o.customer?.email || "-"}</span>
-                      </td>
-                      <td className="px-3 py-2.5 text-brand-charcoal">₹{o.amount ?? 0}</td>
-                      <td className="px-3 py-2.5">
-                        <select
-                          value={o.status}
-                          onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
-                          disabled={Boolean(updatingOrderIds[o.id])}
-                          className={inputClass}
-                        >
-                          {ORDER_STATUSES.map((s) => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex flex-wrap gap-1.5 items-center">
-                          <input
-                            value={o.shippingProvider || ""}
-                            onChange={(e) =>
-                              setOrders((prev) =>
-                                prev.map((row) =>
-                                  row.id === o.id ? { ...row, shippingProvider: e.target.value } : row
-                                )
-                              )
-                            }
-                            placeholder="Carrier"
-                            className={`${inputClass} w-24`}
+              {isLoadingProducts ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[1,2,3].map((i) => (
+                    <div key={i} className="rounded-2xl overflow-hidden border border-brand-sand/30 bg-white">
+                      <div className="skeleton h-40 w-full" />
+                      <div className="p-4 space-y-2">
+                        <div className="skeleton h-4 w-3/4" />
+                        <div className="skeleton h-3 w-1/2" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : products.length === 0 ? (
+                <div className="panel">
+                  <div className="empty-state">
+                    <Package className="empty-state-icon" />
+                    <p className="empty-state-text">No products yet. Add your first product.</p>
+                    <button onClick={() => setIsAdding(true)} className="btn btn-primary btn-sm mt-2">
+                      <Plus className="h-3.5 w-3.5" />
+                      Add Product
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {products.map((p, i) => (
+                    <div
+                      key={p._id}
+                      className="hover-lift panel overflow-hidden animate-fade-up"
+                      style={{ animationDelay: `${i * 40}ms` }}
+                    >
+                      <div className="relative h-44 bg-brand-parchment">
+                        {p.imageUrl ? (
+                          <img
+                            src={p.imageUrl}
+                            alt={p.name}
+                            className="w-full h-full object-cover"
                           />
-                          <input
-                            value={o.trackingNumber || ""}
-                            onChange={(e) =>
-                              setOrders((prev) =>
-                                prev.map((row) =>
-                                  row.id === o.id ? { ...row, trackingNumber: e.target.value } : row
-                                )
-                              )
-                            }
-                            placeholder="Tracking #"
-                            className={`${inputClass} w-28`}
-                          />
-                          <input
-                            value={o.trackingUrl || ""}
-                            onChange={(e) =>
-                              setOrders((prev) =>
-                                prev.map((row) =>
-                                  row.id === o.id ? { ...row, trackingUrl: e.target.value } : row
-                                )
-                              )
-                            }
-                            placeholder="Tracking URL"
-                            className={`${inputClass} w-36`}
-                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Package className="h-10 w-10 text-brand-sand" />
+                          </div>
+                        )}
+                        <span className="absolute top-2 right-2 badge badge-accent">
+                          {p.category}
+                        </span>
+                      </div>
+                      <div className="p-4 space-y-2">
+                        <h3 className="text-sm font-semibold text-brand-charcoal line-clamp-1">{p.name}</h3>
+                        {p.brand && <p className="text-xs text-brand-stone">{p.brand}</p>}
+                        <p className="text-brand-terracotta font-semibold text-sm">
+                          ₹{(p.price as number).toFixed(2)}
+                        </p>
+                        <div className="flex gap-2 pt-1">
                           <button
-                            onClick={() =>
-                              handleUpdateOrderStatus(o.id, o.status, {
-                                shippingProvider: o.shippingProvider,
-                                trackingNumber: o.trackingNumber,
-                                trackingUrl: o.trackingUrl,
-                              })
-                            }
-                            disabled={Boolean(updatingOrderIds[o.id])}
-                            className="px-2 py-1 rounded-lg bg-brand-parchment text-brand-charcoal text-xs border border-brand-sand/40 hover:bg-brand-sand/30 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                            onClick={() => setEditingProduct(p)}
+                            className="btn btn-secondary btn-sm flex-1"
                           >
-                            {updatingOrderIds[o.id] ? "Saving..." : "Save"}
+                            <Pencil className="h-3 w-3" />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p._id!)}
+                            className="btn btn-danger btn-sm flex-1"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            Delete
                           </button>
                         </div>
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              )}
+            </section>
           )}
-        </section>
 
-        <section className="mt-8">
-          <h2 className="font-heading text-lg text-brand-charcoal mb-4">
-            Refund / Replacement / Cancellation Requests
-          </h2>
-          {isLoadingServiceRequests ? (
-            <p className="text-brand-stone text-sm">Loading service requests…</p>
-          ) : serviceRequests.length === 0 ? (
-            <p className="text-brand-stone text-sm">No requests yet.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full border border-brand-sand/30 text-sm rounded-xl overflow-hidden">
-                <thead className="bg-brand-parchment/50">
-                  <tr>
-                    {["Request ID", "Order", "Type", "Reason", "Requested By", "Status"].map((h) => (
-                      <th key={h} className="text-left px-3 py-2.5 border-b border-brand-sand/30 text-xs uppercase tracking-widest font-medium text-brand-stone/70">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {serviceRequests.map((r) => (
-                    <tr key={r.requestId} className="border-b border-brand-sand/20 hover:bg-brand-cream/40 transition-colors">
-                      <td className="px-3 py-2.5 font-mono text-xs text-brand-stone/70">{r.requestId}</td>
-                      <td className="px-3 py-2.5 text-brand-charcoal">{r.orderId}</td>
-                      <td className="px-3 py-2.5 uppercase text-xs text-brand-stone">{r.type}</td>
-                      <td className="px-3 py-2.5 text-brand-stone max-w-[160px] truncate">{r.reason}</td>
-                      <td className="px-3 py-2.5 text-brand-stone">{r.requestedByEmail}</td>
-                      <td className="px-3 py-2.5">
-                        <select
-                          value={r.status}
-                          onChange={(e) => handleUpdateServiceRequest(r.requestId, e.target.value)}
-                          className={inputClass}
-                        >
-                          {SERVICE_REQUEST_STATUSES.map((s) => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {/* ── Orders Section ── */}
+          {activeSection === "orders" && (
+            <section className="animate-fade-up space-y-4">
+              <div className="section-header">
+                <h2 className="section-title">Orders</h2>
+                <button onClick={loadOrders} className="btn btn-ghost btn-sm">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Refresh
+                </button>
+              </div>
+
+              {orderUpdateFeedback && (
+                <div className={`alert ${orderUpdateFeedback.type === "success" ? "alert-success" : "alert-danger"} animate-fade-in`}>
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  {orderUpdateFeedback.message}
+                </div>
+              )}
+
+              {isLoadingOrders ? (
+                <div className="panel">
+                  <div className="panel-body">
+                    <div className="space-y-3">
+                      {[1,2,3].map((i) => <div key={i} className="skeleton h-12 w-full rounded-xl" />)}
+                    </div>
+                  </div>
+                </div>
+              ) : orders.length === 0 ? (
+                <div className="panel">
+                  <div className="empty-state">
+                    <ShoppingBag className="empty-state-icon" />
+                    <p className="empty-state-text">No orders yet.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="panel overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="rasphia-table">
+                      <thead>
+                        <tr>
+                          <th>Order ID</th>
+                          <th>Customer</th>
+                          <th>Amount</th>
+                          <th>Status</th>
+                          <th>Shipping</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {orders.map((o) => (
+                          <tr key={o.id}>
+                            <td>
+                              <span className="font-mono text-xs text-brand-stone/70 truncate block max-w-[120px]">
+                                {o.id}
+                              </span>
+                              {o.createdAt && (
+                                <span className="text-xs text-brand-stone/50">
+                                  {new Date(o.createdAt).toLocaleDateString()}
+                                </span>
+                              )}
+                            </td>
+                            <td>
+                              <p className="font-medium text-sm text-brand-charcoal">
+                                {o.customer?.name || "—"}
+                              </p>
+                              <p className="text-xs text-brand-stone">{o.customer?.email || "—"}</p>
+                            </td>
+                            <td>
+                              <span className="font-semibold text-brand-charcoal">
+                                ₹{o.amount ?? 0}
+                              </span>
+                            </td>
+                            <td>
+                              <select
+                                value={o.status}
+                                onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
+                                disabled={Boolean(updatingOrderIds[o.id])}
+                                className={`${inputClass} min-w-[110px]`}
+                              >
+                                {ORDER_STATUSES.map((s) => (
+                                  <option key={s} value={s}>{s}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td>
+                              <div className="flex flex-wrap gap-1.5 items-center">
+                                <input
+                                  value={o.shippingProvider || ""}
+                                  onChange={(e) =>
+                                    setOrders((prev) =>
+                                      prev.map((row) =>
+                                        row.id === o.id
+                                          ? { ...row, shippingProvider: e.target.value }
+                                          : row
+                                      )
+                                    )
+                                  }
+                                  placeholder="Carrier"
+                                  className={`${inputClass} w-20`}
+                                />
+                                <input
+                                  value={o.trackingNumber || ""}
+                                  onChange={(e) =>
+                                    setOrders((prev) =>
+                                      prev.map((row) =>
+                                        row.id === o.id
+                                          ? { ...row, trackingNumber: e.target.value }
+                                          : row
+                                      )
+                                    )
+                                  }
+                                  placeholder="Tracking #"
+                                  className={`${inputClass} w-24`}
+                                />
+                                <input
+                                  value={o.trackingUrl || ""}
+                                  onChange={(e) =>
+                                    setOrders((prev) =>
+                                      prev.map((row) =>
+                                        row.id === o.id
+                                          ? { ...row, trackingUrl: e.target.value }
+                                          : row
+                                      )
+                                    )
+                                  }
+                                  placeholder="Tracking URL"
+                                  className={`${inputClass} w-32`}
+                                />
+                                <button
+                                  onClick={() =>
+                                    handleUpdateOrderStatus(o.id, o.status, {
+                                      shippingProvider: o.shippingProvider,
+                                      trackingNumber: o.trackingNumber,
+                                      trackingUrl: o.trackingUrl,
+                                    })
+                                  }
+                                  disabled={Boolean(updatingOrderIds[o.id])}
+                                  className="btn btn-secondary btn-sm"
+                                >
+                                  {updatingOrderIds[o.id] ? "Saving…" : "Save"}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </section>
           )}
-        </section>
+
+          {/* ── Service Requests Section ── */}
+          {activeSection === "service" && (
+            <section className="animate-fade-up space-y-4">
+              <div className="section-header">
+                <h2 className="section-title">Service Requests</h2>
+                <button onClick={loadServiceRequests} className="btn btn-ghost btn-sm">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Refresh
+                </button>
+              </div>
+
+              {isLoadingServiceRequests ? (
+                <div className="panel">
+                  <div className="panel-body">
+                    <div className="space-y-3">
+                      {[1,2,3].map((i) => <div key={i} className="skeleton h-12 w-full rounded-xl" />)}
+                    </div>
+                  </div>
+                </div>
+              ) : serviceRequests.length === 0 ? (
+                <div className="panel">
+                  <div className="empty-state">
+                    <ClipboardList className="empty-state-icon" />
+                    <p className="empty-state-text">No service requests yet.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="panel overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="rasphia-table">
+                      <thead>
+                        <tr>
+                          <th>Request ID</th>
+                          <th>Order</th>
+                          <th>Type</th>
+                          <th>Reason</th>
+                          <th>Requested By</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {serviceRequests.map((r) => (
+                          <tr key={r.requestId}>
+                            <td>
+                              <span className="font-mono text-xs text-brand-stone/70">
+                                {r.requestId.slice(0, 10)}…
+                              </span>
+                            </td>
+                            <td>
+                              <span className="text-sm text-brand-charcoal">{r.orderId}</span>
+                            </td>
+                            <td>
+                              <span className="badge badge-neutral uppercase text-[10px]">
+                                {r.type}
+                              </span>
+                            </td>
+                            <td>
+                              <span className="text-sm text-brand-stone max-w-[140px] block truncate">
+                                {r.reason}
+                              </span>
+                            </td>
+                            <td>
+                              <span className="text-xs text-brand-stone">{r.requestedByEmail}</span>
+                            </td>
+                            <td>
+                              <select
+                                value={r.status}
+                                onChange={(e) =>
+                                  handleUpdateServiceRequest(r.requestId, e.target.value)
+                                }
+                                className={inputClass}
+                              >
+                                {SERVICE_REQUEST_STATUSES.map((s) => (
+                                  <option key={s} value={s}>{s}</option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ── Merchants Section (Admin only) ── */}
+          {activeSection === "merchants" && isAdmin && (
+            <section className="animate-fade-up space-y-4">
+              <div className="section-header">
+                <h2 className="section-title">Pending Merchant Approvals</h2>
+                <button onClick={loadPendingMerchants} className="btn btn-ghost btn-sm">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Refresh
+                </button>
+              </div>
+
+              {pendingMerchants.length === 0 ? (
+                <div className="panel">
+                  <div className="empty-state">
+                    <Users className="empty-state-icon" />
+                    <p className="empty-state-text">No pending applications.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {pendingMerchants.map((m, i) => (
+                    <div
+                      key={m.id}
+                      className="panel animate-fade-up"
+                      style={{ animationDelay: `${i * 50}ms` }}
+                    >
+                      <div className="panel-body">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="avatar avatar-md bg-brand-terracotta/10 text-brand-terracotta font-semibold">
+                              {m.name.slice(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-brand-charcoal">{m.name}</p>
+                              <p className="text-sm text-brand-stone">{m.email}</p>
+                              <p className="text-xs text-brand-stone/70">{m.phone}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleMerchantAction(m.id, "approve")}
+                              className="btn btn-success btn-sm"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => handleMerchantAction(m.id, "reject")}
+                              className="btn btn-danger btn-sm"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ── Image Library (Merchant only) ── */}
+          {activeSection === "images" && !isAdmin && (
+            <section className="animate-fade-up space-y-4">
+              <div className="section-header">
+                <h2 className="section-title">Image Library</h2>
+                <label className="btn btn-primary btn-sm cursor-pointer">
+                  <UploadCloud className="h-3.5 w-3.5" />
+                  {isUploadingProductImage ? "Uploading…" : "Upload Image"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const input = e.currentTarget;
+                      const file = input.files?.[0];
+                      if (!file) return;
+                      input.value = "";
+                      await handleUploadProductImage(file);
+                    }}
+                  />
+                </label>
+              </div>
+
+              <p className="text-xs text-brand-stone">
+                Upload images to get public URLs for use in product listings.
+              </p>
+
+              {imageUploadError && (
+                <div className="alert alert-danger">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  {imageUploadError}
+                </div>
+              )}
+
+              {isLoadingImages ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {[1,2,3,4,5,6].map((i) => (
+                    <div key={i} className="rounded-2xl overflow-hidden border border-brand-sand/30">
+                      <div className="skeleton h-36 w-full" />
+                      <div className="p-3 space-y-2">
+                        <div className="skeleton h-3 w-3/4" />
+                        <div className="skeleton h-3 w-1/2" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : imageAssets.length === 0 ? (
+                <div className="panel">
+                  <div className="empty-state">
+                    <ImageIcon className="empty-state-icon" />
+                    <p className="empty-state-text">No images uploaded yet.</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    {imageAssets.map((asset, i) => (
+                      <article
+                        key={asset.id}
+                        className="panel overflow-hidden hover-lift animate-fade-up"
+                        style={{ animationDelay: `${i * 40}ms` }}
+                      >
+                        <div className="relative">
+                          <img
+                            src={asset.url}
+                            alt={asset.originalName}
+                            loading="lazy"
+                            className="h-36 w-full object-cover bg-brand-parchment/50"
+                          />
+                        </div>
+                        <div className="p-3 space-y-1.5">
+                          <p className="truncate text-sm font-medium text-brand-charcoal">
+                            {asset.originalName}
+                          </p>
+                          <p className="text-xs text-brand-stone">
+                            {formatBytes(asset.sizeBytes)}
+                            {asset.width && asset.height
+                              ? ` · ${asset.width}×${asset.height}`
+                              : ""}
+                          </p>
+                          <p className="text-xs text-brand-stone/60">
+                            {new Date(asset.createdAt).toLocaleDateString()}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyImageUrl(asset)}
+                            className="btn btn-secondary btn-sm w-full mt-1"
+                          >
+                            {imageCopiedId === asset.id ? (
+                              <>
+                                <Check className="h-3 w-3 text-green-600" />
+                                Copied!
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-3 w-3" />
+                                Copy URL
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+
+                  {/* Pagination */}
+                  <div className="flex items-center justify-between pt-2">
+                    <button
+                      type="button"
+                      disabled={imagePage <= 1}
+                      onClick={() => setImagePage((p) => Math.max(1, p - 1))}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs text-brand-stone">
+                      Page {imagePage} of {imageTotalPages} · {imageTotal} total
+                    </span>
+                    <button
+                      type="button"
+                      disabled={imagePage >= imageTotalPages}
+                      onClick={() => setImagePage((p) => Math.min(imageTotalPages, p + 1))}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </>
+              )}
+            </section>
+          )}
+
+          {/* ── Bulk Upload (Merchant only) ── */}
+          {activeSection === "bulk" && !isAdmin && (
+            <section className="animate-fade-up space-y-4">
+              <div className="section-header">
+                <h2 className="section-title">Bulk Product Upload</h2>
+              </div>
+
+              <div className="panel">
+                <div className="panel-header">
+                  <div className="flex items-center gap-2">
+                    <FileSpreadsheet className="h-4 w-4 text-brand-terracotta" />
+                    <span className="text-sm font-semibold text-brand-charcoal">CSV Import</span>
+                  </div>
+                </div>
+                <div className="panel-body space-y-4">
+                  <p className="text-sm text-brand-stone">
+                    Download the template, fill in your products, preview the CSV, then import valid rows.
+                  </p>
+
+                  <div className="flex flex-wrap gap-2">
+                    <a
+                      href="/templates/merchant-products-bulk-upload-sample.csv"
+                      download
+                      className="btn btn-secondary btn-sm"
+                    >
+                      Download Template
+                    </a>
+                    <label className="btn btn-secondary btn-sm cursor-pointer">
+                      <FileSpreadsheet className="h-3.5 w-3.5" />
+                      {bulkCsvFile ? bulkCsvFile.name : "Choose CSV"}
+                      <input
+                        type="file"
+                        accept=".csv,text/csv"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null;
+                          setBulkCsvFile(file);
+                          setBulkError(null);
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => submitBulkCsv(true)}
+                      disabled={bulkIsPreviewing || bulkIsImporting || !bulkCsvFile}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      {bulkIsPreviewing ? "Previewing…" : "Preview CSV"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => submitBulkCsv(false)}
+                      disabled={
+                        bulkIsPreviewing ||
+                        bulkIsImporting ||
+                        !bulkCsvFile ||
+                        !bulkSummary ||
+                        bulkSummary.validRows < 1
+                      }
+                      className="btn btn-primary btn-sm"
+                    >
+                      {bulkIsImporting ? "Importing…" : "Import Valid Rows"}
+                    </button>
+                  </div>
+
+                  {bulkError && (
+                    <div className="alert alert-danger">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                      {bulkError}
+                    </div>
+                  )}
+
+                  {bulkSummary && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <MiniStat label="Total Rows" value={bulkSummary.totalRows} />
+                      <MiniStat label="Valid Rows" value={bulkSummary.validRows} color="green" />
+                      <MiniStat label="Invalid Rows" value={bulkSummary.invalidRows} color="amber" />
+                      <MiniStat
+                        label={bulkSummary.dryRun ? "Ready to Import" : "Created"}
+                        value={bulkSummary.dryRun ? bulkSummary.validRows : Number(bulkSummary.createdCount || 0)}
+                      />
+                    </div>
+                  )}
+
+                  {bulkPreviewRows.length > 0 && (
+                    <div className="overflow-x-auto rounded-xl border border-brand-sand/40 bg-white">
+                      <table className="rasphia-table min-w-full">
+                        <thead>
+                          <tr>
+                            {["Name", "Category", "Price", "Stock", "Image URL"].map((h) => (
+                              <th key={h}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bulkPreviewRows.slice(0, 8).map((row, idx) => (
+                            <tr key={`${row.name}-${idx}`}>
+                              <td>{row.name}</td>
+                              <td>{row.category}</td>
+                              <td>₹{row.price}</td>
+                              <td>{row.stockQuantity}</td>
+                              <td className="max-w-[200px] truncate text-brand-stone text-xs">
+                                {row.imageUrl}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {bulkRowErrors.length > 0 && (
+                    <div className="alert alert-warning">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                      <div>
+                        <p className="font-medium text-sm">Row Errors ({bulkRowErrors.length})</p>
+                        <div className="mt-2 max-h-40 overflow-auto space-y-1">
+                          {bulkRowErrors.slice(0, 20).map((err, idx) => (
+                            <p key={`${err.row}-${err.field}-${idx}`} className="text-xs">
+                              Row {err.row} · {err.field}: {err.message}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+        </main>
       </div>
+    </>
+  );
+}
+
+/* ── Helper Components ── */
+
+function StatCard({
+  label,
+  value,
+  icon,
+  highlight,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  highlight?: boolean;
+}) {
+  return (
+    <div className={`stat-card animate-fade-up ${highlight ? "border-brand-coral/30 bg-red-50/30" : ""}`}>
+      <div className="flex items-center justify-between mb-1">
+        <span className="stat-card-label">{label}</span>
+        {icon}
+      </div>
+      <span className="stat-card-value">{value}</span>
+    </div>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color?: "green" | "amber";
+}) {
+  const colorMap = {
+    green: "border-green-200 bg-green-50 text-green-800",
+    amber: "border-amber-200 bg-amber-50 text-amber-800",
+  };
+  const cls = color ? colorMap[color] : "border-brand-sand/50 bg-white text-brand-charcoal";
+  return (
+    <div className={`rounded-xl border px-3 py-2 ${cls}`}>
+      <p className="text-xs opacity-70">{label}</p>
+      <p className="font-semibold text-lg leading-tight">{value}</p>
     </div>
   );
 }
