@@ -43,6 +43,7 @@ export const WA_INTENTS = [
   "stock_query",
   "order_query_active",
   "order_update_status",
+  "merchant_bulk_upload_help",
   "help",
   "unknown",
 ] as const;
@@ -99,6 +100,7 @@ const OrderUpdateSchema = z.object({
 });
 
 type SessionData = {
+  activeRole?: "merchant" | "user";
   activeIntent?: WaIntent;
   draft?: Record<string, unknown>;
   lastPrompt?: string;
@@ -203,6 +205,7 @@ const REQUIRED_BY_INTENT: Record<WaIntent, string[]> = {
   stock_query: [],
   order_query_active: [],
   order_update_status: ["orderId", "status"],
+  merchant_bulk_upload_help: [],
   help: [],
   unknown: [],
 };
@@ -368,6 +371,8 @@ function buildUnclearIntentTemplate(merchantStatus?: string) {
     "5) Orders",
     "Example: Active orders",
     "Example: Update order status orderId=ORD123 status=Shipped",
+    "6) Bulk product import (CSV)",
+    "Example: bulk upload help",
     "",
     "Notes:",
     "- I auto-detect whether this number is acting as a user or merchant from your message + registration state.",
@@ -434,6 +439,8 @@ function buildInitialUsageInstructions(args: {
     "6) Manage orders",
     "Example: active orders",
     "Example: update order status orderId=ORD123 status=Shipped",
+    "7) Bulk product import help",
+    "Example: bulk upload help",
     "",
     "NOTES",
     "- For sensitive actions, I will ask YES/NO confirmation.",
@@ -502,6 +509,41 @@ function detectRoleChoice(text: string): "merchant" | "user" | null {
     return "user";
   }
   return null;
+}
+
+function detectRoleSwitch(text: string): "merchant" | "user" | null {
+  const t = String(text || "").trim().toLowerCase();
+  if (!t) return null;
+  if (!/\b(switch|change|set)\b/.test(t)) return null;
+  return detectRoleChoice(t);
+}
+
+function detectRoleFromProfiles(args: {
+  hasMerchant: boolean;
+  hasUser: boolean;
+}): "merchant" | "user" | null {
+  if (args.hasMerchant && !args.hasUser) return "merchant";
+  if (args.hasUser && !args.hasMerchant) return "user";
+  return null;
+}
+
+function buildRoleConfirmationPrompt(args: {
+  hasMerchantProfile: boolean;
+  hasUserProfile: boolean;
+}) {
+  const profileLine =
+    args.hasMerchantProfile && args.hasUserProfile
+      ? "I found both merchant and user profiles for this number."
+      : !args.hasMerchantProfile && !args.hasUserProfile
+      ? "I could not match this number to a merchant or user profile yet."
+      : "I need explicit role confirmation before continuing.";
+  return [
+    profileLine,
+    "Reply with exactly one word:",
+    "USER",
+    "or",
+    "MERCHANT",
+  ].join("\n");
 }
 
 function shouldSendInitialGuide(text: string) {
@@ -793,6 +835,12 @@ function fallbackIntent(message: string): IntentParse {
       fields: qty ? { stockQuantity: Number(qty) } : {},
     };
   }
+  if (
+    (text.includes("bulk") || text.includes("csv")) &&
+    (text.includes("upload") || text.includes("import") || text.includes("product"))
+  ) {
+    return { intent: "merchant_bulk_upload_help", fields: {} };
+  }
   if (text.includes("upload") || text.includes("add product")) {
     return { intent: "product_upload", fields: {} };
   }
@@ -814,7 +862,8 @@ function fallbackIntent(message: string): IntentParse {
 async function inferIntent(
   message: string,
   activeIntent?: WaIntent,
-  history: ConversationTurn[] = []
+  history: ConversationTurn[] = [],
+  roleHint?: "merchant" | "user" | null
 ): Promise<IntentParse> {
   if (!gemini) return fallbackIntent(message);
 
@@ -860,6 +909,9 @@ async function inferIntent(
 Pick one intent from this enum only: ${WA_INTENTS.join(", ")}.
 Extract only explicit fields from user message.
 If continuation message likely belongs to prior intent (${activeIntent || "none"}), keep same intent unless user clearly switched.
+Current confirmed role hint for this conversation: ${roleHint || "none"}.
+If role hint is merchant, prefer merchant intents.
+If role hint is user, prefer user intents.
 
 Return strict JSON with shape:
 {
@@ -1147,12 +1199,31 @@ async function handleUserDiscoverProducts(
 
   const lines = filtered
     .slice(0, 6)
-    .map((p) => `• ${p.name} | ₹${p.price || 0} | ${p.category || "General"} | stock ${p.stockQuantity}`);
+    .map((p, idx) => {
+      const description = String(p.description || "").trim();
+      const shortDescription =
+        description.length > 120 ? `${description.slice(0, 117)}...` : description;
+      const productLink = buildPublicProductLink(p.id);
+      return [
+        `${idx + 1}) ${p.name}`,
+        `Price: ₹${p.price || 0} | Category: ${p.category || "General"} | Stock: ${p.stockQuantity}`,
+        `Description: ${shortDescription || "No description"}`,
+        `Product link: ${productLink}`,
+        p.imageUrl ? `Image: ${p.imageUrl}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+    });
   return {
     done: true,
-    reply: `${merchantContext?.name ? `Merchant: ${merchantContext.name}\n` : ""}Top product matches:\n${lines.join("\n")}`,
+    reply: `${merchantContext?.name ? `Merchant: ${merchantContext.name}\n` : ""}Top product matches:\n\n${lines.join("\n\n")}\n\nReply with: use product 1`,
     nextIntent: undefined,
-    nextDraft: {},
+    nextDraft: {
+      __productOptions: filtered.slice(0, 6).map((p) => ({
+        id: p.id,
+        name: p.name,
+      })),
+    },
   };
 }
 
@@ -1188,7 +1259,7 @@ async function handleUserDiscoverMerchants(draft: Record<string, unknown>) {
 
   const lines = merchants
     .slice(0, 6)
-    .map((m) => `• ${m.name} (${m.city}, ${m.state}) | /storefronts/${m.slug}`);
+    .map((m, idx) => `${idx + 1}) ${m.name} (${m.city}, ${m.state}) | /storefronts/${m.slug}`);
   return {
     done: true,
     reply: `Merchant results:\n${lines.join("\n")}`,
@@ -1280,10 +1351,10 @@ async function handleUserWishlistView(user: {
     };
   }
 
-  const lines = items.slice(0, 15).map((item) => {
+  const lines = items.slice(0, 15).map((item, idx) => {
     const name = String(item.name || "Unknown");
     const price = Number(item.price || 0);
-    return `• ${name}${price > 0 ? ` | ₹${price}` : ""}`;
+    return `${idx + 1}) ${name}${price > 0 ? ` | ₹${price}` : ""}`;
   });
 
   return {
@@ -1374,6 +1445,23 @@ function pickAddressChoice(value: unknown) {
   return n;
 }
 
+function parseIndexedSelection(text: string, type: "product" | "order"): number | null {
+  const t = String(text || "").trim().toLowerCase();
+  if (!t) return null;
+  const match = t.match(
+    new RegExp(`(?:use|select|pick|choose)\\s+(?:${type})\\s*(\\d{1,3})`, "i")
+  );
+  if (!match?.[1]) return null;
+  const n = Number(match[1]);
+  if (!Number.isFinite(n) || n < 1) return null;
+  return Math.floor(n);
+}
+
+function readDraftOptions<T>(draft: Record<string, unknown>, key: string): T[] {
+  const value = draft[key];
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 function buildUpiAppLinks(upiUri: string) {
   if (!upiUri.startsWith("upi://")) {
     return { gpay: "", phonepe: "", paytm: "" };
@@ -1393,6 +1481,13 @@ function resolvePublicBaseUrl() {
     process.env.RASPHIA_BASE_URL ||
     "";
   return String(configured || "").trim().replace(/\/+$/, "");
+}
+
+function buildPublicProductLink(productId: string) {
+  const base = resolvePublicBaseUrl();
+  const id = String(productId || "").trim();
+  if (!id) return "";
+  return base ? `${base}/products/${id}` : `/products/${id}`;
 }
 
 function buildUpiChooserLink(upiUri: string, orderId: string) {
@@ -1976,14 +2071,19 @@ async function handleUserPaymentConfirm(
         return `${index + 1}. ${order.orderId} • ₹${order.amount} • ${merchantName}`;
       }),
       "",
-      "Reply with: confirm payment orderId=<orderId>",
+      "Reply with: use order 1",
+      "or: confirm payment orderId=<orderId>",
     ];
 
     return {
       done: false,
       reply: lines.join("\n"),
       nextIntent: "user_payment_confirm" as WaIntent,
-      nextDraft: {},
+      nextDraft: {
+        __orderOptions: pendingOrders.slice(0, 10).map((order) => ({
+          orderId: order.orderId,
+        })),
+      },
     };
   }
 
@@ -2117,16 +2217,20 @@ async function handleUserOrderQuery(
     };
   }
 
-  const lines = userOrders.slice(0, 10).map((order) => {
+  const lines = userOrders.slice(0, 10).map((order, idx) => {
     const tracking = order.trackingNumber ? ` | tracking ${order.trackingNumber}` : "";
-    return `• ${order.orderId} | ${order.status} | ₹${order.amount}${tracking}`;
+    return `${idx + 1}) ${order.orderId} | ${order.status} | ₹${order.amount}${tracking}`;
   });
 
   return {
     done: true,
-    reply: `${merchantContext?.name ? `Merchant: ${merchantContext.name}\n` : ""}${activeOnly ? "Your active orders:\n" : "Your orders:\n"}${lines.join("\n")}`,
+    reply: `${merchantContext?.name ? `Merchant: ${merchantContext.name}\n` : ""}${activeOnly ? "Your active orders:\n" : "Your orders:\n"}${lines.join("\n")}\n\nReply with: use order 1`,
     nextIntent: undefined,
-    nextDraft: {},
+    nextDraft: {
+      __orderOptions: userOrders.slice(0, 10).map((order) => ({
+        orderId: order.orderId,
+      })),
+    },
   };
 }
 
@@ -2224,6 +2328,46 @@ async function handleRegister(phone: string, draft: Record<string, unknown>) {
     done: true,
     reply:
       "Registration submitted successfully. Your merchant profile is now pending admin approval.",
+    nextIntent: undefined,
+    nextDraft: {},
+  };
+}
+
+async function handleMerchantBulkUploadHelp(merchant: {
+  id: string;
+  status: string;
+  name?: string | null;
+}) {
+  if (merchant.status !== "approved") {
+    return {
+      done: true,
+      reply:
+        "Your merchant account is pending approval. Bulk CSV import will be enabled once approved.",
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  const base = resolvePublicBaseUrl();
+  const storefrontUrl = base
+    ? `${base}/merchant/storefront#bulk-product-upload`
+    : "/merchant/storefront#bulk-product-upload";
+  const templateUrl = base
+    ? `${base}/templates/merchant-products-bulk-upload-sample.csv`
+    : "/templates/merchant-products-bulk-upload-sample.csv";
+
+  return {
+    done: true,
+    reply: [
+      `Bulk upload is available for ${merchant.name || "your store"}.`,
+      "Steps:",
+      "1) Download CSV template",
+      templateUrl,
+      "2) Fill product rows",
+      "3) Open merchant dashboard bulk upload section",
+      storefrontUrl,
+      "4) Preview CSV, then import valid rows",
+    ].join("\n"),
     nextIntent: undefined,
     nextDraft: {},
   };
@@ -2334,8 +2478,8 @@ async function handleStockQuery(
       };
     }
     const lines = products.map(
-      (p) =>
-        `• ${p.name}: stock ${p.stockQuantity}, ${p.isAvailable ? "available" : "unavailable"}`
+      (p, idx) =>
+        `${idx + 1}) ${p.name}: stock ${p.stockQuantity}, ${p.isAvailable ? "available" : "unavailable"}`
     );
     return {
       done: true,
@@ -2361,8 +2505,8 @@ async function handleStockQuery(
   }
 
   const lines = products.map(
-    (p) =>
-      `• ${p.name}: stock ${p.stockQuantity}, ${p.isAvailable ? "available" : "unavailable"}`
+    (p, idx) =>
+      `${idx + 1}) ${p.name}: stock ${p.stockQuantity}, ${p.isAvailable ? "available" : "unavailable"}`
   );
   return {
     done: true,
@@ -2492,14 +2636,31 @@ async function handleProductQuery(
     };
   }
 
-  const lines = products.map(
-    (p) => `• ${p.name} | ₹${p.price || 0} | stock ${p.stockQuantity}`
-  );
+  const lines = products.map((p, idx) => {
+    const description = String(p.description || "").trim();
+    const shortDescription =
+      description.length > 120 ? `${description.slice(0, 117)}...` : description;
+    const productLink = buildPublicProductLink(p.id);
+    return [
+      `${idx + 1}) ${p.name}`,
+      `Price: ₹${p.price || 0} | stock ${p.stockQuantity}`,
+      `Description: ${shortDescription || "No description"}`,
+      `Product link: ${productLink}`,
+      p.imageUrl ? `Image: ${p.imageUrl}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  });
   return {
     done: true,
-    reply: `Product results:\n${lines.join("\n")}`,
+    reply: `Product results:\n\n${lines.join("\n\n")}\n\nReply with: use product 1`,
     nextIntent: undefined,
-    nextDraft: {},
+    nextDraft: {
+      __productOptions: products.map((p) => ({
+        id: p.id,
+        name: p.name,
+      })),
+    },
   };
 }
 
@@ -2641,6 +2802,34 @@ function canMerchantManageOrder(
   });
 }
 
+async function getMerchantProductOwnershipSets(merchantId: string) {
+  const merchantProducts = await prisma.product.findMany({
+    where: { merchantId },
+    select: { id: true, name: true },
+  });
+  const ids = new Set(merchantProducts.map((p) => p.id));
+  const names = new Set(
+    merchantProducts
+      .map((p) => p.name)
+      .filter((n): n is string => typeof n === "string" && n.length > 0)
+  );
+  return { ids, names };
+}
+
+function isOrderOwnedByMerchant(
+  order: { merchantId?: string | null; products?: unknown },
+  merchantId: string,
+  merchantProductIds: Set<string>,
+  merchantProductNames: Set<string>
+) {
+  if (String(order.merchantId || "").trim() === merchantId) return true;
+  return canMerchantManageOrder(
+    merchantProductIds,
+    merchantProductNames,
+    order.products
+  );
+}
+
 async function handleOrderQueryActive(merchant: { id: string; status: string }) {
   if (merchant.status !== "approved") {
     return {
@@ -2652,27 +2841,32 @@ async function handleOrderQueryActive(merchant: { id: string; status: string }) 
     };
   }
 
-  const merchantProducts = await prisma.product.findMany({
-    where: { merchantId: merchant.id },
-    select: { id: true, name: true },
-  });
-  const ids = new Set(merchantProducts.map((p) => p.id));
-  const names = new Set(
-    merchantProducts
-      .map((p) => p.name)
-      .filter((n): n is string => typeof n === "string" && n.length > 0)
-  );
-
-  const orders = await prisma.order.findMany({
+  const activeStatuses = ["created", "paid", "Processing", "Shipped"];
+  const directOrders = await prisma.order.findMany({
     where: {
-      status: { in: ["created", "paid", "Processing", "Shipped"] },
+      merchantId: merchant.id,
+      status: { in: activeStatuses },
     },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
-  const filtered = orders.filter((o) =>
-    canMerchantManageOrder(ids, names, o.products)
-  );
+
+  let filtered = directOrders;
+  if (!filtered.length) {
+    // Legacy fallback for older orders where merchantId may be null.
+    const { ids, names } = await getMerchantProductOwnershipSets(merchant.id);
+    const legacyOrders = await prisma.order.findMany({
+      where: {
+        merchantId: null,
+        status: { in: activeStatuses },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 150,
+    });
+    filtered = legacyOrders
+      .filter((o) => isOrderOwnedByMerchant(o, merchant.id, ids, names))
+      .slice(0, 50);
+  }
 
   if (!filtered.length) {
     return {
@@ -2685,12 +2879,16 @@ async function handleOrderQueryActive(merchant: { id: string; status: string }) 
 
   const lines = filtered
     .slice(0, 10)
-    .map((o) => `• ${o.orderId} | ${o.status} | ₹${o.amount}`);
+    .map((o, idx) => `${idx + 1}) ${o.orderId} | ${o.status} | ₹${o.amount}`);
   return {
     done: true,
-    reply: `Active orders:\n${lines.join("\n")}`,
+    reply: `Active orders:\n${lines.join("\n")}\n\nReply with: use order 1`,
     nextIntent: undefined,
-    nextDraft: {},
+    nextDraft: {
+      __orderOptions: filtered.slice(0, 10).map((o) => ({
+        orderId: o.orderId,
+      })),
+    },
   };
 }
 
@@ -2745,17 +2943,8 @@ async function handleOrderUpdateStatus(
     };
   }
 
-  const merchantProducts = await prisma.product.findMany({
-    where: { merchantId: merchant.id },
-    select: { id: true, name: true },
-  });
-  const ids = new Set(merchantProducts.map((p) => p.id));
-  const names = new Set(
-    merchantProducts
-      .map((p) => p.name)
-      .filter((n): n is string => typeof n === "string" && n.length > 0)
-  );
-  if (!canMerchantManageOrder(ids, names, order.products)) {
+  const { ids, names } = await getMerchantProductOwnershipSets(merchant.id);
+  if (!isOrderOwnedByMerchant(order, merchant.id, ids, names)) {
     return {
       done: true,
       reply: "You are not allowed to update this order.",
@@ -2838,6 +3027,12 @@ export async function processMerchantWhatsAppMessage(input: {
     recipientMerchant && (!merchant || merchant.id !== recipientMerchant.id)
   );
   const userProfile = await getUserByPhone(phone);
+  const roleFromProfiles = detectRoleFromProfiles({
+    hasMerchant: Boolean(merchant),
+    hasUser: Boolean(userProfile),
+  });
+  const effectiveRole: "merchant" | "user" | null =
+    session.activeRole || roleFromProfiles;
   const inboundText = String(input.text || input.mediaCaption || "").trim();
   const inboundContextText =
     inboundText || (input.mediaId ? "Image uploaded for product workflow" : "");
@@ -2845,6 +3040,7 @@ export async function processMerchantWhatsAppMessage(input: {
   const activeOnlyHint =
     /\bmy active orders?\b/.test(inboundContextText.toLowerCase()) ||
     /\bactive orders?\b/.test(inboundContextText.toLowerCase());
+  const roleSwitchRequest = detectRoleSwitch(inboundContextText);
 
   if (inboundContextText) {
     await appendConversationMessage(sessionId, "user", inboundContextText, {
@@ -2874,13 +3070,19 @@ export async function processMerchantWhatsAppMessage(input: {
   }
 
   if (!session.lastPrompt && shouldSendInitialGuide(inboundContextText)) {
-    const reply = buildInitialUsageInstructions({
-      merchantStatus: merchant?.status,
-      hasUserProfile: Boolean(userProfile),
-      hasMerchantProfile: Boolean(merchant),
-    });
+    const reply = roleFromProfiles
+      ? buildInitialUsageInstructions({
+          merchantStatus: merchant?.status,
+          hasUserProfile: Boolean(userProfile),
+          hasMerchantProfile: Boolean(merchant),
+        })
+      : buildRoleConfirmationPrompt({
+          hasMerchantProfile: Boolean(merchant),
+          hasUserProfile: Boolean(userProfile),
+        });
     const formattedReply = formatWhatsAppMarkdown(reply);
     await saveSession(phone, {
+      activeRole: roleFromProfiles || session.activeRole,
       activeIntent: undefined,
       draft: {},
       activeMerchantId: session.activeMerchantId,
@@ -2890,7 +3092,7 @@ export async function processMerchantWhatsAppMessage(input: {
       processedMessageIds: input.messageId
         ? [...processedMessageIds, input.messageId].slice(-50)
         : processedMessageIds,
-      pendingRoleSelection: !isMerchantInboxMode && !merchant && !userProfile,
+      pendingRoleSelection: !roleFromProfiles,
       pendingConfirmation: null,
     });
     await appendConversationMessage(sessionId, "assistant", formattedReply);
@@ -3062,6 +3264,7 @@ export async function processMerchantWhatsAppMessage(input: {
 
     await saveSession(phone, {
       ...session,
+      activeRole: chosenRole,
       activeIntent: nextIntent,
       lastPrompt: formattedReply,
       processedMessageIds: input.messageId
@@ -3072,6 +3275,62 @@ export async function processMerchantWhatsAppMessage(input: {
     await appendConversationMessage(sessionId, "assistant", formattedReply, {
       intent: nextIntent,
     });
+    await pruneConversation(sessionId);
+    return formattedReply;
+  }
+
+  if (effectiveRole && roleSwitchRequest && roleSwitchRequest !== effectiveRole) {
+    const nextIntent: WaIntent =
+      roleSwitchRequest === "merchant"
+        ? merchant
+          ? "product_query"
+          : "merchant_register"
+        : userProfile
+        ? "user_discover_products"
+        : "user_register";
+    const reply =
+      roleSwitchRequest === "merchant"
+        ? merchant
+          ? "Switched to MERCHANT mode."
+          : "Switched to MERCHANT mode. Please complete merchant registration with businessName and email."
+        : userProfile
+        ? "Switched to USER mode."
+        : "Switched to USER mode. Please register with userName and userEmail.";
+    const formattedReply = formatWhatsAppMarkdown(reply);
+    await saveSession(phone, {
+      ...session,
+      activeRole: roleSwitchRequest,
+      activeIntent: nextIntent,
+      lastPrompt: formattedReply,
+      processedMessageIds: input.messageId
+        ? [...processedMessageIds, input.messageId].slice(-50)
+        : processedMessageIds,
+      pendingRoleSelection: false,
+      pendingConfirmation: null,
+    });
+    await appendConversationMessage(sessionId, "assistant", formattedReply, {
+      intent: nextIntent,
+    });
+    await pruneConversation(sessionId);
+    return formattedReply;
+  }
+
+  if (!effectiveRole) {
+    const reply = buildRoleConfirmationPrompt({
+      hasMerchantProfile: Boolean(merchant),
+      hasUserProfile: Boolean(userProfile),
+    });
+    const formattedReply = formatWhatsAppMarkdown(reply);
+    await saveSession(phone, {
+      ...session,
+      lastPrompt: formattedReply,
+      processedMessageIds: input.messageId
+        ? [...processedMessageIds, input.messageId].slice(-50)
+        : processedMessageIds,
+      pendingRoleSelection: true,
+      pendingConfirmation: null,
+    });
+    await appendConversationMessage(sessionId, "assistant", formattedReply);
     await pruneConversation(sessionId);
     return formattedReply;
   }
@@ -3095,7 +3354,8 @@ export async function processMerchantWhatsAppMessage(input: {
   const parsed = await inferIntent(
     inboundContextText,
     session.activeIntent,
-    historyForIntent
+    historyForIntent,
+    effectiveRole
   );
   const merchantIntents = new Set<WaIntent>([
     "merchant_register",
@@ -3106,6 +3366,7 @@ export async function processMerchantWhatsAppMessage(input: {
     "stock_query",
     "order_query_active",
     "order_update_status",
+    "merchant_bulk_upload_help",
   ]);
   const userIntents = new Set<WaIntent>([
     "user_register",
@@ -3127,6 +3388,8 @@ export async function processMerchantWhatsAppMessage(input: {
   const asksMerchantRole =
     /\bmerchant\b/.test(lowerInbound) ||
     /\bstock\b/.test(lowerInbound) ||
+    /\bbulk\b/.test(lowerInbound) ||
+    /\bcsv\b/.test(lowerInbound) ||
     /\border\s+update\b/.test(lowerInbound) ||
     /\bactive orders\b/.test(lowerInbound) ||
     /\bupload\b/.test(lowerInbound);
@@ -3151,6 +3414,14 @@ export async function processMerchantWhatsAppMessage(input: {
       ? session.activeIntent
       : parsed.intent;
 
+  if (
+    effectiveRole === "merchant" &&
+    intent === "user_order_query" &&
+    (activeOnlyHint || /\bactive orders?\b/.test(lowerInbound) || /\border\b/.test(lowerInbound))
+  ) {
+    intent = "order_query_active";
+  }
+
   let forceUserActiveOnly = false;
   let merchantInboxBlockedAction = false;
   if (isMerchantInboxMode && merchantIntents.has(intent) && intent !== "merchant_register") {
@@ -3166,13 +3437,14 @@ export async function processMerchantWhatsAppMessage(input: {
       intent = "help";
     }
   }
+  if (effectiveRole === "merchant" && userIntents.has(intent)) {
+    intent = "help";
+  }
+  if (effectiveRole === "user" && merchantIntents.has(intent) && intent !== "merchant_register") {
+    intent = "help";
+  }
   if (!merchant && merchantIntents.has(intent) && intent !== "merchant_register") {
-    if (intent === "order_query_active" && userProfile) {
-      intent = "user_order_query";
-      forceUserActiveOnly = true;
-    } else {
-      intent = userProfile ? "user_discover_products" : "user_register";
-    }
+    intent = "merchant_register";
   }
   if (!userProfile && userIntents.has(intent) && intent !== "user_register") {
     intent = "user_register";
@@ -3187,9 +3459,43 @@ export async function processMerchantWhatsAppMessage(input: {
     }
   }
 
+  const selectedProductIndex = parseIndexedSelection(inboundContextText, "product");
+  const selectedOrderIndex = parseIndexedSelection(inboundContextText, "order");
+  const sessionDraft = (session.draft || {}) as Record<string, unknown>;
+  const productOptions = readDraftOptions<{ id?: string; name?: string }>(
+    sessionDraft,
+    "__productOptions"
+  );
+  const orderOptions = readDraftOptions<{ orderId?: string }>(
+    sessionDraft,
+    "__orderOptions"
+  );
+  const selectedProduct =
+    selectedProductIndex && selectedProductIndex <= productOptions.length
+      ? productOptions[selectedProductIndex - 1]
+      : null;
+  const selectedOrder =
+    selectedOrderIndex && selectedOrderIndex <= orderOptions.length
+      ? orderOptions[selectedOrderIndex - 1]
+      : null;
+
+  if ((intent === "unknown" || intent === "help") && selectedOrder) {
+    intent =
+      session.activeIntent ||
+      (effectiveRole === "merchant" ? "order_update_status" : "user_order_query");
+  }
+  if ((intent === "unknown" || intent === "help") && selectedProduct) {
+    intent =
+      session.activeIntent ||
+      (effectiveRole === "merchant" ? "product_query" : "user_order_create");
+  }
+
   const draft = {
     ...(session.draft || {}),
     ...(parsed.fields || {}),
+    ...(selectedProduct?.name ? { productName: selectedProduct.name } : {}),
+    ...(selectedProduct?.id ? { productId: selectedProduct.id } : {}),
+    ...(selectedOrder?.orderId ? { orderId: selectedOrder.orderId } : {}),
     ...(explicitMerchantSlug ? { merchantSlug: explicitMerchantSlug } : {}),
     ...(activeOnlyHint ? { activeOnly: true } : {}),
     ...(forceUserActiveOnly ? { activeOnly: true } : {}),
@@ -3248,31 +3554,6 @@ export async function processMerchantWhatsAppMessage(input: {
     return formattedReply;
   }
 
-  if (
-    !isMerchantInboxMode &&
-    !merchant &&
-    !userProfile &&
-    (intent === "help" || intent === "unknown") &&
-    !asksMerchantRole &&
-    !asksUserRole
-  ) {
-    const reply =
-      "Before I continue, please confirm your role: are you a Rasphia USER or a Rasphia MERCHANT?";
-    const formattedReply = formatWhatsAppMarkdown(reply);
-    await saveSession(phone, {
-      ...session,
-      lastPrompt: formattedReply,
-      processedMessageIds: input.messageId
-        ? [...processedMessageIds, input.messageId].slice(-50)
-        : processedMessageIds,
-      pendingRoleSelection: true,
-      draft,
-    });
-    await appendConversationMessage(sessionId, "assistant", formattedReply);
-    await pruneConversation(sessionId);
-    return formattedReply;
-  }
-
   let result:
     | {
         done: boolean;
@@ -3288,6 +3569,10 @@ export async function processMerchantWhatsAppMessage(input: {
       done: !mediaUrl,
       reply: merchantInboxBlockedAction
         ? "This is a merchant customer chat. Merchant stock/product management actions are not available here. You can discover products, place orders, track orders, and request refund/replacement/cancellation."
+        : effectiveRole === "merchant" && asksUserRole
+        ? "You are in MERCHANT mode. User actions are blocked here. Reply 'switch to user' if you want user flow."
+        : effectiveRole === "user" && asksMerchantRole
+        ? "You are in USER mode. Merchant actions are blocked here. Reply 'switch to merchant' if you want merchant flow."
         : mediaUrl
         ? `Image received and attached. ${merchant?.status === "approved" ? "Tell me product details like name/category/price/stock." : "Please continue with registration details."}`
         : buildUnclearIntentTemplate(merchant?.status),
@@ -3457,6 +3742,18 @@ export async function processMerchantWhatsAppMessage(input: {
     }
   } else if (intent === "merchant_register") {
     result = await handleRegister(phone, draft);
+  } else if (intent === "merchant_bulk_upload_help") {
+    if (!merchant) {
+      result = {
+        done: false,
+        reply:
+          "Merchant profile not found for this number. Share businessName and email to register merchant.",
+        nextIntent: "merchant_register",
+        nextDraft: draft,
+      };
+    } else {
+      result = await handleMerchantBulkUploadHelp(merchant);
+    }
   } else if (intent === "product_upload") {
     if (!merchant) {
       result = {
@@ -3534,7 +3831,7 @@ export async function processMerchantWhatsAppMessage(input: {
     result = {
       done: true,
       reply:
-        "I could not map that request yet. Please try one of: register, upload product, query stock, update stock, query active orders.",
+        "I could not map that request yet. Please try one of: register, upload product, query stock, update stock, query active orders, bulk upload help.",
       nextIntent: undefined,
       nextDraft: {},
     };
@@ -3542,6 +3839,7 @@ export async function processMerchantWhatsAppMessage(input: {
 
   const formattedResultReply = formatWhatsAppMarkdown(result.reply);
   await saveSession(phone, {
+    activeRole: effectiveRole,
     activeIntent: result.nextIntent,
     draft: result.nextDraft,
     activeMerchantId: merchantContext?.id || session.activeMerchantId,

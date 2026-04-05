@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import AdminProductForm from "../components/AdminProductForm";
 import { Product } from "../types";
 
@@ -150,17 +150,46 @@ export default function ManagementDashboard() {
       const res = await fetch("/api/management/orders");
       if (!res.ok) throw new Error("Failed to fetch orders");
       const data = await res.json();
-      const normalized: ManagementOrder[] = (data || []).map((o: any) => ({
-        id: o.orderId || o.order_id || o.id || o._id,
-        status: o.status,
-        amount: o.amount,
-        trackingNumber: o.trackingNumber ?? o.tracking_number ?? null,
-        shippingProvider: o.shippingProvider ?? o.shipping_provider ?? null,
-        trackingUrl: o.trackingUrl ?? o.tracking_url ?? null,
-        estimatedDelivery: o.estimatedDelivery ?? o.estimated_delivery ?? null,
-        shippingDetails: o.shippingDetails ?? o.shipping_details ?? null,
-        customer: o.customer || {},
-        createdAt: o.createdAt,
+      const rows: Array<Record<string, unknown>> = Array.isArray(data) ? data : [];
+      const normalized: ManagementOrder[] = rows.map((o) => ({
+        id: String(o.orderId || o.order_id || o.id || o._id || ""),
+        status: String(o.status || ""),
+        amount: typeof o.amount === "number" ? o.amount : undefined,
+        trackingNumber:
+          typeof o.trackingNumber === "string"
+            ? o.trackingNumber
+            : typeof o.tracking_number === "string"
+            ? o.tracking_number
+            : null,
+        shippingProvider:
+          typeof o.shippingProvider === "string"
+            ? o.shippingProvider
+            : typeof o.shipping_provider === "string"
+            ? o.shipping_provider
+            : null,
+        trackingUrl:
+          typeof o.trackingUrl === "string"
+            ? o.trackingUrl
+            : typeof o.tracking_url === "string"
+            ? o.tracking_url
+            : null,
+        estimatedDelivery:
+          typeof o.estimatedDelivery === "string"
+            ? o.estimatedDelivery
+            : typeof o.estimated_delivery === "string"
+            ? o.estimated_delivery
+            : null,
+        shippingDetails:
+          o.shippingDetails && typeof o.shippingDetails === "object"
+            ? (o.shippingDetails as Record<string, unknown>)
+            : o.shipping_details && typeof o.shipping_details === "object"
+            ? (o.shipping_details as Record<string, unknown>)
+            : null,
+        customer:
+          o.customer && typeof o.customer === "object"
+            ? (o.customer as { name?: string; email?: string })
+            : {},
+        createdAt: typeof o.createdAt === "string" ? o.createdAt : undefined,
       }));
       setOrders(normalized);
     } catch (e) {
@@ -177,17 +206,28 @@ export default function ManagementDashboard() {
       const res = await fetch("/api/management/service-requests");
       if (!res.ok) throw new Error("Failed to load service requests");
       const data = await res.json();
-      const normalized: ServiceRequest[] = (data || []).map((r: any) => ({
-        requestId: r.requestId || r.request_id,
-        orderId: r.orderId || r.order_id,
-        type: r.type,
-        status: r.status,
-        reason: r.reason,
-        details: r.details,
-        requestedByEmail: r.requestedByEmail || r.requested_by_email,
-        reviewedByEmail: r.reviewedByEmail || r.reviewed_by_email,
-        resolutionNote: r.resolutionNote || r.resolution_note,
-        createdAt: r.createdAt,
+      const rows: Array<Record<string, unknown>> = Array.isArray(data) ? data : [];
+      const normalized: ServiceRequest[] = rows.map((r) => ({
+        requestId: String(r.requestId || r.request_id || ""),
+        orderId: String(r.orderId || r.order_id || ""),
+        type: String(r.type || ""),
+        status: String(r.status || ""),
+        reason: String(r.reason || ""),
+        details: typeof r.details === "string" ? r.details : null,
+        requestedByEmail: String(r.requestedByEmail || r.requested_by_email || ""),
+        reviewedByEmail:
+          typeof r.reviewedByEmail === "string"
+            ? r.reviewedByEmail
+            : typeof r.reviewed_by_email === "string"
+            ? r.reviewed_by_email
+            : null,
+        resolutionNote:
+          typeof r.resolutionNote === "string"
+            ? r.resolutionNote
+            : typeof r.resolution_note === "string"
+            ? r.resolution_note
+            : null,
+        createdAt: typeof r.createdAt === "string" ? r.createdAt : undefined,
       }));
       setServiceRequests(normalized);
     } catch (e) {
@@ -323,6 +363,9 @@ export default function ManagementDashboard() {
   };
 
   const inputClass = "border border-brand-sand/50 rounded-lg px-2 py-1 text-xs bg-white text-brand-charcoal focus:outline-none focus:border-brand-terracotta/40";
+  const handleSignOut = async () => {
+    await signOut({ callbackUrl: "/" });
+  };
 
   if (sessionStatus === "loading" || !access)
     return (
@@ -372,6 +415,22 @@ export default function ManagementDashboard() {
   return (
     <div className="min-h-screen bg-brand-cream p-6 font-body">
       <div className="max-w-7xl mx-auto bg-white/80 backdrop-blur-xl rounded-3xl border border-brand-sand/30 shadow-soft-md p-6 md:p-8">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <Link
+            href="/"
+            className="rounded-full border border-brand-sand/60 bg-white px-4 py-2 text-sm text-brand-charcoal hover:bg-brand-cream"
+          >
+            Rasphia Home
+          </Link>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="rounded-full border border-brand-sand/60 bg-white px-4 py-2 text-sm text-brand-charcoal hover:bg-brand-cream"
+          >
+            Sign out
+          </button>
+        </div>
+
         <div className="text-center mb-8">
           <h1 className="font-heading text-3xl text-brand-charcoal mb-1">
             {isAdmin ? "Admin Dashboard" : "Merchant Dashboard"}

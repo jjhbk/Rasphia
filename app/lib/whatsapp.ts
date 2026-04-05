@@ -34,6 +34,30 @@ export async function sendText(to: string, text: string) {
   }
 }
 
+export async function sendImage(to: string, imageUrl: string, caption?: string) {
+  const url = `https://graph.facebook.com/v17.0/${PHONE_NUMBER_ID}/messages`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "image",
+      image: {
+        link: imageUrl,
+        ...(caption ? { caption } : {}),
+      },
+    }),
+  });
+  if (!res.ok) {
+    const body = await parseErrorBody(res);
+    throw new Error(`WhatsApp sendImage failed (${res.status}): ${body}`);
+  }
+}
+
 // Send an interactive list of product options (max 10 per list)
 export async function sendProductList(
   to: string,
@@ -45,7 +69,7 @@ export async function sendProductList(
   const sections = [
     {
       title,
-      rows: products.map((p, idx) => ({
+      rows: products.map((p) => ({
         id: p.id,
         title: p.name,
         description: p.subtitle || "",

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processMerchantWhatsAppMessage } from "@/app/lib/whatsapp-orchestrator";
-import { sendText } from "@/app/lib/whatsapp";
+import { sendImage, sendText } from "@/app/lib/whatsapp";
 
 export const runtime = "nodejs";
 
@@ -40,6 +40,7 @@ function buildWhatsAppUsageTemplate() {
     "3) stock query Canvas Lamp",
     "4) stock update productName=Canvas Lamp stockQuantity=0",
     "5) active orders",
+    "6) bulk upload help",
     "",
     "Please retry your command now.",
   ].join("\n");
@@ -68,6 +69,27 @@ type WhatsAppInbound = {
     }>;
   }>;
 };
+
+function extractImageCardsFromReply(reply: string) {
+  const lines = String(reply || "")
+    .split("\n")
+    .map((line) => line.trim());
+  const cards: Array<{ imageUrl: string; caption: string }> = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const imageMatch = /^Image:\s*(https?:\/\/\S+)/i.exec(lines[i]);
+    if (!imageMatch) continue;
+    const imageUrl = imageMatch[1];
+    const title = i > 0 ? lines[i - 1].replace(/^\d+\)\s*/, "").trim() : "";
+    const descLine = lines.find((line, idx) => idx > i - 3 && idx < i && /^Description:/i.test(line));
+    const linkLine = lines.find((line, idx) => idx > i - 4 && idx < i + 4 && /^Product link:/i.test(line));
+    const caption = [title, descLine, linkLine].filter(Boolean).join("\n").slice(0, 900);
+    cards.push({ imageUrl, caption });
+    if (cards.length >= 3) break;
+  }
+
+  return cards;
+}
 
 export async function GET(req: NextRequest) {
   const mode = req.nextUrl.searchParams.get("hub.mode");
@@ -157,6 +179,14 @@ export async function POST(req: NextRequest) {
           mediaId: mediaId || undefined,
           mediaCaption: mediaCaption || undefined,
         });
+        const cards = extractImageCardsFromReply(reply);
+        for (const card of cards) {
+          try {
+            await sendImage(from, card.imageUrl, card.caption);
+          } catch {
+            // Non-blocking; continue with text reply.
+          }
+        }
         await sendText(from, reply);
         processed += 1;
         diagnostics.push({
@@ -199,9 +229,14 @@ export async function POST(req: NextRequest) {
           status: "error",
           reason,
         });
-        if (!debug) {
-          throw err;
-        }
+        // Do not fail the entire webhook for a single message failure.
+        // Meta retries aggressively on non-2xx responses.
+        console.error("[/api/whatsapp] message processing error", {
+          messageId: String(message.id || ""),
+          from,
+          reason,
+        });
+        continue;
       }
     }
 
@@ -216,6 +251,8 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : "WhatsApp webhook failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[/api/whatsapp] fatal webhook error", { message });
+    // Return 200 so Meta does not keep retrying for transient/server-side failures.
+    return NextResponse.json({ ok: false, error: message }, { status: 200 });
   }
 }
