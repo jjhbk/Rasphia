@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { processMerchantWhatsAppMessage } from "@/app/lib/whatsapp-orchestrator";
+import {
+  buildRoleAwareWhatsAppUsageTemplate,
+  processMerchantWhatsAppMessage,
+} from "@/app/lib/whatsapp-orchestrator";
 import { sendImage, sendText } from "@/app/lib/whatsapp";
 
 export const runtime = "nodejs";
@@ -16,34 +19,6 @@ function isLikelyLlmFailure(message: string) {
     m.includes("model") ||
     m.includes("llm")
   );
-}
-
-function buildWhatsAppUsageTemplate() {
-  return [
-    "*Rasphia Assistant Help*",
-    "I hit a temporary AI processing issue. You can continue using these commands:",
-    "",
-    "*User commands*",
-    "1) register userName=Rahul userEmail=rahul@example.com",
-    "2) discover products query=table lamp maxPrice=2000",
-    "3) shop acme-decor",
-    "4) buy productName=Canvas Lamp quantity=2",
-    "5) my orders",
-    "6) track order orderId=sp_ord_xxx",
-    "7) refund orderId=sp_ord_xxx reason=Received damaged item",
-    "8) replacement orderId=sp_ord_xxx reason=Wrong size",
-    "9) cancel order orderId=sp_ord_xxx reason=Ordered by mistake",
-    "",
-    "*Merchant commands*",
-    "1) register merchant businessName=Acme Decor email=a@b.com addressLine1=... addressLine2=... city=Hyderabad state=Telangana zipCode=500001 locationLink=https://maps.google.com/...",
-    "2) add product name=Canvas Lamp category=home price=1499 stockQuantity=20",
-    "3) stock query Canvas Lamp",
-    "4) stock update productName=Canvas Lamp stockQuantity=0",
-    "5) active orders",
-    "6) bulk upload help",
-    "",
-    "Please retry your command now.",
-  ].join("\n");
 }
 
 type WhatsAppInbound = {
@@ -201,7 +176,8 @@ export async function POST(req: NextRequest) {
 
         if (likelyLlmFailure) {
           try {
-            await sendText(from, buildWhatsAppUsageTemplate());
+            const usageTemplate = await buildRoleAwareWhatsAppUsageTemplate(from);
+            await sendText(from, usageTemplate);
             processed += 1;
             diagnostics.push({
               messageId: String(message.id || ""),

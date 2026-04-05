@@ -3859,3 +3859,51 @@ export async function processMerchantWhatsAppMessage(input: {
 
   return formattedResultReply;
 }
+
+export async function buildRoleAwareWhatsAppUsageTemplate(fromPhone: string) {
+  const phone = normalizePhone(fromPhone) || fromPhone;
+  const merchant = await getMerchantByPhone(phone);
+  const userProfile = await getUserByPhone(phone);
+  const session = await prisma.whatsappSession.findUnique({
+    where: { phone },
+    select: { data: true },
+  });
+  const sessionData =
+    session?.data && typeof session.data === "object"
+      ? (session.data as SessionData)
+      : null;
+  const role = sessionData?.activeRole;
+
+  const merchantTemplate = [
+    "*Merchant Quick Guide*",
+    "1) Add product: add product name=... category=... price=... stockQuantity=...",
+    "2) Update product: update product productName=... price=... stockQuantity=...",
+    "3) Check stock: stock query <product name>",
+    "4) Active orders: active orders",
+    "5) Update order: update order status orderId=... status=Shipped",
+    "6) Bulk CSV help: bulk upload help",
+  ].join("\n");
+
+  const userTemplate = [
+    "*User Quick Guide*",
+    "1) Register: register userName=... userEmail=...",
+    "2) Discover: discover products query=... maxPrice=...",
+    "3) Buy: buy productName=... quantity=... upiVerifiedName=... shippingAddress=...",
+    "4) My orders: my orders",
+    "5) Track one: track order orderId=...",
+    "6) Service request: refund/replacement/cancel orderId=... reason=...",
+  ].join("\n");
+
+  if (role === "merchant") return merchantTemplate;
+  if (role === "user") return userTemplate;
+  if (merchant && !userProfile) return merchantTemplate;
+  if (userProfile && !merchant) return userTemplate;
+
+  return [
+    "*Rasphia Assistant*",
+    "Please confirm your role first:",
+    "Reply USER or MERCHANT",
+    "",
+    "Then I will show only the relevant quick commands.",
+  ].join("\n");
+}
