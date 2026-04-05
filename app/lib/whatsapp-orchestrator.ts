@@ -135,6 +135,7 @@ type MerchantChatContext = {
 
 const WHATSAPP_CONTEXT_WINDOW = Number(process.env.WHATSAPP_CONTEXT_WINDOW || 20);
 const WHATSAPP_CONTEXT_KEEP = Number(process.env.WHATSAPP_CONTEXT_KEEP || 40);
+const WHATSAPP_TOP_USER_PRODUCT_SUGGESTIONS = 3;
 
 function formatWhatsAppMarkdown(text: string) {
   const raw = String(text || "").replace(/\r\n/g, "\n").trim();
@@ -1248,7 +1249,7 @@ async function handleUserDiscoverProducts(
   }
 
   const lines = filtered
-    .slice(0, 6)
+    .slice(0, WHATSAPP_TOP_USER_PRODUCT_SUGGESTIONS)
     .map((p, idx) => {
       const description = String(p.description || "").trim();
       const shortDescription =
@@ -1269,7 +1270,9 @@ async function handleUserDiscoverProducts(
     reply: `${merchantContext?.name ? `Merchant: ${merchantContext.name}\n` : ""}Top product matches:\n\n${lines.join("\n\n")}\n\nReply with: use product 1`,
     nextIntent: undefined,
     nextDraft: {
-      __productOptions: filtered.slice(0, 6).map((p) => ({
+      __productOptions: filtered
+        .slice(0, WHATSAPP_TOP_USER_PRODUCT_SUGGESTIONS)
+        .map((p) => ({
         id: p.id,
         name: p.name,
       })),
@@ -1555,6 +1558,88 @@ function buildUpiQrImageLink(orderId: string) {
   if (!base || !orderId) return "";
   const params = new URLSearchParams({ orderId });
   return `${base}/api/upi-qr?${params.toString()}`;
+}
+
+function readOrderProducts(products: Prisma.JsonValue | null) {
+  const items = Array.isArray(products)
+    ? (products as Array<Record<string, unknown>>)
+    : [];
+  return items.map((item) => {
+    const name = String(item.name || item.productName || "Item").trim() || "Item";
+    const quantity = Math.max(1, Number(item.quantity || 1) || 1);
+    const productId = String(item.productId || item.id || "").trim();
+    return { name, quantity, productId };
+  });
+}
+
+function readOrderCustomer(customer: Prisma.JsonValue) {
+  if (!customer || typeof customer !== "object" || Array.isArray(customer)) {
+    return { name: "", email: "", phone: "", address: "" };
+  }
+  const obj = customer as Record<string, unknown>;
+  return {
+    name: String(obj.name || "").trim(),
+    email: String(obj.email || "").trim(),
+    phone: String(obj.phone || "").trim(),
+    address: String(obj.address || "").trim(),
+  };
+}
+
+function buildOrderDetailLines(
+  order: {
+    orderId: string;
+    status: string;
+    amount: number;
+    currency?: string | null;
+    merchantId?: string | null;
+    paymentId?: string | null;
+    trackingNumber?: string | null;
+    trackingUrl?: string | null;
+    shippingProvider?: string | null;
+    estimatedDelivery?: Date | string | null;
+    products?: Prisma.JsonValue | null;
+    customer?: Prisma.JsonValue | null;
+  },
+  options?: { index?: number; merchantName?: string | null; includeCustomer?: boolean }
+) {
+  const products = readOrderProducts(order.products || null);
+  const customer = readOrderCustomer(order.customer as Prisma.JsonValue);
+  const productLines = products.length
+    ? products
+        .slice(0, 5)
+        .map((p, i) => {
+          const link = p.productId ? buildPublicProductLink(p.productId) : "";
+          return `${i + 1}. ${p.name} x${p.quantity}${link ? ` (${link})` : ""}`;
+        })
+    : ["1. Item details unavailable"];
+  const moneyPrefix = String(order.currency || "").toUpperCase() === "INR" ? "₹" : "";
+  const trackingLine = order.trackingNumber
+    ? `${order.shippingProvider ? `${order.shippingProvider} ` : ""}${order.trackingNumber}`
+    : "";
+  const links: string[] = [];
+  if (order.trackingUrl) links.push(`Tracking URL: ${order.trackingUrl}`);
+  const titlePrefix = options?.index ? `${options.index}) ` : "";
+
+  const lines = [
+    `${titlePrefix}Order ID: ${order.orderId}`,
+    `Status: ${order.status}`,
+    `Amount: ${moneyPrefix}${order.amount}`,
+    options?.merchantName ? `Merchant: ${options.merchantName}` : "",
+    trackingLine ? `Tracking: ${trackingLine}` : "",
+    order.estimatedDelivery
+      ? `Estimated delivery: ${new Date(order.estimatedDelivery).toLocaleDateString()}`
+      : "",
+    order.paymentId ? `Payment Ref: ${order.paymentId}` : "",
+    options?.includeCustomer && customer.name ? `Customer: ${customer.name}` : "",
+    options?.includeCustomer && customer.email ? `Customer Email: ${customer.email}` : "",
+    options?.includeCustomer && customer.phone ? `Customer Phone: ${customer.phone}` : "",
+    options?.includeCustomer && customer.address ? `Address: ${customer.address}` : "",
+    "Products:",
+    ...productLines,
+    ...(links.length ? ["Links:", ...links] : []),
+  ].filter(Boolean);
+
+  return lines.join("\n");
 }
 
 async function getSavedAddressesForUser(user: {
@@ -2251,33 +2336,45 @@ async function handleUserOrderQuery(
 
   if (inputOrderId && userOrders.length) {
     const order = userOrders[0];
-    const orderItems = Array.isArray(order.products)
-      ? (order.products as Array<{ name?: string; quantity?: number }>)
-      : [];
-    const itemLine = orderItems
-      .slice(0, 5)
-      .map((p) => `${p.name || "Item"} x${Math.max(1, Number(p.quantity || 1))}`)
-      .join(", ");
-    const tracking = order.trackingNumber ? `\nTracking: ${order.trackingNumber}` : "";
     return {
       done: true,
-      reply: `Order details:\nOrder ID: ${order.orderId}\nStatus: ${order.status}\nAmount: ₹${order.amount}\nItems: ${itemLine || "n/a"}${tracking}`,
+      reply: `Order details:\n${buildOrderDetailLines(order)}`,
       nextIntent: undefined,
       nextDraft: {},
     };
   }
 
-  const lines = userOrders.slice(0, 10).map((order, idx) => {
-    const tracking = order.trackingNumber ? ` | tracking ${order.trackingNumber}` : "";
-    return `${idx + 1}) ${order.orderId} | ${order.status} | ₹${order.amount}${tracking}`;
-  });
+  const merchantIds = Array.from(
+    new Set(
+      userOrders
+        .map((order) => String(order.merchantId || "").trim())
+        .filter((id) => id.length > 0)
+    )
+  );
+  const merchants = merchantIds.length
+    ? await prisma.merchant.findMany({
+        where: { id: { in: merchantIds } },
+        select: { id: true, name: true },
+      })
+    : [];
+  const merchantNameById = new Map(merchants.map((m) => [m.id, m.name]));
+
+  const lines = userOrders.slice(0, 5).map((order, idx) =>
+    buildOrderDetailLines(order, {
+      index: idx + 1,
+      merchantName:
+        merchantNameById.get(String(order.merchantId || "").trim()) ||
+        String(order.merchantId || "").trim() ||
+        null,
+    })
+  );
 
   return {
     done: true,
-    reply: `${merchantContext?.name ? `Merchant: ${merchantContext.name}\n` : ""}${activeOnly ? "Your active orders:\n" : "Your orders:\n"}${lines.join("\n")}\n\nReply with: use order 1`,
+    reply: `${merchantContext?.name ? `Merchant: ${merchantContext.name}\n` : ""}${activeOnly ? "Your active orders:\n\n" : "Your orders:\n\n"}${lines.join("\n\n")}\n\nReply with: use order 1`,
     nextIntent: undefined,
     nextDraft: {
-      __orderOptions: userOrders.slice(0, 10).map((order) => ({
+      __orderOptions: userOrders.slice(0, 5).map((order) => ({
         orderId: order.orderId,
       })),
     },
@@ -2927,15 +3024,18 @@ async function handleOrderQueryActive(merchant: { id: string; status: string }) 
     };
   }
 
-  const lines = filtered
-    .slice(0, 10)
-    .map((o, idx) => `${idx + 1}) ${o.orderId} | ${o.status} | ₹${o.amount}`);
+  const lines = filtered.slice(0, 5).map((o, idx) =>
+    buildOrderDetailLines(o, {
+      index: idx + 1,
+      includeCustomer: true,
+    })
+  );
   return {
     done: true,
-    reply: `Active orders:\n${lines.join("\n")}\n\nReply with: use order 1`,
+    reply: `Active orders:\n\n${lines.join("\n\n")}\n\nReply with: use order 1`,
     nextIntent: undefined,
     nextDraft: {
-      __orderOptions: filtered.slice(0, 10).map((o) => ({
+      __orderOptions: filtered.slice(0, 5).map((o) => ({
         orderId: o.orderId,
       })),
     },
@@ -3875,7 +3975,9 @@ export async function processMerchantWhatsAppMessage(input: {
       result = await handleStockQuery(merchant, draft);
     }
   } else if (intent === "order_query_active") {
-    if (userProfile) {
+    if (effectiveRole === "merchant" && merchant && !isMerchantInboxMode) {
+      result = await handleOrderQueryActive(merchant);
+    } else if (userProfile) {
       result = await handleUserOrderQuery(
         { email: userProfile.email },
         { ...draft, activeOnly: true },

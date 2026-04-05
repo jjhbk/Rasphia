@@ -64,6 +64,44 @@ function formatStorefrontMessage(lines: string[]) {
   return lines.filter(Boolean).join("\n");
 }
 
+function buildStorefrontProductDisplayText(
+  products: Array<{
+    id: string;
+    name: string;
+    category: string | null;
+    description: string | null;
+    price: number | null;
+    imageUrl: string | null;
+    stockQuantity: number;
+  }>,
+  baseUrl: string,
+  heading = "*Top product matches*"
+) {
+  const lines = products.slice(0, 3).map((p, idx) => {
+    const shortDescription = String(p.description || "").trim();
+    const description =
+      shortDescription.length > 120
+        ? `${shortDescription.slice(0, 117)}...`
+        : shortDescription || "No description";
+    const productLink = buildStorefrontProductLink(baseUrl, p.id);
+    return formatStorefrontMessage([
+      `${idx + 1}) ${p.name}`,
+      `Price: Rs ${p.price || 0} | Category: ${p.category || "General"} | Stock: ${p.stockQuantity}`,
+      `Description: ${description}`,
+      `Product link: ${productLink}`,
+      p.imageUrl ? `Image: ${p.imageUrl}` : "",
+    ]);
+  });
+
+  return formatStorefrontMessage([
+    heading,
+    "",
+    ...lines,
+    "",
+    "Reply with: use product 1",
+  ]);
+}
+
 function buildStorefrontFirstMessageGuide(args: {
   merchantName: string;
   merchantSlug: string;
@@ -174,6 +212,73 @@ function isMyOrdersIntent(message: string) {
 
 function isGuideIntent(message: string) {
   return /^(hi|hello|hey|start|help|\?)\b/i.test(String(message || "").trim());
+}
+
+function shouldResetStorefrontContext(message: string) {
+  const t = String(message || "").trim().toLowerCase();
+  if (!t) return false;
+  if (
+    [
+      "clear context",
+      "reset context",
+      "restart chat",
+      "reset chat",
+      "clear chat",
+      "start over",
+    ].includes(t)
+  ) {
+    return true;
+  }
+  return /\b(clear|reset|restart)\b.*\b(chat|context)\b/.test(t);
+}
+
+function buildStorefrontProductLink(baseUrl: string, productId: string) {
+  const id = String(productId || "").trim();
+  if (!id) return "";
+  return baseUrl ? `${baseUrl}/products/${id}` : `/products/${id}`;
+}
+
+function buildStorefrontOrderDetailLines(
+  order: {
+    orderId: string;
+    status: string;
+    amount: number;
+    paymentId?: string | null;
+    trackingNumber?: string | null;
+    trackingUrl?: string | null;
+    shippingProvider?: string | null;
+    products?: Prisma.JsonValue | null;
+  },
+  options: { index?: number; baseUrl: string }
+) {
+  const items = Array.isArray(order.products)
+    ? (order.products as Array<Record<string, unknown>>)
+    : [];
+  const itemLines = items.length
+    ? items.slice(0, 6).map((item, idx) => {
+        const name = String(item.name || item.productName || "Item").trim() || "Item";
+        const quantity = Math.max(1, Number(item.quantity || 1) || 1);
+        const productId = String(item.productId || item.id || "").trim();
+        const link = productId ? buildStorefrontProductLink(options.baseUrl, productId) : "";
+        return `${idx + 1}. ${name} x${quantity}${link ? ` (${link})` : ""}`;
+      })
+    : ["1. Item details unavailable"];
+
+  const lines = [
+    `${options.index ? `${options.index}) ` : ""}Order ID: ${order.orderId}`,
+    `Status: ${order.status}`,
+    `Amount: Rs ${order.amount}`,
+    order.paymentId ? `Payment Ref: ${order.paymentId}` : "",
+    order.shippingProvider || order.trackingNumber
+      ? `Shipping: ${String(order.shippingProvider || "").trim()} ${String(order.trackingNumber || "").trim()}`.trim()
+      : "",
+    "Products:",
+    ...itemLines,
+    order.trackingUrl ? `Tracking URL: ${order.trackingUrl}` : "",
+    options.baseUrl ? `Order QR: ${options.baseUrl}/api/upi-qr?orderId=${encodeURIComponent(order.orderId)}` : "",
+  ].filter(Boolean);
+
+  return lines.join("\n");
 }
 
 function resolveProductNameFromMessage(message: string) {
@@ -341,10 +446,16 @@ export async function POST(
     const message = String(body?.message || "").trim();
     const history: ChatMessage[] = Array.isArray(body?.history)
       ? body.history
-          .map((m: any) => ({
-            role: m?.role === "assistant" ? "assistant" : "user",
-            text: String(m?.text || "").trim(),
-          }))
+          .map((m: unknown) => {
+            const row =
+              m && typeof m === "object"
+                ? (m as { role?: string; text?: string })
+                : {};
+            return {
+              role: row.role === "assistant" ? "assistant" : "user",
+              text: String(row.text || "").trim(),
+            } as ChatMessage;
+          })
           .filter((m: ChatMessage) => m.text.length > 0)
           .slice(-6)
       : [];
@@ -419,16 +530,38 @@ export async function POST(
       );
     }
     const isFirstMessage = history.length === 0;
-
-    if (isFirstMessage && isGuideIntent(message)) {
+    if (shouldResetStorefrontContext(message)) {
       const top = products.slice(0, 3).map((p) => ({ ...p, _id: p.id }));
       return NextResponse.json(
         {
-          text: buildStorefrontFirstMessageGuide({
-            merchantName: merchant.name,
-            merchantSlug: slug,
-            hasUserSession: Boolean(userProfile),
-          }),
+          text: formatStorefrontMessage([
+            "*Storefront chat reset*",
+            "Context cleared for this conversation.",
+            "You can start fresh with:",
+            "- discover products query=...",
+            "- buy product=... qty=... address=...",
+            "- my orders",
+          ]),
+          suggestedProducts: top,
+        },
+        { status: 200 }
+      );
+    }
+
+    if (isFirstMessage && isGuideIntent(message)) {
+      const top = products.slice(0, 3).map((p) => ({ ...p, _id: p.id }));
+      const baseUrl = resolvePublicBaseUrl(req);
+      return NextResponse.json(
+        {
+          text: formatStorefrontMessage([
+            buildStorefrontFirstMessageGuide({
+              merchantName: merchant.name,
+              merchantSlug: slug,
+              hasUserSession: Boolean(userProfile),
+            }),
+            "",
+            buildStorefrontProductDisplayText(top, baseUrl, "*Top picks right now*"),
+          ]),
           suggestedProducts: top,
         },
         { status: 200 }
@@ -728,23 +861,13 @@ export async function POST(
 
       if (inputOrderId && userOrders.length) {
         const order = userOrders[0];
-        const orderItems = Array.isArray(order.products)
-          ? (order.products as Array<{ name?: string; quantity?: number }>)
-          : [];
-        const itemLine = orderItems
-          .slice(0, 6)
-          .map((p) => `${p.name || "Item"} x${Math.max(1, Number(p.quantity || 1))}`)
-          .join(", ");
+        const baseUrl = resolvePublicBaseUrl(req);
 
         return NextResponse.json(
           {
             text: formatStorefrontMessage([
               "*Order details*",
-              `*Order ID:* ${order.orderId}`,
-              `*Status:* ${order.status}`,
-              `*Amount:* Rs ${order.amount}`,
-              `*Items:* ${itemLine || "n/a"}`,
-              order.trackingNumber ? `*Tracking:* ${order.trackingNumber}` : "",
+              buildStorefrontOrderDetailLines(order, { baseUrl }),
             ]),
             suggestedProducts: [],
           },
@@ -752,15 +875,16 @@ export async function POST(
         );
       }
 
-      const lines = userOrders.slice(0, 10).map((order) => {
-        const tracking = order.trackingNumber ? ` | tracking ${order.trackingNumber}` : "";
-        return `- ${order.orderId} | ${order.status} | Rs ${order.amount}${tracking}`;
-      });
+      const baseUrl = resolvePublicBaseUrl(req);
+      const lines = userOrders
+        .slice(0, 5)
+        .map((order, idx) => buildStorefrontOrderDetailLines(order, { index: idx + 1, baseUrl }));
 
       return NextResponse.json(
         {
           text: formatStorefrontMessage([
             onlyActive ? "*Your active orders*" : "*Your orders*",
+            "",
             ...lines,
           ]),
           suggestedProducts: [],
@@ -797,9 +921,16 @@ export async function POST(
       const top = (simpleMatches.length ? simpleMatches : products)
         .slice(0, 3)
         .map((p) => ({ ...p, _id: p.id }));
+      const baseUrl = resolvePublicBaseUrl(req);
       return NextResponse.json(
         {
-          text: "I can help with this store catalog. Here are a few relevant picks. Want me to narrow by budget or category?",
+          text: formatStorefrontMessage([
+            "I can help with this store catalog. Here are a few relevant picks.",
+            "",
+            buildStorefrontProductDisplayText(top, baseUrl),
+            "",
+            "Want me to narrow by budget or category?",
+          ]),
           suggestedProducts: top,
         },
         { status: 200 }
@@ -872,12 +1003,18 @@ Rules:
           : (simpleMatches.length ? simpleMatches : products)
               .slice(0, 3)
               .map((p) => ({ ...p, _id: p.id }));
+      const baseUrl = resolvePublicBaseUrl(req);
 
       return NextResponse.json(
         {
-          text:
+          text: formatStorefrontMessage([
             parsed.response ||
-            "I found a few options from this store. Want me to narrow by budget or use-case?",
+              "I found a few options from this store.",
+            "",
+            buildStorefrontProductDisplayText(fallbackSuggestions, baseUrl),
+            "",
+            "Want me to narrow by budget or use-case?",
+          ]),
           suggestedProducts: fallbackSuggestions,
         },
         { status: 200 }
@@ -887,9 +1024,14 @@ Rules:
       const top = (simpleMatches.length ? simpleMatches : products)
         .slice(0, 3)
         .map((p) => ({ ...p, _id: p.id }));
+      const baseUrl = resolvePublicBaseUrl(req);
       return NextResponse.json(
         {
-          text: "I can help with this store catalog. Here are a few relevant picks.",
+          text: formatStorefrontMessage([
+            "I can help with this store catalog. Here are a few relevant picks.",
+            "",
+            buildStorefrontProductDisplayText(top, baseUrl),
+          ]),
           suggestedProducts: top,
         },
         { status: 200 }
