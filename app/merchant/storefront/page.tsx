@@ -572,8 +572,8 @@ export default function MerchantStorefrontPage() {
 
                     <div>
                       <label className="input-label">Store URL Slug</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-brand-stone/60 pointer-events-none">
+                      <div className="flex items-center rounded-xl border border-brand-sand/50 bg-white focus-within:border-brand-terracotta/40 focus-within:ring-2 focus-within:ring-brand-terracotta/10">
+                        <span className="px-3 py-2.5 text-sm text-brand-stone/70 border-r border-brand-sand/40 whitespace-nowrap">
                           rasphia.com/storefronts/
                         </span>
                         <input
@@ -581,7 +581,6 @@ export default function MerchantStorefrontPage() {
                           value={form.slug}
                           minLength={SLUG_MIN_LENGTH}
                           maxLength={SLUG_MAX_LENGTH}
-                          pattern="^[a-z0-9_-]+$"
                           onChange={(e) =>
                             setForm((p) => ({
                               ...p,
@@ -596,7 +595,7 @@ export default function MerchantStorefrontPage() {
                               });
                             }
                           }}
-                          className="input-field pl-[200px]"
+                          className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-brand-charcoal outline-none placeholder:text-brand-stone/50"
                           placeholder="my-store"
                         />
                       </div>

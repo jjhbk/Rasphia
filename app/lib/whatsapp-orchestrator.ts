@@ -36,6 +36,7 @@ export const WA_INTENTS = [
   "user_wishlist_remove",
   "user_wishlist_view",
   "merchant_register",
+  "merchant_storefront_update",
   "product_upload",
   "product_update",
   "product_query",
@@ -98,6 +99,25 @@ const OrderUpdateSchema = z.object({
     "Replacement",
   ]),
 });
+
+const StorefrontUpdateSchema = z
+  .object({
+    storeName: z.string().min(2).optional(),
+    logoUrl: z.string().url().optional(),
+    coverImageUrl: z.string().url().optional(),
+  })
+  .refine(
+    (value) =>
+      Boolean(
+        (value.storeName && value.storeName.trim().length > 0) ||
+          (value.logoUrl && value.logoUrl.trim().length > 0) ||
+          (value.coverImageUrl && value.coverImageUrl.trim().length > 0)
+      ),
+    {
+      message:
+        "Please share at least one field to update: storeName, logoUrl, or coverImageUrl.",
+    }
+  );
 
 type SessionData = {
   activeRole?: "merchant" | "user";
@@ -199,6 +219,7 @@ const REQUIRED_BY_INTENT: Record<WaIntent, string[]> = {
     "zipCode",
     "locationLink",
   ],
+  merchant_storefront_update: [],
   product_upload: ["name", "category", "price", "stockQuantity"],
   product_update: ["productName"],
   product_query: [],
@@ -222,6 +243,7 @@ const OPTIONAL_BY_INTENT: Partial<Record<WaIntent, string[]>> = {
   user_persona_update: ["personaTags"],
   product_upload: ["brand", "description", "imageUrl"],
   product_update: ["price", "stockQuantity", "category", "brand", "description", "imageUrl"],
+  merchant_storefront_update: ["storeName", "logoUrl", "coverImageUrl"],
   stock_query: ["productName"],
 };
 
@@ -248,6 +270,9 @@ const FIELD_PROMPTS: Record<string, string> = {
   state: "Please share your state.",
   zipCode: "Please share your ZIP/postal code.",
   locationLink: "Please share your location link (Google Maps URL).",
+  storeName: "Please share your storefront display name.",
+  logoUrl: "Please share the storefront logo image URL.",
+  coverImageUrl: "Please share the storefront cover image URL.",
   name: "Please share the product name.",
   category: "Please share the product category.",
   price: "Please share the product price.",
@@ -281,6 +306,9 @@ function prettyFieldName(field: string) {
     addressLine2: "Address Line 2",
     zipCode: "ZIP Code",
     locationLink: "Location Link",
+    storeName: "Storefront Name",
+    logoUrl: "Logo URL",
+    coverImageUrl: "Cover Image URL",
     productName: "Product Name",
     stockQuantity: "Stock Quantity",
     imageUrl: "Image URL",
@@ -365,6 +393,9 @@ function buildUnclearIntentTemplate(merchantStatus?: string) {
     "Example: Update productName=Canvas Lamp price=1299 stockQuantity=15",
     "Example: Query product Canvas Lamp",
     "",
+    "3) Storefront settings update",
+    "Example: update storefront storeName=Acme Decor logoUrl=https://... coverImageUrl=https://...",
+    "",
     "4) Stock update/query",
     "Example: Stock update productName=Canvas Lamp stockQuantity=0",
     "Example: Stock query Canvas Lamp",
@@ -443,6 +474,8 @@ function buildInitialUsageInstructions(args: {
     "Example: update order status orderId=ORD123 status=Shipped",
     "7) Bulk product import help",
     "Example: bulk upload help",
+    "8) Update storefront settings",
+    "Example: update storefront storeName=Acme Decor logoUrl=https://... coverImageUrl=https://...",
     "",
     "NOTES",
     "- For sensitive actions, I will ask YES/NO confirmation.",
@@ -466,8 +499,9 @@ function buildRoleSpecificQuickGuide(role: "merchant" | "user") {
       "4) Active orders: active orders",
       "5) Update order: update order status orderId=... status=Shipped",
       "6) Bulk CSV help: bulk upload help",
-      "7) Restart chat: clear context",
-      "8) Switch role: switch to user",
+      "7) Storefront settings: update storefront storeName=... logoUrl=https://... coverImageUrl=https://...",
+      "8) Restart chat: clear context",
+      "9) Switch role: switch to user",
     ].join("\n");
   }
 
@@ -876,6 +910,31 @@ function fallbackIntent(message: string): IntentParse {
   if (text.includes("register") || text.includes("onboard")) {
     return { intent: "merchant_register", fields: {} };
   }
+  if (
+    text.includes("update storefront") ||
+    text.includes("storefront update") ||
+    text.includes("update store name") ||
+    text.includes("update logo") ||
+    text.includes("change logo") ||
+    text.includes("update cover") ||
+    text.includes("change cover")
+  ) {
+    const storeName =
+      text.match(/(?:storename|store\s*name|businessname)\s*[:=]\s*([^,\n]+)/i)?.[1] || "";
+    const logoUrl = text.match(/(?:logourl|logo)\s*[:=]\s*(https?:\/\/[^\s,]+)/i)?.[1] || "";
+    const coverImageUrl =
+      text.match(
+        /(?:coverimageurl|coverurl|cover|bannerurl|banner)\s*[:=]\s*(https?:\/\/[^\s,]+)/i
+      )?.[1] || "";
+    return {
+      intent: "merchant_storefront_update",
+      fields: {
+        ...(storeName ? { storeName: storeName.trim() } : {}),
+        ...(logoUrl ? { logoUrl: logoUrl.trim() } : {}),
+        ...(coverImageUrl ? { coverImageUrl: coverImageUrl.trim() } : {}),
+      },
+    };
+  }
   if (text.includes("stock") && (text.includes("how much") || text.includes("check") || text.includes("query") || text.includes("available"))) {
     return { intent: "stock_query", fields: {} };
   }
@@ -938,6 +997,9 @@ async function inferIntent(
     "state",
     "zipCode",
     "locationLink",
+    "storeName",
+    "logoUrl",
+    "coverImageUrl",
     "name",
     "productName",
     "category",
@@ -987,6 +1049,9 @@ Return strict JSON with shape:
     "state": string|null,
     "zipCode": string|null,
     "locationLink": string|null,
+    "storeName": string|null,
+    "logoUrl": string|null,
+    "coverImageUrl": string|null,
     "name": string|null,
     "productName": string|null,
     "category": string|null,
@@ -2520,6 +2585,79 @@ async function handleMerchantBulkUploadHelp(merchant: {
   };
 }
 
+async function handleMerchantStorefrontUpdate(
+  merchant: { id: string; status: string; slug?: string | null; name?: string | null },
+  draft: Record<string, unknown>
+) {
+  if (merchant.status !== "approved") {
+    return {
+      done: true,
+      reply:
+        "Your merchant account is pending approval. Storefront settings can be updated once approved.",
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  const mappedDraft = {
+    storeName: String(draft.storeName || draft.businessName || "").trim() || undefined,
+    logoUrl: String(draft.logoUrl || "").trim() || undefined,
+    coverImageUrl: String(draft.coverImageUrl || "").trim() || undefined,
+  };
+
+  const parsed = StorefrontUpdateSchema.safeParse(mappedDraft);
+  if (!parsed.success) {
+    const issue =
+      parsed.error.issues[0]?.message ||
+      "Invalid storefront update details.";
+    const checklist = buildIntentChecklist("merchant_storefront_update", draft);
+    return {
+      done: false,
+      reply: `I found an issue: ${issue}. Please share valid details.${checklist}`,
+      nextIntent: "merchant_storefront_update" as WaIntent,
+      nextDraft: draft,
+    };
+  }
+
+  const payload = parsed.data;
+  const updated = await prisma.merchant.update({
+    where: { id: merchant.id },
+    data: {
+      ...(payload.storeName ? { name: payload.storeName } : {}),
+      ...(payload.logoUrl ? { logoUrl: payload.logoUrl } : {}),
+      ...(payload.coverImageUrl ? { coverImageUrl: payload.coverImageUrl } : {}),
+      updatedAt: new Date(),
+    },
+    select: {
+      name: true,
+      slug: true,
+      logoUrl: true,
+      coverImageUrl: true,
+    },
+  });
+
+  const base = resolvePublicBaseUrl();
+  const storefrontUrl = base
+    ? `${base}/storefronts/${updated.slug}`
+    : `/storefronts/${updated.slug}`;
+
+  const changed: string[] = [];
+  if (payload.storeName) changed.push(`Store name: ${updated.name}`);
+  if (payload.logoUrl) changed.push(`Logo URL updated`);
+  if (payload.coverImageUrl) changed.push(`Cover image URL updated`);
+
+  return {
+    done: true,
+    reply: [
+      "Storefront updated successfully.",
+      ...changed.map((line) => `- ${line}`),
+      `Storefront: ${storefrontUrl}`,
+    ].join("\n"),
+    nextIntent: undefined,
+    nextDraft: {},
+  };
+}
+
 async function handleProductUpload(
   merchant: { id: string; email: string; status: string },
   draft: Record<string, unknown>
@@ -3529,6 +3667,7 @@ export async function processMerchantWhatsAppMessage(input: {
   );
   const merchantIntents = new Set<WaIntent>([
     "merchant_register",
+    "merchant_storefront_update",
     "product_upload",
     "product_update",
     "product_query",
@@ -3560,6 +3699,11 @@ export async function processMerchantWhatsAppMessage(input: {
     /\bstock\b/.test(lowerInbound) ||
     /\bbulk\b/.test(lowerInbound) ||
     /\bcsv\b/.test(lowerInbound) ||
+    /\bstorefront\b/.test(lowerInbound) ||
+    /\bstore name\b/.test(lowerInbound) ||
+    /\blogo\b/.test(lowerInbound) ||
+    /\bcover\b/.test(lowerInbound) ||
+    /\bbanner\b/.test(lowerInbound) ||
     /\border\s+update\b/.test(lowerInbound) ||
     /\bactive orders\b/.test(lowerInbound) ||
     /\bupload\b/.test(lowerInbound);
@@ -3928,6 +4072,18 @@ export async function processMerchantWhatsAppMessage(input: {
       };
     } else {
       result = await handleMerchantBulkUploadHelp(merchant);
+    }
+  } else if (intent === "merchant_storefront_update") {
+    if (!merchant) {
+      result = {
+        done: false,
+        reply:
+          "Merchant profile not found for this number. Share businessName and email to register merchant.",
+        nextIntent: "merchant_register",
+        nextDraft: draft,
+      };
+    } else {
+      result = await handleMerchantStorefrontUpdate(merchant, draft);
     }
   } else if (intent === "product_upload") {
     if (!merchant) {
