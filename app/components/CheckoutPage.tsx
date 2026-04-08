@@ -71,6 +71,11 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [isSeedhapeModalOpen, setIsSeedhapeModalOpen] = useState(false);
   const [pendingCustomer, setPendingCustomer] = useState<CheckoutCustomer | null>(null);
   const [paymentStatusText, setPaymentStatusText] = useState("");
+  const [paymentProgress, setPaymentProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const pendingPaymentsRef = useRef<SeedhapeCheckoutOrder[]>([]);
   const successHandledRef = useRef<Set<string>>(new Set());
@@ -184,6 +189,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       setIsSeedhapeModalOpen(true);
       pendingPaymentsRef.current = rest;
       setPendingCustomer(normalizedCustomer);
+      setPaymentProgress({ current: 1, total: orders.length });
       setPaymentStatusText(`Order created (1/${orders.length}). Complete payment in SeedhaPe.`);
     } catch (err) {
       console.error("Payment error:", err);
@@ -209,8 +215,12 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       if (pendingPaymentsRef.current.length > 0) {
         const [nextOrder, ...rest] = pendingPaymentsRef.current;
         pendingPaymentsRef.current = rest;
+        setIsSeedhapeModalOpen(false);
         setActivePayment(nextOrder);
-        setIsSeedhapeModalOpen(true);
+        setPaymentProgress((prev) =>
+          prev ? { ...prev, current: Math.min(prev.current + 1, prev.total) } : prev
+        );
+        window.setTimeout(() => setIsSeedhapeModalOpen(true), 120);
         setPaymentStatusText(`Payment confirmed for ${orderId}. Continue with next payment.`);
         return;
       }
@@ -219,6 +229,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       pendingPaymentsRef.current = [];
       setPendingCustomer(null);
       setIsProcessing(false);
+      setPaymentProgress(null);
       if (normalizedCustomer) {
         onPlaceOrder(normalizedCustomer, `seedhape_${orderId}`);
       }
@@ -230,6 +241,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       pendingPaymentsRef.current = [];
       setPaymentStatusText("Payment expired. Please create a new checkout.");
       setIsProcessing(false);
+      setPaymentProgress(null);
       return;
     }
     if (verify.status === "disputed") {
@@ -239,6 +251,28 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       return;
     }
     setPaymentStatusText("Payment pending. Complete payment in your UPI app.");
+  };
+
+  const handleOpenPaymentWindow = () => {
+    if (!activePayment) return;
+    setIsSeedhapeModalOpen(true);
+  };
+
+  const handleVerifyCurrentPayment = async () => {
+    if (!activePayment || isVerifyingPayment) return;
+    setIsVerifyingPayment(true);
+    try {
+      const customerToUse = pendingCustomer || customer;
+      await checkPaymentStatus(
+        activePayment.seedhapeOrderId || activePayment.id,
+        customerToUse
+      );
+    } catch (err) {
+      console.error("Manual verify payment error:", err);
+      setPaymentStatusText("Could not verify payment right now. Please try again.");
+    } finally {
+      setIsVerifyingPayment(false);
+    }
   };
 
   const inputClass =
@@ -537,11 +571,16 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
           <>
             {isSeedhapeModalOpen && (
               <PaymentModal
+                key={activePayment.seedhapeOrderId || activePayment.id}
                 orderId={activePayment.seedhapeOrderId || activePayment.id}
                 open={isSeedhapeModalOpen}
                 onClose={() => {
                   setIsSeedhapeModalOpen(false);
-                  setPaymentStatusText("Payment window closed.");
+                  setPaymentStatusText(
+                    pendingPaymentsRef.current.length > 0
+                      ? "Payment window closed. Re-open to continue remaining payments."
+                      : "Payment window closed."
+                  );
                 }}
                 onSuccess={async (result) => {
                   if (successHandledRef.current.has(result.orderId)) return;
@@ -570,10 +609,32 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
               <p className="text-xs font-medium text-brand-charcoal">
                 {activePayment.productName || "Item"} · {formatPrice(activePayment.amount / 100)}
               </p>
+              {paymentProgress && (
+                <p className="mt-0.5 text-[11px] text-brand-stone/80">
+                  Payment step {paymentProgress.current} of {paymentProgress.total}
+                </p>
+              )}
               <p className="mt-0.5 text-[11px] text-brand-stone/60 font-mono">
                 {activePayment.seedhapeOrderId || activePayment.id}
               </p>
               <p className="mt-2 text-xs text-brand-stone">{paymentStatusText}</p>
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenPaymentWindow}
+                  className="rounded-lg bg-brand-charcoal px-3 py-1.5 text-xs text-white hover:bg-brand-warm-black"
+                >
+                  Open payment window
+                </button>
+                <button
+                  type="button"
+                  onClick={handleVerifyCurrentPayment}
+                  disabled={isVerifyingPayment}
+                  className="rounded-lg border border-brand-sand/60 px-3 py-1.5 text-xs text-brand-charcoal disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isVerifyingPayment ? "Verifying..." : "I paid, verify now"}
+                </button>
+              </div>
             </div>
           </>
         )}

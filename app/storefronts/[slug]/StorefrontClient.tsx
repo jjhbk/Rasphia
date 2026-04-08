@@ -6,6 +6,8 @@ import BrandLogo from "@/app/components/brand/BrandLogo";
 import { toHighQualityImageUrl } from "@/app/utils/imageQuality";
 import { signIn, useSession } from "next-auth/react";
 import { ShoppingCart, X } from "lucide-react";
+import CheckoutPage from "@/app/components/CheckoutPage";
+import type { CheckoutCustomer, Product, UserProfile } from "@/app/types";
 
 type StorefrontProduct = {
   _id: string;
@@ -57,6 +59,15 @@ type CartItem = {
   quantity: number;
   merchantSlug: string;
   merchantName: string;
+};
+
+const initialUser: UserProfile = {
+  name: "",
+  email: "",
+  phone: "",
+  address: "",
+  wishlist: [],
+  addressBook: [],
 };
 
 const CART_STORAGE_PREFIX = "rasphia_cart_v1";
@@ -123,6 +134,8 @@ export default function MerchantStorefrontPublicPage({
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [currentUser, setCurrentUser] = useState<UserProfile>(initialUser);
+  const [checkoutProducts, setCheckoutProducts] = useState<Product[] | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartFeedback, setCartFeedback] = useState<string | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -137,6 +150,52 @@ export default function MerchantStorefrontPublicPage({
   const [userCartStorageKey, setUserCartStorageKey] = useState(
     `${CART_STORAGE_PREFIX}:guest`
   );
+
+  useEffect(() => {
+    const userEmail = String(session?.user?.email || "").trim();
+    if (!userEmail) {
+      setCurrentUser(initialUser);
+      return;
+    }
+
+    let cancelled = false;
+    setCurrentUser((prev) => ({
+      ...prev,
+      email: userEmail,
+      name: String(session?.user?.name || prev.name || "").trim(),
+    }));
+
+    const loadProfile = async () => {
+      try {
+        const res = await fetch(
+          `/api/user/get-profile?email=${encodeURIComponent(userEmail)}`
+        );
+        if (!res.ok) return;
+        const profile = await res.json();
+        if (cancelled) return;
+        setCurrentUser({
+          name: String(profile?.name || session?.user?.name || "").trim(),
+          email: String(profile?.email || userEmail).trim(),
+          phone: String(profile?.phone || "").trim(),
+          address: String(profile?.address || "").trim(),
+          wishlist: Array.isArray(profile?.wishlist) ? profile.wishlist : [],
+          addressBook: Array.isArray(profile?.addressBook) ? profile.addressBook : [],
+        });
+      } catch {
+        if (cancelled) return;
+        setCurrentUser((prev) => ({
+          ...prev,
+          email: userEmail,
+          name: String(session?.user?.name || "").trim(),
+        }));
+      }
+    };
+
+    loadProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.email, session?.user?.name]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -525,6 +584,95 @@ export default function MerchantStorefrontPublicPage({
       setChatLoading(false);
     }
   };
+
+  const checkoutCartItems = useMemo<Product[]>(
+    () =>
+      cart.map((item) => ({
+        _id: item._id || item.id,
+        id: item.id,
+        name: item.name,
+        brand: item.brand || "",
+        merchantSlug: item.merchantSlug,
+        merchantName: item.merchantName,
+        category: "General",
+        price: Number(item.price || 0),
+        quantity: Math.max(1, Number(item.quantity || 1)),
+        imageUrl: item.imageUrl || "",
+      })),
+    [cart]
+  );
+
+  const handleCheckoutFromCart = async () => {
+    if (!cart.length) return;
+    if (sessionStatus === "loading") return;
+    if (!session?.user?.email) {
+      await signIn(undefined, {
+        callbackUrl:
+          typeof window !== "undefined" ? window.location.href : `/storefronts/${slug}`,
+      });
+      return;
+    }
+    setCheckoutProducts(checkoutCartItems);
+    setIsCartOpen(false);
+  };
+
+  const handleCancelCheckout = () => {
+    setCheckoutProducts(null);
+  };
+
+  const handlePlaceOrder = async (
+    customer: CheckoutCustomer,
+    _paymentId: string
+  ) => {
+    if (!checkoutProducts?.length) return;
+    const checkedOutIds = new Set(
+      checkoutProducts
+        .map((p) => String(p.id || p._id || "").trim())
+        .filter(Boolean)
+    );
+    const addressEntry = {
+      name: customer.name,
+      phone: customer.phone,
+      addressLine1: customer.addressLine1 || "",
+      addressLine2: customer.addressLine2 || "",
+      city: customer.city || "",
+      state: customer.state || "",
+      zipCode: customer.zipCode || "",
+      address: customer.address,
+    };
+    const nextAddressBook = (currentUser.addressBook || []).some(
+      (entry) => entry.address === addressEntry.address
+    )
+      ? (currentUser.addressBook || []).map((entry) =>
+          entry.address === addressEntry.address ? addressEntry : entry
+        )
+      : [addressEntry, ...(currentUser.addressBook || [])];
+
+    setCurrentUser((prev) => ({
+      ...prev,
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+      address: customer.address,
+      addressBook: nextAddressBook,
+    }));
+    setCart((prev) =>
+      prev.filter((item) => !checkedOutIds.has(String(item.id || item._id || "").trim()))
+    );
+    setCheckoutProducts(null);
+    setCartFeedback("Order placed successfully.");
+  };
+
+  if (checkoutProducts) {
+    return (
+      <CheckoutPage
+        products={checkoutProducts}
+        user={currentUser}
+        onPlaceOrder={handlePlaceOrder}
+        onCancel={handleCancelCheckout}
+      />
+    );
+  }
 
   if (initialLoading && !data) {
     return <div className="min-h-screen bg-brand-cream p-6">Loading storefront...</div>;
@@ -927,6 +1075,14 @@ export default function MerchantStorefrontPublicPage({
                       )
                       .toFixed(0)}
                   </p>
+                  <button
+                    type="button"
+                    onClick={handleCheckoutFromCart}
+                    disabled={!cart.length || sessionStatus === "loading"}
+                    className="mt-3 w-full rounded-xl bg-brand-charcoal px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {sessionStatus === "loading" ? "Checking..." : "Proceed to checkout"}
+                  </button>
                 </div>
               </>
             )}
