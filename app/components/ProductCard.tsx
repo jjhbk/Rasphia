@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import type { Product } from "../types";
 import HeartIcon from "./icons/HeartIcon";
 import StarRatingDisplay from "./StarRatingDisplay";
@@ -99,6 +100,8 @@ const ProductCard: React.FC<ProductCardProps> = ({
     ? reviews.reduce((acc, r) => acc + (r.rating || 0), 0) /
       reviews.length
     : 0;
+  const merchantSlug = String(product.merchantSlug || "").trim();
+  const merchantStoreUrl = merchantSlug ? `/storefronts/${merchantSlug}` : "";
   return (
     <>
       <div className="flex flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/90 shadow-lg shadow-stone-200/70 transition hover:-translate-y-1">
@@ -119,6 +122,16 @@ const ProductCard: React.FC<ProductCardProps> = ({
         <div className="flex flex-grow flex-col p-4">
           <h3 className="font-semibold text-stone-800">{product.name}</h3>
           <p className="text-sm text-stone-500 mb-2">{product.brand}</p>
+          {merchantStoreUrl ? (
+            <Link
+              href={merchantStoreUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mb-2 inline-flex w-fit items-center text-xs font-medium text-brand-terracotta hover:text-brand-charcoal underline underline-offset-2"
+            >
+              Visit {product.merchantName || "store"} storefront
+            </Link>
+          ) : null}
 
           <button
             type="button"

@@ -3,6 +3,7 @@ import { DM_Sans } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
 import AuthSessionProvider from "./providers/SessionProvider";
+import FloatingWhatsAppButton from "./components/FloatingWhatsAppButton";
 
 const dmSans = DM_Sans({
   variable: "--font-body",
@@ -40,6 +41,12 @@ export default function RootLayout({
         className={`${dmSans.variable} ${fraunces.variable} font-body antialiased`}
       >
         <AuthSessionProvider>{children}</AuthSessionProvider>
+        <FloatingWhatsAppButton
+          phoneNumber="+916301304257"
+          label="Chat with Rasphia"
+          hideOnStorefront
+          defaultMessage="Hi Rasphia, I need help."
+        />
       </body>
     </html>
   );

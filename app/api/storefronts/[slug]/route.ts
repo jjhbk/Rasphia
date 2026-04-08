@@ -46,6 +46,7 @@ export async function GET(
         id: true,
         slug: true,
         name: true,
+        phone: true,
         logoUrl: true,
         coverImageUrl: true,
         storefrontDescription: true,

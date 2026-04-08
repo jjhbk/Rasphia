@@ -8,6 +8,7 @@ import { signIn, useSession } from "next-auth/react";
 import { ShoppingCart, X } from "lucide-react";
 import CheckoutPage from "@/app/components/CheckoutPage";
 import type { CheckoutCustomer, Product, UserProfile } from "@/app/types";
+import FloatingWhatsAppButton from "@/app/components/FloatingWhatsAppButton";
 
 type StorefrontProduct = {
   _id: string;
@@ -28,6 +29,7 @@ type StorefrontResponse = {
     id: string;
     slug: string;
     name: string;
+    phone?: string | null;
     logoUrl?: string | null;
     coverImageUrl?: string | null;
     storefrontDescription?: string | null;
@@ -1089,6 +1091,11 @@ export default function MerchantStorefrontPublicPage({
           </div>
         </div>
       ) : null}
+      <FloatingWhatsAppButton
+        phoneNumber={String(data.merchant.phone || "")}
+        label={`Chat ${data.merchant.name} on WhatsApp`}
+        defaultMessage={`Hi ${data.merchant.name}, I found your Rasphia storefront and need help.`}
+      />
     </div>
   );
 }

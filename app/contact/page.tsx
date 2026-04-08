@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2, MessageCircle, Send, Paperclip } from "lucide-react";
+import { CheckCircle2, Send, Paperclip } from "lucide-react";
 import BrandLogo from "@/app/components/brand/BrandLogo";
 import Navbar from "@/app/components/Navbar";
 
@@ -60,17 +60,6 @@ export default function ContactUs() {
   return (
     <>
       <Navbar />
-
-      {/* WhatsApp floating button */}
-      <a
-        href="https://wa.me/917995981488"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 flex items-center gap-2 bg-green-500 text-white px-4 py-3 rounded-full shadow-soft-lg hover:bg-green-600 transition-all hover:scale-105 z-50 text-sm font-medium"
-      >
-        <MessageCircle className="h-4 w-4" />
-        Chat on WhatsApp
-      </a>
 
       <div className="min-h-screen bg-brand-hero py-12 px-4 font-body">
         <div className="max-w-lg mx-auto animate-fade-up">
