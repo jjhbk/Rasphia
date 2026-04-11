@@ -1,31 +1,42 @@
 import { NextResponse } from "next/server";
+import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
+import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
+import { prisma } from "@/app/lib/prisma";
 
-function unavailable() {
-  return NextResponse.json(
-    {
-      error:
-        "Temporarily unavailable during SQL migration. This endpoint is being moved off MongoDB.",
-    },
-    { status: 503 }
-  );
-}
+export const runtime = "nodejs";
+export const OPTIONS = handleOptions;
 
-export async function GET() {
-  return unavailable();
-}
+export const GET = withExtensionCors(async (req: Request) => {
+  try {
+    const email = await verifyExtensionToken(req);
+    if (!email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-export async function POST() {
-  return unavailable();
-}
+    const insights = await prisma.productInsight.findMany({
+      where: { email },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
 
-export async function PUT() {
-  return unavailable();
-}
-
-export async function PATCH() {
-  return unavailable();
-}
-
-export async function DELETE() {
-  return unavailable();
-}
+    return NextResponse.json(
+      insights.map((i) => {
+        const payload = (i.payload || {}) as Record<string, any>;
+        return {
+          id: payload.insightId || i.id,
+          chatId: payload.chatId ?? null,
+          product: payload.product ?? null,
+          analysis: payload.analysis ?? null,
+          createdAt: i.createdAt,
+        };
+      }),
+      { status: 200 }
+    );
+  } catch (err) {
+    console.error("LIST INSIGHTS ERROR:", err);
+    return NextResponse.json(
+      { error: "Failed to load insights" },
+      { status: 500 }
+    );
+  }
+});

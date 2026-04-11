@@ -1,31 +1,58 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
+import { ChatSession, Message } from "@/app/types";
+import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
+import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
+import { prisma } from "@/app/lib/prisma";
 
-function unavailable() {
-  return NextResponse.json(
-    {
-      error:
-        "Temporarily unavailable during SQL migration. This endpoint is being moved off MongoDB.",
-    },
-    { status: 503 }
-  );
-}
+export const runtime = "nodejs";
+export const OPTIONS = handleOptions;
 
-export async function GET() {
-  return unavailable();
-}
+export const POST = withExtensionCors(async (req: Request) => {
+  try {
+    const email = await verifyExtensionToken(req);
+    if (!email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-export async function POST() {
-  return unavailable();
-}
+    const { initialMessage } = await req.json();
 
-export async function PUT() {
-  return unavailable();
-}
+    const now = new Date();
+    const firstMessage: Message = initialMessage ?? {
+      author: "ai",
+      text: "Hi, I am Rasphia. Analyze products and I will help with best picks.",
+      createdAt: now.toISOString(),
+    };
 
-export async function PATCH() {
-  return unavailable();
-}
+    const newChat: Omit<ChatSession, "_id"> = {
+      userEmail: email,
+      title: now.toLocaleString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      }),
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      messages: [firstMessage],
+    };
 
-export async function DELETE() {
-  return unavailable();
-}
+    const res = await prisma.chat.create({
+      data: {
+        userEmail: newChat.userEmail,
+        title: newChat.title,
+        messages: newChat.messages as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return NextResponse.json({ ...newChat, _id: res.id }, { status: 201 });
+  } catch (err: any) {
+    console.error("Chat Create Error:", err);
+    return NextResponse.json(
+      { error: err.message || "Server error" },
+      { status: 500 }
+    );
+  }
+});

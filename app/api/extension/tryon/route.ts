@@ -18,7 +18,7 @@ export const POST = withExtensionCors(async (req: Request) => {
       return NextResponse.json({ error: "Missing token" }, { status: 401 });
     }
 
-    const email = verifyExtensionTokenFromString(extToken);
+    const email = await verifyExtensionTokenFromString(extToken);
     if (!email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

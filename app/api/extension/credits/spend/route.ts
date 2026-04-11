@@ -1,31 +1,50 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/app/lib/prisma";
+import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
+import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
 
-function unavailable() {
-  return NextResponse.json(
-    {
-      error:
-        "Temporarily unavailable during SQL migration. This endpoint is being moved off MongoDB.",
-    },
-    { status: 503 }
-  );
-}
+export const runtime = "nodejs";
+export const OPTIONS = handleOptions;
 
-export async function GET() {
-  return unavailable();
-}
+export const POST = withExtensionCors(async (req: Request) => {
+  const email = await verifyExtensionToken(req);
+  if (!email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-export async function POST() {
-  return unavailable();
-}
+  const { amount, reason } = await req.json();
+  const spendAmount = Number(amount);
 
-export async function PUT() {
-  return unavailable();
-}
+  if (!Number.isFinite(spendAmount) || spendAmount < 5) {
+    return NextResponse.json(
+      { error: "Invalid amount" },
+      { status: 400 }
+    );
+  }
 
-export async function PATCH() {
-  return unavailable();
-}
+  const user = await prisma.userProfile.findUnique({ where: { email } });
 
-export async function DELETE() {
-  return unavailable();
-}
+  if (!user || (user.credits ?? 0) < spendAmount) {
+    return NextResponse.json(
+      { error: "Insufficient credits" },
+      { status: 400 }
+    );
+  }
+
+  await prisma.$transaction([
+    prisma.userProfile.update({
+      where: { email },
+      data: { credits: { decrement: spendAmount } },
+    }),
+    prisma.creditLedger.create({
+      data: {
+        email,
+        type: "debit",
+        amount: spendAmount,
+        reason: reason ?? "usage",
+      },
+    }),
+  ]);
+
+  return NextResponse.json({ ok: true }, { status: 200 });
+});

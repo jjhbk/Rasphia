@@ -11,6 +11,13 @@ const secret = new TextEncoder().encode(process.env.EXTENSION_JWT_SECRET!);
 export const POST = withExtensionCors(async (req: Request) => {
   const { one_time_token } = await req.json();
 
+  if (!one_time_token) {
+    return NextResponse.json(
+      { error: "Missing one_time_token" },
+      { status: 400 }
+    );
+  }
+
   const tokenRecord = await prisma.extensionToken.findUnique({
     where: { token: one_time_token },
   });
@@ -43,7 +50,7 @@ export const POST = withExtensionCors(async (req: Request) => {
   return NextResponse.json(
     {
       access_token: jwtToken,
-      expires_in: 7 * 24 * 3600,
+      expires_in: 7 * 24 * 60 * 60,
     },
     { status: 200 }
   );

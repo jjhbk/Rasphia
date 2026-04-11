@@ -1,31 +1,54 @@
 import { NextResponse } from "next/server";
+import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
+import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
+import { prisma } from "@/app/lib/prisma";
 
-function unavailable() {
-  return NextResponse.json(
-    {
-      error:
-        "Temporarily unavailable during SQL migration. This endpoint is being moved off MongoDB.",
-    },
-    { status: 503 }
-  );
-}
+export const runtime = "nodejs";
+export const OPTIONS = handleOptions;
 
-export async function GET() {
-  return unavailable();
-}
+export const GET = withExtensionCors(async (req: Request) => {
+  try {
+    const email = await verifyExtensionToken(req);
+    if (!email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-export async function POST() {
-  return unavailable();
-}
+    const url = new URL(req.url);
+    const q = (url.searchParams.get("q") ?? "").trim().toLowerCase();
 
-export async function PUT() {
-  return unavailable();
-}
+    const chats = await prisma.chat.findMany({
+      where: { userEmail: email },
+      orderBy: { updatedAt: "desc" },
+    });
 
-export async function PATCH() {
-  return unavailable();
-}
+    if (!q) {
+      return NextResponse.json(
+        chats.map((c) => ({ ...c, _id: c.id })),
+        { status: 200 }
+      );
+    }
 
-export async function DELETE() {
-  return unavailable();
-}
+    const filtered = chats.filter((chat) => {
+      const title = (chat.title || "").toLowerCase();
+      const messages = Array.isArray(chat.messages)
+        ? (chat.messages as Array<{ text?: string }>)
+        : [];
+      const inTitle = title.includes(q);
+      const inMessages = messages.some((m) =>
+        String(m?.text || "").toLowerCase().includes(q)
+      );
+      return inTitle || inMessages;
+    });
+
+    return NextResponse.json(
+      filtered.map((c) => ({ ...c, _id: c.id })),
+      { status: 200 }
+    );
+  } catch (err: any) {
+    console.error("Chat search error:", err);
+    return NextResponse.json(
+      { error: err.message || "Server error" },
+      { status: 500 }
+    );
+  }
+});

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { prisma } from "@/app/lib/prisma";
 import crypto from "crypto";
+import { prisma } from "@/app/lib/prisma";
 import { getExtensionCorsHeaders } from "@/app/lib/extensionCors";
 
 export const runtime = "nodejs";
@@ -21,6 +21,7 @@ export async function GET(req: Request) {
       const signinUrl = `${baseUrl}/api/auth/signin/google?callbackUrl=/api/extension/init?ext=1`;
       return NextResponse.redirect(signinUrl, { status: 302 });
     }
+
     return NextResponse.json({ error: "Not logged in" }, { status: 401 });
   }
 
@@ -39,6 +40,7 @@ export async function GET(req: Request) {
 
   if (isExtension) {
     const redirectUrl = `${baseUrl}/extension/auth?token=${token}`;
+
     return NextResponse.redirect(redirectUrl, {
       status: 302,
       headers: getExtensionCorsHeaders(req),

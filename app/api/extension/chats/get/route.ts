@@ -1,31 +1,44 @@
 import { NextResponse } from "next/server";
+import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
+import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
+import { prisma } from "@/app/lib/prisma";
 
-function unavailable() {
-  return NextResponse.json(
-    {
-      error:
-        "Temporarily unavailable during SQL migration. This endpoint is being moved off MongoDB.",
-    },
-    { status: 503 }
-  );
-}
+export const runtime = "nodejs";
+export const OPTIONS = handleOptions;
 
-export async function GET() {
-  return unavailable();
-}
+export const GET = withExtensionCors(async (req: Request) => {
+  try {
+    const email = await verifyExtensionToken(req);
+    if (!email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-export async function POST() {
-  return unavailable();
-}
+    const url = new URL(req.url);
+    const chatId = url.searchParams.get("chatId");
 
-export async function PUT() {
-  return unavailable();
-}
+    if (!chatId) {
+      return NextResponse.json({ error: "Missing chatId" }, { status: 400 });
+    }
 
-export async function PATCH() {
-  return unavailable();
-}
+    const chat = await prisma.chat.findUnique({ where: { id: chatId } });
 
-export async function DELETE() {
-  return unavailable();
-}
+    if (!chat) {
+      return NextResponse.json({ error: "Chat not found" }, { status: 404 });
+    }
+
+    if (chat.userEmail !== email) {
+      return NextResponse.json(
+        { error: "Forbidden: You do not own this chat" },
+        { status: 403 }
+      );
+    }
+
+    return NextResponse.json({ ...chat, _id: chat.id }, { status: 200 });
+  } catch (err: any) {
+    console.error("Chat fetch error:", err);
+    return NextResponse.json(
+      { error: err.message || "Server error" },
+      { status: 500 }
+    );
+  }
+});

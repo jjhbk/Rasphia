@@ -1,31 +1,21 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/app/lib/prisma";
+import { verifyExtensionToken } from "@/app/lib/verifyExtToken";
+import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
 
-function unavailable() {
-  return NextResponse.json(
-    {
-      error:
-        "Temporarily unavailable during SQL migration. This endpoint is being moved off MongoDB.",
-    },
-    { status: 503 }
-  );
-}
+export const runtime = "nodejs";
+export const OPTIONS = handleOptions;
 
-export async function GET() {
-  return unavailable();
-}
+export const GET = withExtensionCors(async (req: Request) => {
+  const email = await verifyExtensionToken(req);
+  if (!email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-export async function POST() {
-  return unavailable();
-}
+  const user = await prisma.userProfile.findUnique({
+    where: { email },
+    select: { credits: true },
+  });
 
-export async function PUT() {
-  return unavailable();
-}
-
-export async function PATCH() {
-  return unavailable();
-}
-
-export async function DELETE() {
-  return unavailable();
-}
+  return NextResponse.json({ credits: user?.credits ?? 0 }, { status: 200 });
+});
