@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Sparkles,
   MessageCircle,
@@ -123,8 +123,38 @@ const previewSuggestions = [
   },
 ];
 
+const HOMEPAGE_DEMO_VIDEO_URL =
+  "https://mmml2bafriznrxgn.public.blob.vercel-storage.com/Merchant%20Onboarding%20%281%29.mp4";
+
 const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
   const [hoveredVibe, setHoveredVibe] = useState<number | null>(null);
+  const demoVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const video = demoVideoRef.current;
+    if (!video) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+
+        if (entry.isIntersecting) {
+          video.play().catch(() => {
+            // Ignore autoplay failures; controls remain available for manual play.
+          });
+          return;
+        }
+
+        video.pause();
+      },
+      { threshold: 0.5 }
+    );
+
+    observer.observe(video);
+
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#F8F4EF] text-stone-900">
@@ -395,25 +425,49 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
         </section>
 
         <section className="mt-20 rounded-[32px] bg-gradient-to-br from-[#FFF4E1] to-[#F1E3D3] p-10">
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-700">
-            For marketplaces & brands
-          </p>
-          <h2 className="mt-2 font-serif text-4xl">
-            Integrate with the future of shopping.
-          </h2>
-          <p className="mt-4 max-w-2xl text-lg text-stone-600">
-            Rasphia is building the AI intelligence layer for commerce.
-            Integrate your catalog, reviews, or fulfillment and guide customers
-            to better decisions across the open web.
-          </p>
+          <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr] lg:items-center">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-700">
+                For marketplaces & brands
+              </p>
+              <h2 className="mt-2 font-serif text-4xl">
+                Integrate with the future of shopping.
+              </h2>
+              <p className="mt-4 max-w-2xl text-lg text-stone-600">
+                Rasphia is building the AI intelligence layer for commerce.
+                Integrate your catalog, reviews, or fulfillment and guide customers
+                to better decisions across the open web.
+              </p>
 
-          <a
-            href="/merchant/onboarding"
-            className="mt-6 inline-flex items-center gap-3 rounded-full bg-stone-900 px-8 py-3 font-medium text-white shadow hover:bg-stone-800"
-          >
-            Become a Merchant
-            <ArrowRight className="h-5 w-5" />
-          </a>
+              <a
+                href="/merchant/onboarding"
+                className="mt-6 inline-flex items-center gap-3 rounded-full bg-stone-900 px-8 py-3 font-medium text-white shadow hover:bg-stone-800"
+              >
+                Become a Merchant
+                <ArrowRight className="h-5 w-5" />
+              </a>
+            </div>
+
+            <div>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.3em] text-stone-500">
+                Merchant Onboarding Demo
+              </p>
+              <div className="overflow-hidden rounded-2xl border border-amber-100/70 bg-black shadow-xl shadow-stone-300/40">
+                <video
+                  ref={demoVideoRef}
+                  src={HOMEPAGE_DEMO_VIDEO_URL}
+                  className="h-full w-full object-cover"
+                  muted
+                  loop
+                  playsInline
+                  controls
+                  preload="metadata"
+                >
+                  Your browser does not support the video tag.
+                </video>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section
