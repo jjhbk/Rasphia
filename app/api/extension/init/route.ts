@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/app/lib/prisma";
 import crypto from "crypto";
+import { getExtensionCorsHeaders } from "@/app/lib/extensionCors";
 
 export const runtime = "nodejs";
 
@@ -40,12 +41,7 @@ export async function GET(req: Request) {
     const redirectUrl = `${baseUrl}/extension/auth?token=${token}`;
     return NextResponse.redirect(redirectUrl, {
       status: 302,
-      headers: {
-        "Access-Control-Allow-Origin": "chrome-extension://*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers":
-          "Content-Type, Authorization, X-Rasphia-Extension-Token",
-      },
+      headers: getExtensionCorsHeaders(req),
     });
   }
 

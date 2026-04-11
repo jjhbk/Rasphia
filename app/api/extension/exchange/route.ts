@@ -1,23 +1,14 @@
 import { SignJWT } from "jose";
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { handleOptions, withExtensionCors } from "@/app/lib/extensionCors";
 
 export const runtime = "nodejs";
+export const OPTIONS = handleOptions;
 
 const secret = new TextEncoder().encode(process.env.EXTENSION_JWT_SECRET!);
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "chrome-extension://*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, X-Rasphia-Extension-Token",
-};
-
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: corsHeaders });
-}
-
-export async function POST(req: Request) {
+export const POST = withExtensionCors(async (req: Request) => {
   const { one_time_token } = await req.json();
 
   const tokenRecord = await prisma.extensionToken.findUnique({
@@ -54,9 +45,6 @@ export async function POST(req: Request) {
       access_token: jwtToken,
       expires_in: 7 * 24 * 3600,
     },
-    {
-      status: 200,
-      headers: corsHeaders,
-    }
+    { status: 200 }
   );
-}
+});

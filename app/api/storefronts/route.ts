@@ -13,6 +13,11 @@ const PUBLIC_STOREFRONT_STATUSES = [
 export async function GET(req: NextRequest) {
   try {
     const q = String(req.nextUrl.searchParams.get("q") || "").trim();
+    const terms = q
+      .split(/\s+/)
+      .map((term) => term.trim())
+      .filter(Boolean)
+      .slice(0, 8);
     const limit = Math.min(
       Math.max(parseInt(req.nextUrl.searchParams.get("limit") || "24", 10), 1),
       100
@@ -21,18 +26,26 @@ export async function GET(req: NextRequest) {
     const merchants = await prisma.merchant.findMany({
       where: {
         status: { in: [...PUBLIC_STOREFRONT_STATUSES] },
-        ...(q
+        ...(terms.length
           ? {
-              OR: [
-                { name: { contains: q, mode: "insensitive" } },
-                { slug: { contains: q, mode: "insensitive" } },
-                {
-                  storefrontDescription: {
-                    contains: q,
-                    mode: "insensitive",
+              AND: terms.map((term) => ({
+                OR: [
+                  { name: { contains: term, mode: "insensitive" } },
+                  { slug: { contains: term, mode: "insensitive" } },
+                  {
+                    storefrontDescription: {
+                      contains: term,
+                      mode: "insensitive",
+                    },
                   },
-                },
-              ],
+                  { city: { contains: term, mode: "insensitive" } },
+                  { state: { contains: term, mode: "insensitive" } },
+                  { zipCode: { contains: term, mode: "insensitive" } },
+                  { addressLine1: { contains: term, mode: "insensitive" } },
+                  { addressLine2: { contains: term, mode: "insensitive" } },
+                  { address: { contains: term, mode: "insensitive" } },
+                ],
+              })),
             }
           : {}),
       },

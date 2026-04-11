@@ -164,12 +164,11 @@ export default function MerchantOnboardingPage() {
       setError("ZIP code format is invalid.");
       return;
     }
-    if (!form.locationLink.trim()) {
-      setError("Location link is required.");
-      return;
-    }
-    if (!/^https?:\/\/.+/i.test(form.locationLink.trim())) {
-      setError("Location link must be a valid URL.");
+    if (
+      form.locationLink.trim().length > 0 &&
+      !/^https?:\/\/.+/i.test(form.locationLink.trim())
+    ) {
+      setError("Google Maps location link must be a valid URL.");
       return;
     }
 
@@ -359,15 +358,19 @@ export default function MerchantOnboardingPage() {
                   </div>
 
                   <div>
-                    <label className="input-label">Google Maps / Location Link</label>
+                    <label className="input-label">
+                      Google Maps Location Link (optional)
+                    </label>
                     <input
                       value={form.locationLink}
                       onChange={(e) => setForm((p) => ({ ...p, locationLink: e.target.value }))}
                       type="url"
                       className="input-field"
                       placeholder="https://maps.google.com/..."
-                      required
                     />
+                    <p className="text-xs text-brand-stone mt-1">
+                      Paste your Google Maps pin/location URL if available.
+                    </p>
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-3 pt-2">

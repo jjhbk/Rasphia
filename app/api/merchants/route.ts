@@ -49,11 +49,8 @@ function validateMerchantPayload(input: {
   if (!/^[A-Za-z0-9\- ]{4,12}$/.test(zipCode)) {
     return { error: "ZIP code format is invalid." };
   }
-  if (!locationLink) {
-    return { error: "Location link is required." };
-  }
-  if (!/^https?:\/\/.+/i.test(locationLink)) {
-    return { error: "Location link must be a valid URL." };
+  if (locationLink && !/^https?:\/\/.+/i.test(locationLink)) {
+    return { error: "Google Maps location link must be a valid URL." };
   }
 
   return {
@@ -65,7 +62,7 @@ function validateMerchantPayload(input: {
     city,
     state,
     zipCode,
-    locationLink,
+    locationLink: locationLink || "",
   };
 }
 
