@@ -142,6 +142,9 @@ const foundingBenefits = [
   "Direct line to the founding team",
 ];
 
+const DEMO_VIDEO_URL =
+  "https://mmml2bafriznrxgn.public.blob.vercel-storage.com/Merchant%20Onboarding%20%281%29.mp4";
+
 /* ─────────────────────────────────────────────
    Components
 ───────────────────────────────────────────── */
@@ -230,6 +233,18 @@ export default function MerchantLandingPage() {
   const [slotsLeft] = useState(47);
   const [scrolled, setScrolled] = useState(false);
   const heroRef = useRef<HTMLDivElement>(null);
+  const demoVideoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = demoVideoRef.current;
+    if (!video) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { entry?.isIntersecting ? video.play().catch(() => {}) : video.pause(); },
+      { threshold: 0.5 }
+    );
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -482,6 +497,26 @@ export default function MerchantLandingPage() {
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="mt-10">
+            <p className="mb-3 text-center text-xs font-semibold uppercase tracking-[0.3em] text-stone-500">
+              See it in action
+            </p>
+            <div className="overflow-hidden rounded-2xl border border-amber-100/70 bg-black shadow-xl shadow-stone-300/40">
+              <video
+                ref={demoVideoRef}
+                src={DEMO_VIDEO_URL}
+                className="h-full w-full object-cover"
+                muted
+                loop
+                playsInline
+                controls
+                preload="metadata"
+              >
+                Your browser does not support the video tag.
+              </video>
+            </div>
           </div>
 
           <div className="mt-8 text-center">
