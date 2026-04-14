@@ -182,7 +182,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                 </a>
               ))}
               <a
-                href="/merchant/onboarding"
+                href="/merchant"
                 className="rounded-full px-3 py-1 transition-colors hover:bg-white/80 hover:text-stone-900"
               >
                 Become a Merchant
@@ -234,7 +234,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                   Browse Merchant Stores
                 </a>
                 <a
-                  href="/merchant/onboarding"
+                  href="/merchant"
                   className="inline-flex h-12 w-full shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-stone-300 bg-white/60 px-7 py-3 text-sm font-medium text-stone-800 transition hover:bg-white sm:h-auto sm:w-auto"
                 >
                   Become a Merchant
@@ -440,7 +440,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
               </p>
 
               <a
-                href="/merchant/onboarding"
+                href="/merchant"
                 className="mt-6 inline-flex items-center gap-3 rounded-full bg-stone-900 px-8 py-3 font-medium text-white shadow hover:bg-stone-800"
               >
                 Become a Merchant
