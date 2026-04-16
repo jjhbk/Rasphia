@@ -170,6 +170,12 @@ export interface Order {
   date: string;
   status: OrderStatus;
   trackingNumber?: string;
+  invoiceNumber?: string;
+  invoiceId?: string;
+  invoicePdfUrl?: string;
+  invoiceGeneratedAt?: string;
+  invoiceSyncStatus?: string;
+  invoiceSyncError?: string;
   isReviewed?: boolean;
 }
 

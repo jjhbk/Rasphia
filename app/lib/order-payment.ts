@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
+import { syncOrderInvoiceWithBahi } from "@/app/lib/order-invoice";
 
 type FinalizeOrderPaymentInput = {
   orderId: string;
@@ -88,6 +89,16 @@ export async function finalizeOrderAsPaid(input: FinalizeOrderPaymentInput) {
       },
     });
   });
+
+  try {
+    await syncOrderInvoiceWithBahi(input.orderId);
+  } catch (error) {
+    // Never fail payment finalization because downstream invoice sync failed.
+    console.error("[order-payment] Bahi invoice sync failed", {
+      orderId: input.orderId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   return { ok: true as const, alreadyPaid: false as const, order };
 }

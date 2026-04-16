@@ -17,6 +17,7 @@ import {
   CreditCard,
   Layout,
   Image as ImageIcon,
+  FileText,
 } from "lucide-react";
 import BrandLogo from "@/app/components/brand/BrandLogo";
 import Navbar from "@/app/components/Navbar";
@@ -122,6 +123,18 @@ type MerchantSeedhapeSettings = {
   generatedWebhookSecret?: string | null;
 };
 
+type MerchantBahiSettings = {
+  configured: boolean;
+  apiKeyMasked: string | null;
+  bahiMerchantId: string | null;
+  bahiUpiId: string | null;
+  baseUrl: string;
+  autoReceiptEnabled: boolean;
+  configuredAt: string | null;
+  trackedInvoiceCount?: number;
+  generatedWebhookSecret?: string | null;
+};
+
 type Tab = "branding" | "payments";
 
 export default function MerchantStorefrontPage() {
@@ -156,6 +169,21 @@ export default function MerchantStorefrontPage() {
   const [seedhapeSuccess, setSeedhapeSuccess] = useState<string | null>(null);
   const [webhookCopied, setWebhookCopied] = useState(false);
   const [rotatedWebhookSecret, setRotatedWebhookSecret] = useState<string | null>(null);
+  const [bahi, setBahi] = useState<MerchantBahiSettings | null>(null);
+  const [bahiForm, setBahiForm] = useState({
+    bahiApiKey: "",
+    bahiWebhookSecret: "",
+    bahiMerchantId: "",
+    bahiUpiId: "",
+    bahiBaseUrl: "",
+    autoReceiptEnabled: true,
+  });
+  const [bahiError, setBahiError] = useState<string | null>(null);
+  const [bahiSuccess, setBahiSuccess] = useState<string | null>(null);
+  const [isSavingBahi, setIsSavingBahi] = useState(false);
+  const [isRotatingBahiSecret, setIsRotatingBahiSecret] = useState(false);
+  const [isSyncingBahi, setIsSyncingBahi] = useState(false);
+  const [rotatedBahiSecret, setRotatedBahiSecret] = useState<string | null>(null);
   const [urlCopied, setUrlCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("branding");
 
@@ -197,6 +225,24 @@ export default function MerchantStorefrontPage() {
           if (settings.generatedWebhookSecret) {
             setSeedhapeSuccess(
               `Default webhook secret generated. Save it now: ${settings.generatedWebhookSecret}`
+            );
+          }
+        }
+        const bahiRes = await fetch("/api/merchant/bahi");
+        const bahiData = await bahiRes.json();
+        if (bahiRes.ok && bahiData?.bahi) {
+          const settings = bahiData.bahi as MerchantBahiSettings;
+          setBahi(settings);
+          setBahiForm((prev) => ({
+            ...prev,
+            bahiMerchantId: settings.bahiMerchantId || "",
+            bahiUpiId: settings.bahiUpiId || "",
+            bahiBaseUrl: settings.baseUrl || "",
+            autoReceiptEnabled: Boolean(settings.autoReceiptEnabled),
+          }));
+          if (settings.generatedWebhookSecret) {
+            setBahiSuccess(
+              `Default Bahi webhook secret generated. Save it now: ${settings.generatedWebhookSecret}`
             );
           }
         }
@@ -427,6 +473,111 @@ export default function MerchantStorefrontPage() {
       setSeedhapeError(msg);
     } finally {
       setIsRotatingSecret(false);
+    }
+  };
+
+  const saveBahiSettings = async () => {
+    try {
+      setIsSavingBahi(true);
+      setBahiError(null);
+      setBahiSuccess(null);
+      const payload: Record<string, unknown> = {
+        autoReceiptEnabled: Boolean(bahiForm.autoReceiptEnabled),
+      };
+      if (bahiForm.bahiApiKey.trim()) payload.bahiApiKey = bahiForm.bahiApiKey.trim();
+      if (bahiForm.bahiWebhookSecret.trim()) {
+        payload.bahiWebhookSecret = bahiForm.bahiWebhookSecret.trim();
+      }
+      if (bahiForm.bahiMerchantId.trim()) {
+        payload.bahiMerchantId = bahiForm.bahiMerchantId.trim();
+      }
+      if (bahiForm.bahiUpiId.trim()) payload.bahiUpiId = bahiForm.bahiUpiId.trim();
+      if (bahiForm.bahiBaseUrl.trim()) payload.bahiBaseUrl = bahiForm.bahiBaseUrl.trim();
+
+      const res = await fetch("/api/merchant/bahi", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to save Bahi settings");
+
+      const next = data?.bahi as MerchantBahiSettings;
+      setBahi(next);
+      setBahiForm((prev) => ({
+        ...prev,
+        bahiApiKey: "",
+        bahiWebhookSecret: "",
+        bahiMerchantId: next?.bahiMerchantId || prev.bahiMerchantId,
+        bahiUpiId: next?.bahiUpiId || prev.bahiUpiId,
+        bahiBaseUrl: next?.baseUrl || prev.bahiBaseUrl,
+        autoReceiptEnabled: Boolean(next?.autoReceiptEnabled),
+      }));
+      setBahiSuccess("Bahi settings updated.");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to save Bahi settings";
+      setBahiError(msg);
+    } finally {
+      setIsSavingBahi(false);
+    }
+  };
+
+  const rotateBahiSecret = async () => {
+    try {
+      setIsRotatingBahiSecret(true);
+      setBahiError(null);
+      setBahiSuccess(null);
+      setRotatedBahiSecret(null);
+      const res = await fetch("/api/merchant/bahi", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rotateWebhookSecret: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to rotate Bahi webhook secret");
+      setBahi(data.bahi as MerchantBahiSettings);
+      const generated = String(data?.rotated?.generatedWebhookSecret || "").trim();
+      if (generated) {
+        setRotatedBahiSecret(generated);
+        setBahiSuccess("Bahi webhook secret rotated.");
+      } else {
+        setBahiSuccess("Bahi webhook secret rotated.");
+      }
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : "Failed to rotate Bahi webhook secret";
+      setBahiError(msg);
+    } finally {
+      setIsRotatingBahiSecret(false);
+    }
+  };
+
+  const syncBahiTracking = async () => {
+    try {
+      setIsSyncingBahi(true);
+      setBahiError(null);
+      setBahiSuccess(null);
+      const res = await fetch("/api/merchant/bahi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sinceHours: 168 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to sync Bahi tracking");
+
+      const getRes = await fetch("/api/merchant/bahi");
+      const getData = await getRes.json();
+      if (getRes.ok && getData?.bahi) setBahi(getData.bahi as MerchantBahiSettings);
+
+      const tracked = data?.tracked || {};
+      setBahiSuccess(
+        `Tracking synced: ${tracked.matchedOrders || 0} orders matched, ${tracked.updatedOrders || 0} updated.`
+      );
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to sync Bahi tracking";
+      setBahiError(msg);
+    } finally {
+      setIsSyncingBahi(false);
     }
   };
 
@@ -1099,6 +1250,224 @@ export default function MerchantStorefrontPage() {
                     />
                   </div>
                 )}
+              </div>
+            </div>
+
+            <div className={`alert ${bahi?.configured ? "alert-success" : "alert-info"}`}>
+              {bahi?.configured ? (
+                <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-green-600" />
+              ) : (
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              )}
+              <div>
+                <p className="font-medium text-sm">
+                  {bahi?.configured
+                    ? "Bahi automated receipts are configured"
+                    : "Bahi receipt automation not configured"}
+                </p>
+                <p className="text-xs opacity-70 mt-0.5">
+                  Tracked invoices: {bahi?.trackedInvoiceCount || 0}
+                </p>
+                {bahi?.configuredAt && (
+                  <p className="text-xs opacity-70 mt-0.5">
+                    Last updated: {new Date(bahi.configuredAt).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {bahiError && (
+              <div className="alert alert-danger">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                {bahiError}
+              </div>
+            )}
+
+            {bahiSuccess && (
+              <div className="alert alert-success">
+                <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-green-600" />
+                {bahiSuccess}
+              </div>
+            )}
+
+            {rotatedBahiSecret && (
+              <div className="panel animate-scale-in">
+                <div className="panel-header bg-green-50/80 border-green-200/60">
+                  <div className="flex items-center gap-2 text-green-700">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span className="text-sm font-semibold">New Bahi Webhook Secret (shown once)</span>
+                  </div>
+                </div>
+                <div className="panel-body">
+                  <p className="text-xs text-brand-stone mb-2">
+                    Copy this secret and keep it securely in your Bahi integration settings.
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={rotatedBahiSecret}
+                      readOnly
+                      className="input-field font-mono text-xs flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(rotatedBahiSecret);
+                          setBahiSuccess("Bahi webhook secret copied.");
+                        } catch {
+                          setBahiError("Could not copy Bahi webhook secret.");
+                        }
+                      }}
+                      className="btn btn-secondary btn-sm flex-shrink-0"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="panel">
+              <div className="panel-header">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-brand-terracotta" />
+                  <span className="text-sm font-semibold text-brand-charcoal">Bahi Receipts & Tracking</span>
+                </div>
+              </div>
+              <div className="panel-body space-y-4">
+                <p className="text-xs text-brand-stone">
+                  Connect Bahi to auto-generate GST invoices when payments are marked paid and sync invoice tracking back to orders.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="input-label">Bahi API Key</label>
+                    <input
+                      type="password"
+                      value={bahiForm.bahiApiKey}
+                      onChange={(e) =>
+                        setBahiForm((p) => ({ ...p, bahiApiKey: e.target.value }))
+                      }
+                      placeholder={bahi?.apiKeyMasked || "bahi_live_xxxxx..."}
+                      className="input-field"
+                    />
+                    <p className="text-xs text-brand-stone mt-1">Leave blank to keep existing key.</p>
+                  </div>
+                  <div>
+                    <label className="input-label">Bahi Webhook Secret</label>
+                    <input
+                      type="password"
+                      value={bahiForm.bahiWebhookSecret}
+                      onChange={(e) =>
+                        setBahiForm((p) => ({ ...p, bahiWebhookSecret: e.target.value }))
+                      }
+                      placeholder="Set or replace webhook secret"
+                      className="input-field"
+                    />
+                    <p className="text-xs text-brand-stone mt-1">Used to sign `x-bahi-signature` requests.</p>
+                  </div>
+                  <div>
+                    <label className="input-label">Bahi Merchant ID</label>
+                    <input
+                      value={bahiForm.bahiMerchantId}
+                      onChange={(e) =>
+                        setBahiForm((p) => ({ ...p, bahiMerchantId: e.target.value }))
+                      }
+                      placeholder={bahi?.bahiMerchantId || "your-bahi-merchant-id"}
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label className="input-label">Merchant UPI ID</label>
+                    <input
+                      value={bahiForm.bahiUpiId}
+                      onChange={(e) =>
+                        setBahiForm((p) => ({ ...p, bahiUpiId: e.target.value }))
+                      }
+                      placeholder={bahi?.bahiUpiId || "merchant@upi"}
+                      className="input-field"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="input-label">Bahi Base URL</label>
+                    <input
+                      value={bahiForm.bahiBaseUrl}
+                      onChange={(e) =>
+                        setBahiForm((p) => ({ ...p, bahiBaseUrl: e.target.value }))
+                      }
+                      placeholder={bahi?.baseUrl || "https://api.bahi.app/api"}
+                      className="input-field font-mono text-xs"
+                    />
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 text-sm text-brand-charcoal">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-brand-sand/60"
+                    checked={Boolean(bahiForm.autoReceiptEnabled)}
+                    onChange={(e) =>
+                      setBahiForm((p) => ({
+                        ...p,
+                        autoReceiptEnabled: e.target.checked,
+                      }))
+                    }
+                  />
+                  Enable automated receipt generation after payment verification
+                </label>
+
+                <div className="flex gap-2 pt-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={saveBahiSettings}
+                    disabled={isSavingBahi}
+                    className="btn btn-primary"
+                  >
+                    {isSavingBahi ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        Saving…
+                      </>
+                    ) : (
+                      "Save Bahi Settings"
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={rotateBahiSecret}
+                    disabled={isRotatingBahiSecret}
+                    className="btn btn-secondary"
+                  >
+                    {isRotatingBahiSecret ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        Rotating…
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4" />
+                        Rotate Bahi Secret
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={syncBahiTracking}
+                    disabled={isSyncingBahi}
+                    className="btn btn-secondary"
+                  >
+                    {isSyncingBahi ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        Syncing…
+                      </>
+                    ) : (
+                      "Sync Invoice Tracking"
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
