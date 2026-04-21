@@ -4,10 +4,11 @@ import {
   MessageCircle,
   ArrowRight,
   ArrowDown,
-  UserRound,
+  CheckCircle2,
 } from "lucide-react";
 import SocialLinks from "./SocialLinks";
 import BrandLogo from "./brand/BrandLogo";
+import Link from "next/link";
 
 interface LandingPageProps {
   onLogin: () => void;
@@ -15,113 +16,99 @@ interface LandingPageProps {
 
 const navLinks = [
   { label: "How it works", href: "#how-it-works" },
-  { label: "Why Rasphia", href: "#contrast" },
-  { label: "Stories", href: "#stories" },
+  { label: "Why Rasphia", href: "#why-rasphia" },
+  { label: "Meet the makers", href: "#makers" },
+  { label: "WhatsApp shopping", href: "#whatsapp-shopping" },
 ];
 
 const vibeTiles = [
   {
-    mood: "Cozy Sunday",
-    hint: "Candles, throws, warm drinks",
+    mood: "Handmade Home",
+    hint: "Candles, ceramics, thoughtful decor",
     gradient: "from-[#E8D5C4] to-[#D4A574]",
   },
   {
-    mood: "Gift for someone hard to shop for",
-    hint: "Thoughtful, unexpected finds",
+    mood: "Skincare That Fits",
+    hint: "Skin-type aware independent labels",
     gradient: "from-[#C5CEBC] to-[#8B9D83]",
   },
   {
-    mood: "Refresh my desk",
-    hint: "Clean lines, quiet objects",
+    mood: "Gifts With Story",
+    hint: "Maker-made, personal, values-aligned",
     gradient: "from-[#D4C5B5] to-[#A39B93]",
   },
   {
-    mood: "Something unexpected",
-    hint: "Surprise me with taste",
+    mood: "Everyday Local Finds",
+    hint: "No marketplace clutter, just your vibe",
     gradient: "from-[#E8947A] to-[#C75C3A]",
   },
 ];
 
-const contrasts = [
-  { old: "You search for products", vibe: "Products find you" },
-  { old: "Same storefront for everyone", vibe: "Built just for you" },
+const whyRasphia = [
   {
-    old: "Decision fatigue from 100s of options",
-    vibe: "Calm confidence from curated picks",
+    title: "Real makers, not marketplaces",
+    description:
+      "Every product comes directly from an independent Indian seller. No middlemen, no inflated platform pricing, no mass-market sameness.",
   },
   {
-    old: "Mega-warehouses, faceless brands",
-    vibe: "Your neighborhood's best makers",
+    title: "AI that gets your taste",
+    description:
+      "Tell Rasphia your skin type, style, budget, and values. The concierge learns what fits and cuts the sponsored clutter.",
+  },
+  {
+    title: "Shop entirely on WhatsApp",
+    description:
+      "Discover, buy, pay, and track orders without leaving chat. UPI checkout, WhatsApp updates, and direct conversations with makers.",
   },
 ];
 
-const personaSteps = [
+const howItWorksSteps = [
   {
     step: "01",
-    title: "Tell us a feeling",
+    title: "Tell Rasphia what you love",
     description:
-      "Not a category. A mood, an occasion, a season of life. That's all we need to start.",
+      "Start with a 60-second web quiz or WhatsApp chat. Share your style, budget, needs, and preferences.",
   },
   {
     step: "02",
-    title: "Your taste blooms",
+    title: "Get matched to makers who fit",
     description:
-      "A few simple inputs evolve into a living map of your aesthetic, lifestyle, and sensibility.",
+      "Our AI surfaces real independent brands that match your taste, not algorithm-boosted listings.",
   },
   {
     step: "03",
-    title: "The right 6, not 600",
+    title: "Buy and chat directly",
     description:
-      "Every visit surfaces products that genuinely fit - not trending, not sponsored, just right for you.",
+      "Checkout with UPI, get WhatsApp updates, and connect with real humans on the other end.",
   },
 ];
 
-const testimonials = [
-  {
-    quote:
-      "It felt like the store was built just for me. I didn't search for anything - it just knew.",
-    author: "Medha A.",
-    detail: "Hyderabad",
-  },
-  {
-    quote:
-      "I stopped scrolling through 40 pages of moisturizers. Rasphia showed me three. All perfect.",
-    author: "Kabir L.",
-    detail: "Pune",
-  },
-  {
-    quote:
-      "The gift I bought through Rasphia made my sister cry. She said it was the most 'her' thing she'd ever received.",
-    author: "Sahana V.",
-    detail: "Bangalore",
-  },
-];
-
-const partnerLogos = [
-  "Clay Studio",
-  "Serenity Scents",
-  "GlowLab",
-  "EverHome",
-  "UrbanGroom",
+const makerTiles = [
+  "Onboarding independent makers now — join the waitlist to be first to browse.",
+  "Onboarding independent makers now — join the waitlist to be first to browse.",
+  "Onboarding independent makers now — join the waitlist to be first to browse.",
 ];
 
 const previewSuggestions = [
   {
-    name: "Niacinamide 10% Serum",
-    notes: "Acne • Oil control",
-    price: "₹399",
+    name: "Candle set from a Jaipur maker",
+    notes: "Hand-poured • Small batch",
+    price: "From ₹699",
   },
   {
-    name: "Oud Wood Pocket Perfume",
-    notes: "Rich & long-lasting",
-    price: "₹250",
+    name: "Ceramic cup duo by studio potter",
+    notes: "Wheel-thrown • Gift-ready",
+    price: "From ₹1,099",
   },
   {
-    name: "Pastel Ceramic Vase",
-    notes: "Room decor",
-    price: "₹550",
+    name: "Clean skincare starter ritual",
+    notes: "By indie formulation lab",
+    price: "From ₹899",
   },
 ];
+
+const WHATSAPP_NUMBER = "+91 6301304257";
+const WHATSAPP_LINK = "https://wa.me/916301304257?text=Hi%2C%20I%20want%20to%20shop";
 
 const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
   const [hoveredVibe, setHoveredVibe] = useState<number | null>(null);
@@ -151,12 +138,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                   {link.label}
                 </a>
               ))}
-              <a
-                href="/merchant"
-                className="rounded-full px-3 py-1 transition-colors hover:bg-white/80 hover:text-stone-900"
-              >
+              <Link href="/merchant" className="rounded-full px-3 py-1 transition-colors hover:bg-white/80 hover:text-stone-900">
                 Become a Merchant
-              </a>
+              </Link>
             </div>
 
             <button
@@ -175,17 +159,15 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
               </p>
 
               <h1 className="mt-6 font-serif text-5xl leading-tight md:text-6xl">
-                You don&apos;t need more products.
+                Shop the vibe.
                 <br />
-                <span className="text-amber-700">You need the right ones.</span>
+                <span className="text-amber-700">Skip the marketplace.</span>
               </h1>
 
               <p className="mt-5 text-lg text-stone-600">
-                Rasphia is <em>Vibe Shopping</em> - a store built around your taste,
-                not a catalog. Tell us how you feel. We&apos;ll do the rest.
-              </p>
-              <p className="mt-3 text-base text-stone-700">
-                We partner with independent makers, local shops, and neighborhood businesses.
+                Discover India&apos;s best independent makers - candles, ceramics, skincare,
+                handmade everything. Our AI learns your taste and matches you to brands that
+                actually fit. Shop on the web or entirely through WhatsApp.
               </p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4">
@@ -193,21 +175,17 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                   onClick={onLogin}
                   className="inline-flex h-12 w-full shrink-0 items-center justify-center gap-3 whitespace-nowrap rounded-full border-0 bg-stone-900 px-8 py-3 font-medium text-white shadow-lg shadow-stone-300/60 transition hover:-translate-y-0.5 hover:bg-stone-800 sm:h-auto sm:w-auto"
                 >
-                  Start discovering
+                  Start shopping
                   <ArrowRight className="h-5 w-5" />
                 </button>
 
                 <a
-                  href="/storefronts"
+                  href={WHATSAPP_LINK}
+                  target="_blank"
+                  rel="noreferrer"
                   className="inline-flex h-12 w-full shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-stone-300 bg-white/60 px-7 py-3 text-sm font-medium text-stone-800 transition hover:bg-white sm:h-auto sm:w-auto"
                 >
-                  Browse Merchant Stores
-                </a>
-                <a
-                  href="/merchant"
-                  className="inline-flex h-12 w-full shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-stone-300 bg-white/60 px-7 py-3 text-sm font-medium text-stone-800 transition hover:bg-white sm:h-auto sm:w-auto"
-                >
-                  Become a Merchant
+                  Chat with Rasphia on WhatsApp - send &quot;hi&quot; to {WHATSAPP_NUMBER}
                 </a>
                 <a
                   href="#how-it-works"
@@ -224,16 +202,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
               <div className="relative rounded-2xl bg-white/95 p-5 backdrop-blur">
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-stone-400">
                   <MessageCircle className="h-4 w-4 text-amber-600" />
-                  Live preview
+                  Concierge preview
                 </div>
 
                 <div className="mt-4 space-y-4 text-sm">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-900 text-white">
-                      <UserRound className="h-4 w-4" />
-                    </div>
                     <div className="rounded-2xl rounded-bl-sm bg-gradient-to-br from-[#2C1A13] via-[#3F2B22] to-[#6C4C3C] px-4 py-3 text-white shadow-lg">
-                      I need a thoughtful gift under ₹1000.
+                      Hi, I want to shop.
                     </div>
                   </div>
 
@@ -242,7 +217,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                       <Sparkles className="h-4 w-4" />
                     </div>
                     <div className="rounded-2xl rounded-tl-sm bg-gradient-to-r from-white via-stone-50 to-amber-50 px-4 py-3 text-stone-800 shadow-md">
-                      Here are the best local picks with strong reviews and quick delivery.
+                      Perfect. Tell me your vibe and budget. I&apos;ll match you with independent Indian makers.
                     </div>
                   </div>
                 </div>
@@ -275,7 +250,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
 
           <section className="mt-16">
             <p className="text-xs uppercase tracking-[0.35em] text-stone-500">
-              What&apos;s your vibe today?
+              What do you want to shop today?
             </p>
             <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
               {vibeTiles.map((tile, i) => (
@@ -305,58 +280,37 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
           </section>
 
           <section className="mt-16 border-t border-white/50 py-8 text-center">
-            <p className="text-xs uppercase tracking-[0.4em] text-stone-500">
-              Partner brands
+            <p className="text-sm text-stone-600">
+              Built for Indian shoppers. UPI payments, WhatsApp updates, direct from the maker&apos;s hands to yours.
             </p>
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-6 text-sm font-medium text-stone-500">
-              {partnerLogos.map((logo) => (
-                <span key={logo} className="opacity-70">
-                  {logo}
-                </span>
-              ))}
-            </div>
           </section>
         </div>
       </div>
 
       <main className="mx-auto max-w-6xl px-6 py-20 lg:px-8">
         <section
-          id="contrast"
+          id="why-rasphia"
           className="rounded-[32px] border border-stone-200/70 bg-white/80 p-8 shadow-xl shadow-stone-200/40 backdrop-blur"
         >
           <p className="text-xs uppercase tracking-[0.35em] text-amber-700">
-            A different kind of shopping
+            Why Rasphia
           </p>
           <h2 className="mt-3 font-serif text-4xl text-stone-900">
-            Shopping shouldn&apos;t feel like work.
+            Shop the vibe, not the clutter.
           </h2>
           <p className="mt-4 max-w-2xl text-lg text-stone-600">
-            Traditional e-commerce gives you search bars and filters. Rasphia
-            starts with how you feel, then curates what actually fits.
+            Rasphia helps you move away from algorithmic noise and toward independent makers
+            who actually match your taste.
           </p>
 
-          <div className="mt-10 grid gap-4 md:grid-cols-2">
-            {contrasts.map((c) => (
+          <div className="mt-10 grid gap-4 md:grid-cols-3">
+            {whyRasphia.map((item) => (
               <div
-                key={c.old}
-                className="grid overflow-hidden rounded-2xl border border-stone-200/70 md:grid-cols-2"
+                key={item.title}
+                className="rounded-2xl border border-stone-200/70 bg-white p-6"
               >
-                <div className="bg-[#F6F0E7]/70 p-5">
-                  <p className="text-xs uppercase tracking-[0.2em] text-stone-500">
-                    Traditional
-                  </p>
-                  <p className="mt-2 text-sm text-black line-through decoration-black">
-                    {c.old}
-                  </p>
-                </div>
-                <div className="bg-white p-5">
-                  <p className="text-xs uppercase tracking-[0.2em] text-amber-700">
-                    Vibe Shopping
-                  </p>
-                  <p className="mt-2 text-sm font-medium text-stone-900">
-                    {c.vibe}
-                  </p>
-                </div>
+                <h3 className="text-xl font-semibold text-stone-900">{item.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-stone-600">{item.description}</p>
               </div>
             ))}
           </div>
@@ -367,15 +321,14 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
           className="mt-16 rounded-[32px] bg-white p-8 shadow-xl shadow-stone-200/50"
         >
           <h2 className="font-serif text-4xl text-stone-900">
-            A few inputs. A universe of perfect picks.
+            How it works
           </h2>
           <p className="mt-4 max-w-2xl text-lg text-stone-600">
-            Your taste graph evolves with you, so each session gets sharper and
-            more personal.
+            Fast, personal, and built around independent makers.
           </p>
 
           <div className="mt-8 grid gap-6 md:grid-cols-3">
-            {personaSteps.map((step) => (
+            {howItWorksSteps.map((step) => (
               <div
                 key={step.step}
                 className="rounded-2xl border border-stone-100 p-6 transition-all hover:-translate-y-1 hover:shadow-lg"
@@ -394,51 +347,81 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
           </div>
         </section>
 
-        <section className="mt-20 rounded-[32px] bg-gradient-to-br from-[#FFF4E1] to-[#F1E3D3] p-10">
-          <div className="flex flex-col items-start gap-6 lg:flex-row lg:items-center lg:justify-between">
+        <section
+          id="makers"
+          className="mt-20 rounded-[32px] bg-gradient-to-br from-[#FFF4E1] to-[#F1E3D3] p-10"
+        >
+          <div className="flex flex-col items-start gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-700">
-                For independent sellers
+                Meet the makers
               </p>
               <h2 className="mt-2 font-serif text-4xl">
-                Sell on Rasphia. Keep everything.
+                Independent brands, curated with care.
               </h2>
               <p className="mt-4 max-w-xl text-lg text-stone-600">
-                List your products, get an AI-powered storefront, and reach customers
-                whose taste genuinely matches what you sell — all with zero commission.
+                Onboarding independent makers now - join the waitlist to be first to browse.
               </p>
             </div>
-            <a
-              href="/merchant"
-              className="shrink-0 inline-flex items-center gap-3 rounded-full bg-stone-900 px-8 py-3 font-medium text-white shadow hover:bg-stone-800"
-            >
-              Become a Merchant
-              <ArrowRight className="h-5 w-5" />
-            </a>
+          </div>
+
+          <div className="mt-8 grid gap-6 md:grid-cols-3">
+            {makerTiles.map((text, idx) => (
+              <article key={idx} className="rounded-3xl border border-stone-200/70 bg-white/85 p-6 shadow-md">
+                <div className="h-36 rounded-2xl border border-dashed border-stone-300 bg-stone-100/60" />
+                <p className="mt-4 text-sm text-stone-600">{text}</p>
+                <div className="mt-5">
+                  <button
+                    onClick={onLogin}
+                    className="inline-flex items-center gap-2 rounded-full bg-stone-900 px-5 py-2 text-sm font-medium text-white"
+                  >
+                    Join waitlist to shop
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </article>
+            ))}
           </div>
         </section>
 
         <section
-          id="stories"
+          id="whatsapp-shopping"
           className="mt-20 rounded-[32px] bg-[#1C140E] px-8 py-12 text-white shadow-2xl shadow-stone-900/20"
         >
           <h2 className="font-serif text-4xl">
-            Shopping that feels like it was meant for you.
+            Your personal shopper lives in WhatsApp.
           </h2>
+          <p className="mt-4 max-w-3xl text-white/80">
+            Message {WHATSAPP_NUMBER} and browse, buy, pay, and track orders entirely in chat.
+            Perfect if you hate app clutter or want a more personal shopping flow.
+          </p>
 
-          <div className="mt-8 grid gap-6 md:grid-cols-3">
-            {testimonials.map((t) => (
-              <article
-                key={t.author}
-                className="rounded-3xl border border-white/10 bg-white/5 p-6"
-              >
-                <p className="text-white/80">&quot;{t.quote}&quot;</p>
-                <div className="mt-4 border-t border-white/10 pt-4">
-                  <p className="text-sm font-semibold">{t.author}</p>
-                  <p className="text-xs text-white/60">{t.detail}</p>
-                </div>
-              </article>
-            ))}
+          <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
+            <div className="rounded-2xl border border-white/15 bg-white/5 p-6">
+              <p className="text-sm text-white/85">WhatsApp shopping flow</p>
+              <div className="mt-4 space-y-3 text-sm">
+                {[
+                  "Send: Hi, I want to shop",
+                  "Share your vibe, budget, and what you need",
+                  "Get matched picks from independent makers",
+                  "Pay by UPI and track updates in WhatsApp",
+                ].map((line) => (
+                  <div key={line} className="flex items-start gap-2 text-white/80">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                    <span>{line}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <a
+              href={WHATSAPP_LINK}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-3 rounded-full bg-white px-9 py-3 font-semibold text-stone-900 shadow-lg shadow-black/10 transition hover:-translate-y-0.5 hover:bg-amber-50"
+            >
+              Try it now on WhatsApp
+              <ArrowRight className="h-5 w-5" />
+            </a>
           </div>
         </section>
 
@@ -446,32 +429,32 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
           <div className="grid gap-6 lg:grid-cols-2 lg:items-center">
             <div>
               <p className="text-sm uppercase tracking-[0.4em] text-white/60">
-                Ready?
+                Ready to shop differently?
               </p>
               <h2 className="mt-2 font-serif text-4xl leading-snug">
-                Tell us what you like. We&apos;ll do the rest.
+                Start with your vibe.
+                <br />
+                Shop your values.
               </h2>
               <p className="mt-3 max-w-xl text-white/75">
-                A simple taste quiz, a few signals, and your storefront starts
-                feeling personal in minutes.
+                Discover products from independent Indian makers, with WhatsApp-native shopping when you want it.
               </p>
             </div>
-            <div className="flex flex-col gap-4">
-              <button
-                onClick={onLogin}
-                className="inline-flex items-center justify-center gap-3 self-start rounded-full border-0 bg-white px-9 py-3 font-semibold text-stone-900 shadow-lg shadow-black/10 transition hover:-translate-y-0.5 hover:bg-amber-50"
-                style={{ borderRadius: "999px" }}
+            <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap">
+              <Link
+                href="/storefronts"
+                className="inline-flex items-center justify-center gap-3 rounded-full border-0 bg-white px-9 py-3 font-semibold text-stone-900 shadow-lg shadow-black/10 transition hover:-translate-y-0.5 hover:bg-amber-50"
               >
-                Show me what&apos;s good
-                <ArrowRight className="h-5 w-5" />
-              </button>
-              <p className="text-sm text-white/70">
-                Prefer guidance?{" "}
-                <a href="/contact" className="underline decoration-amber-200">
-                  Book a live walkthrough
-                </a>
-                .
-              </p>
+                Browse stores
+              </Link>
+              <a
+                href={WHATSAPP_LINK}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-3 rounded-full border border-white/40 bg-white/10 px-9 py-3 font-semibold text-white transition hover:bg-white/20"
+              >
+                Chat on WhatsApp
+              </a>
             </div>
           </div>
         </section>
@@ -483,8 +466,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
             <div>
               <p className="font-heading text-2xl text-brand-charcoal">Rasphia</p>
               <p className="mt-2 max-w-xs text-sm text-brand-stone">
-                Shopping that knows you. Persona-driven discovery for the things
-                that fit your life.
+                Shop the vibe with independent Indian makers, on web or WhatsApp.
               </p>
             </div>
 
