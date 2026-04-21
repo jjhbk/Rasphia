@@ -119,6 +119,37 @@ const pricingPlans = [
   },
 ];
 
+const growthLevers = [
+  {
+    icon: MessageSquare,
+    title: "Never miss a 'price?' DM again",
+    metric: "AI replies in ~10 seconds, 24/7",
+    description:
+      "Early merchants report meaningful recovery of inquiries that used to go cold. In many cases, this maps to ~20-30% more DM conversations saved.",
+  },
+  {
+    icon: Users,
+    title: "Turn past customers into repeat buyers, automatically",
+    metric: "Existing customers often convert 5-10x better than cold traffic",
+    description:
+      "Send WhatsApp campaigns to your order history in one click. Repeat outreach is typically the fastest path to compounding revenue without extra ad spend.",
+  },
+  {
+    icon: Sparkles,
+    title: "Get discovered by shoppers who match your vibe",
+    metric: "Intent-matched discovery without ad spend",
+    description:
+      "Our matching system focuses on shopper taste fit, so the people seeing your products are more likely to care about what you make.",
+  },
+  {
+    icon: Store,
+    title: "Replace your Linktree with a real store",
+    metric: "One link, full catalog shopping flow",
+    description:
+      "Turn your Instagram bio link into a proper storefront where shoppers can browse, pay, and track orders instead of bouncing after one post.",
+  },
+];
+
 const DEMO_VIDEO_URL =
   "https://mmml2bafriznrxgn.public.blob.vercel-storage.com/Merchant%20Onboarding%20%281%29.mp4";
 const WHATSAPP_NUMBER = "+91 6301304257";
@@ -273,6 +304,47 @@ export default function MerchantLandingPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Sales growth levers ── */}
+      <section className="mx-auto max-w-6xl px-6 pt-14 lg:px-8">
+        <div className="rounded-[32px] border border-stone-200/70 bg-white/80 p-8 shadow-xl shadow-stone-200/40 backdrop-blur">
+          <div className="text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-700">
+              Growth levers
+            </p>
+            <h2 className="mt-3 font-serif text-4xl text-stone-900">
+              How Rasphia grows your sales
+            </h2>
+            <p className="mx-auto mt-4 max-w-3xl text-sm text-stone-600">
+              These are practical levers we optimize for from day one. Early results vary by category
+              and execution, but merchants are seeing meaningful lift.
+            </p>
+          </div>
+
+          <div className="mt-10 grid gap-5 md:grid-cols-2">
+            {growthLevers.map((lever) => {
+              const Icon = lever.icon;
+              return (
+                <article
+                  key={lever.title}
+                  className="rounded-2xl border border-stone-200/70 bg-white p-6 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100/80 text-amber-700">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-700">
+                      {lever.metric}
+                    </span>
+                  </div>
+                  <h3 className="mt-4 text-lg font-semibold text-stone-900">{lever.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-stone-600">{lever.description}</p>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      </section>
 
       {/* ── Main content ── */}
       <main className="mx-auto max-w-6xl px-6 py-20 lg:px-8 space-y-20">
