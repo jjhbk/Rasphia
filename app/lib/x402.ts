@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { randomBytes } from "node:crypto";
+import { createPrivateKey, randomBytes } from "node:crypto";
 import { SignJWT, importPKCS8 } from "jose";
 
 export type X402Requirements = {
@@ -19,11 +19,26 @@ const FACILITATOR_URL =
   process.env.X402_FACILITATOR_URL?.trim() || "https://x402.org/facilitator";
 
 function getPemKey(raw: string) {
-  if (raw.includes("-----BEGIN")) return raw;
-  return raw.replace(/\\n/g, "\n");
+  const normalized = String(raw || "").trim();
+  if (!normalized) return "";
+  if (normalized.includes("-----BEGIN")) return normalized.replace(/\\n/g, "\n");
+
+  // Try base64-encoded PKCS#8 DER -> PEM conversion (common CDP key export format).
+  try {
+    const der = Buffer.from(normalized, "base64");
+    const keyObj = createPrivateKey({ key: der, format: "der", type: "pkcs8" });
+    return keyObj.export({ format: "pem", type: "pkcs8" }).toString("utf-8");
+  } catch {
+    // Fallback: treat as inline PEM with escaped newlines if caller already pasted that shape.
+    return normalized.replace(/\\n/g, "\n");
+  }
 }
 
-async function buildFacilitatorAuthorizationHeader() {
+async function buildFacilitatorAuthorizationHeader(args: {
+  method: "POST";
+  requestHost: string;
+  requestPath: string;
+}) {
   const explicitAuth = process.env.X402_FACILITATOR_AUTH_HEADER?.trim();
   if (explicitAuth) return explicitAuth;
 
@@ -42,12 +57,14 @@ async function buildFacilitatorAuthorizationHeader() {
   const alg = (process.env.CDP_JWT_ALG || "ES256").trim();
   const audience = (process.env.CDP_JWT_AUD || "cdp").trim();
   const ttlSec = Math.max(30, Math.min(300, Number(process.env.CDP_JWT_TTL_SECONDS || 120)));
+  const uri = `${args.method} ${args.requestHost}${args.requestPath}`;
 
   const privateKey = await importPKCS8(pem, alg);
   const jwt = await new SignJWT({
     iss: apiKeyId,
     sub: apiKeyId,
     aud: audience,
+    uri,
     nonce: randomBytes(16).toString("hex"),
   })
     .setProtectedHeader({
@@ -63,11 +80,15 @@ async function buildFacilitatorAuthorizationHeader() {
   return `Bearer ${jwt}`;
 }
 
-async function facilitatorHeaders() {
+async function facilitatorHeaders(args: {
+  method: "POST";
+  requestHost: string;
+  requestPath: string;
+}) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  const authHeader = await buildFacilitatorAuthorizationHeader();
+  const authHeader = await buildFacilitatorAuthorizationHeader(args);
   if (authHeader) {
     headers["Authorization"] = authHeader;
   }
@@ -75,8 +96,14 @@ async function facilitatorHeaders() {
 }
 
 async function post(path: "/verify" | "/settle", body: unknown) {
-  const url = `${FACILITATOR_URL.replace(/\/+$/, "")}${path}`;
-  const headers = await facilitatorHeaders();
+  const base = FACILITATOR_URL.replace(/\/+$/, "");
+  const url = `${base}${path}`;
+  const u = new URL(url);
+  const headers = await facilitatorHeaders({
+    method: "POST",
+    requestHost: u.host,
+    requestPath: u.pathname,
+  });
   const res = await fetch(url, {
     method: "POST",
     headers,
