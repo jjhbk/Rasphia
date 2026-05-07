@@ -234,8 +234,15 @@ const REQUIRED_BY_INTENT: Record<WaIntent, string[]> = {
 const OPTIONAL_BY_INTENT: Partial<Record<WaIntent, string[]>> = {
   user_discover_products: ["query", "category", "maxPrice", "tag", "merchantSlug"],
   user_discover_merchants: ["query", "city"],
-  user_order_create: ["quantity", "merchantSlug", "shippingAddress", "addressChoice"],
+  user_order_create: [
+    "quantity",
+    "merchantSlug",
+    "shippingAddress",
+    "addressChoice",
+    "paymentRail",
+  ],
   user_order_query: ["orderId", "activeOnly", "merchantSlug"],
+  user_payment_confirm: ["orderId", "txHash", "payerAddress"],
   user_refund_request: ["details"],
   user_replacement_request: ["details"],
   user_cancellation_request: ["details"],
@@ -260,6 +267,8 @@ const FIELD_PROMPTS: Record<string, string> = {
     "Please share your full delivery address for this order.",
   addressChoice:
     "Select a saved address by number (for example: addressOption=1), or share shippingAddress=...",
+  paymentRail:
+    "Optional payment rail: paymentRail=seedhape (default) or paymentRail=x402.",
   maxPrice: "Optionally share a max price.",
   tag: "Optionally share a tag (for example: gift, decor, skincare).",
   businessName: "Please share your business name.",
@@ -322,8 +331,14 @@ function prettyFieldName(field: string) {
 }
 
 function buildIntentChecklist(intent: WaIntent, draft: Record<string, unknown>) {
-  const required = REQUIRED_BY_INTENT[intent] || [];
+  let required = REQUIRED_BY_INTENT[intent] || [];
   const optional = OPTIONAL_BY_INTENT[intent] || [];
+  if (intent === "user_order_create") {
+    const rail = normalizePaymentRail(draft.paymentRail);
+    if (rail.startsWith("x402")) {
+      required = required.filter((field) => field !== "upiVerifiedName");
+    }
+  }
   if (!required.length && !optional.length) return "";
 
   const mark = (field: string) => {
@@ -695,13 +710,27 @@ async function resolveMerchantContext(args: {
 }
 
 function missingRequired(intent: WaIntent, draft: Record<string, unknown>) {
-  const required = REQUIRED_BY_INTENT[intent] || [];
+  let required = REQUIRED_BY_INTENT[intent] || [];
+  if (intent === "user_order_create") {
+    const rail = normalizePaymentRail(draft.paymentRail);
+    if (rail.startsWith("x402")) {
+      required = required.filter((field) => field !== "upiVerifiedName");
+    }
+  }
   return required.filter((field) => {
     const value = draft[field];
     if (value === null || value === undefined) return true;
     if (typeof value === "string") return value.trim().length === 0;
     return false;
   });
+}
+
+function normalizePaymentRail(value: unknown) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "seedhape_whatsapp";
+  if (raw.includes("x402") || raw.includes("agentic")) return "x402_agentic";
+  if (raw.includes("seedhape")) return "seedhape_whatsapp";
+  return "seedhape_whatsapp";
 }
 
 async function getMerchantByPhone(phone: string) {
@@ -842,7 +871,17 @@ function fallbackIntent(message: string): IntentParse {
     text.includes("verify payment") ||
     text.includes("payment confirm")
   ) {
-    return { intent: "user_payment_confirm", fields: {} };
+    const txHash =
+      text.match(/(?:txhash|tx|transaction)\s*[:=]?\s*(0x[a-f0-9]{16,})/i)?.[1] || "";
+    const payerAddress =
+      text.match(/(?:payeraddress|payer|address)\s*[:=]?\s*(0x[a-f0-9]{16,})/i)?.[1] || "";
+    return {
+      intent: "user_payment_confirm",
+      fields: {
+        ...(txHash ? { txHash: txHash.trim() } : {}),
+        ...(payerAddress ? { payerAddress: payerAddress.trim() } : {}),
+      },
+    };
   }
   if (
     text.includes("refund") ||
@@ -881,6 +920,12 @@ function fallbackIntent(message: string): IntentParse {
       "";
     const shippingAddress =
       text.match(/(?:shippingaddress|address)\s*[:=]\s*(.+)$/i)?.[1] || "";
+    const paymentRail =
+      text.includes("x402") || text.includes("agentic")
+        ? "x402_agentic"
+        : text.includes("seedhape")
+        ? "seedhape_whatsapp"
+        : "";
     return {
       intent: "user_order_create",
       fields: {
@@ -889,6 +934,7 @@ function fallbackIntent(message: string): IntentParse {
         ...(productName ? { productName: productName.trim() } : {}),
         ...(upiVerifiedName ? { upiVerifiedName: upiVerifiedName.trim() } : {}),
         ...(shippingAddress ? { shippingAddress: shippingAddress.trim() } : {}),
+        ...(paymentRail ? { paymentRail } : {}),
       },
     };
   }
@@ -1013,6 +1059,9 @@ async function inferIntent(
     "reason",
     "details",
     "status",
+    "paymentRail",
+    "txHash",
+    "payerAddress",
   ] as const;
 
   const response = await gemini.models.generateContent({
@@ -1065,6 +1114,9 @@ Return strict JSON with shape:
     "reason": string|null,
     "details": string|null,
     "status": string|null
+    "paymentRail": string|null,
+    "txHash": string|null,
+    "payerAddress": string|null
   }
 }`,
       ...history.map((turn) => `${turn.role === "user" ? "User" : "Assistant"}: ${turn.content}`),
@@ -1994,6 +2046,7 @@ async function handleUserOrderCreate(
   draft: Record<string, unknown>,
   merchantContext?: MerchantChatContext | null
 ) {
+  const paymentRail = normalizePaymentRail(draft.paymentRail);
   const missing = missingRequired("user_order_create", draft);
   if (missing.length) {
     const checklist = buildIntentChecklist("user_order_create", draft);
@@ -2076,7 +2129,6 @@ async function handleUserOrderCreate(
 
   const totalRupees = Number(product.price || 0) * quantity;
   const totalPaise = Math.max(100, Math.round(totalRupees * 100));
-  const externalOrderId = `wa_${Date.now()}`;
   const merchantId = String(product.merchantId || "").trim();
   if (!merchantId) {
     return {
@@ -2086,6 +2138,41 @@ async function handleUserOrderCreate(
       nextDraft: {},
     };
   }
+  const merchant = await prisma.merchant.findUnique({
+    where: { id: merchantId },
+    select: { name: true, slug: true },
+  });
+
+  if (paymentRail === "x402_agentic") {
+    const appBaseUrl = String(process.env.NEXT_PUBLIC_APP_URL || "").trim();
+    const merchantSlug = String(merchant?.slug || merchantContext?.slug || "").trim();
+    const x402BuyUrl =
+      appBaseUrl && merchantSlug
+        ? `${appBaseUrl}/api/agent/merchants/${encodeURIComponent(
+            merchantSlug
+          )}/products/${encodeURIComponent(product.id)}/buy`
+        : null;
+
+    return {
+      done: true,
+      reply: [
+        "x402 payment rail selected.",
+        `Merchant: ${merchant?.name || merchantId}`,
+        `Item: ${product.name} x${quantity}`,
+        `Amount: ₹${totalRupees}`,
+        "",
+        "To complete this on agentic rail, have your agent call the x402 checkout endpoint.",
+        ...(x402BuyUrl ? [`Endpoint: ${x402BuyUrl}`] : []),
+        "That endpoint returns 402 first, then accepts X-PAYMENT for settlement.",
+        "",
+        "If you want to pay by UPI in WhatsApp now, retry with paymentRail=seedhape",
+      ].join("\n"),
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  const externalOrderId = `wa_${Date.now()}`;
   let merchantConfig: Awaited<ReturnType<typeof getMerchantSeedhapeConfig>>;
   try {
     merchantConfig = await getMerchantSeedhapeConfig(merchantId);
@@ -2099,10 +2186,6 @@ async function handleUserOrderCreate(
       nextDraft: {},
     };
   }
-  const merchant = await prisma.merchant.findUnique({
-    where: { id: merchantId },
-    select: { name: true },
-  });
 
   const seedhapeOrder = await createSeedhapeOrderWithConfig(
     {
@@ -2318,6 +2401,48 @@ async function handleUserPaymentConfirm(
       nextDraft: {},
     };
   }
+
+  const mode = String(order.mode || "").toLowerCase();
+  if (mode.startsWith("x402")) {
+    if (String(order.status || "").toLowerCase() === "paid") {
+      return {
+        done: true,
+        reply: `Payment already confirmed for ${orderId}.`,
+        nextIntent: undefined,
+        nextDraft: {},
+      };
+    }
+
+    const txHash = String(draft.txHash || "").trim();
+    const payerAddress = String(draft.payerAddress || "").trim();
+    if (!/^0x[a-fA-F0-9]{32,}$/.test(txHash)) {
+      return {
+        done: false,
+        reply: [
+          "For x402 orders, share a valid transaction hash to confirm payment.",
+          "Example: confirm payment orderId=<orderId> txHash=0x...",
+        ].join("\n"),
+        nextIntent: "user_payment_confirm" as WaIntent,
+        nextDraft: { ...draft, orderId },
+      };
+    }
+
+    await finalizeOrderAsPaid({
+      orderId,
+      paymentId: `x402_${txHash}`,
+      by: user.email,
+      note: `x402 payment confirmed via WhatsApp${payerAddress ? ` (payer ${payerAddress})` : ""}`,
+      verifiedAt: new Date(),
+    });
+
+    return {
+      done: true,
+      reply: `x402 payment confirmed for ${orderId}. Your order is now marked paid.`,
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
   const merchantConfig = await getMerchantSeedhapeConfig(merchantId);
   const providerStatus = await getSeedhapeOrderStatusWithConfig(orderId, {
     apiKey: merchantConfig.apiKey,
