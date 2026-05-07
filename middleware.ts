@@ -7,6 +7,7 @@ export function middleware(req: NextRequest) {
 
   const publicApiPrefixes = [
     "/api/auth",
+    "/api/agent",
     "/api/extension",
     "/api/mobile/auth",
     "/api/storefronts",
