@@ -24,6 +24,7 @@ import {
 } from "@/app/lib/razorpay";
 import { getMerchantAnalyticsSummary } from "@/app/lib/merchant-analytics";
 import { createWhatsAppCheckoutToken } from "@/app/lib/whatsapp-checkout";
+import { queryCustomerOrders } from "@/app/lib/customer-order-query";
 
 const geminiApiKey =
   process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "";
@@ -2125,25 +2126,6 @@ async function getSavedAddressesForUser(user: {
     if (out.length >= 5) break;
   }
 
-  if (out.length >= 5) return out;
-
-  const recentOrders = await prisma.order.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 80,
-    select: { customer: true },
-  });
-
-  for (const order of recentOrders) {
-    if (!order.customer || typeof order.customer !== "object" || Array.isArray(order.customer)) {
-      continue;
-    }
-    const customer = order.customer as Record<string, unknown>;
-    const email = String(customer.email || "").trim().toLowerCase();
-    if (email !== user.email.toLowerCase()) continue;
-    push(String(customer.address || "").trim());
-    if (out.length >= 5) break;
-  }
-
   return out;
 }
 
@@ -2189,34 +2171,6 @@ async function getSavedAddressEntriesForUser(user: {
       parsed.phone = String(profile?.phone || user.phone || "").trim();
       push(parsed);
     }
-  }
-
-  const recentOrders = await prisma.order.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 80,
-    select: { customer: true },
-  });
-
-  for (const order of recentOrders) {
-    if (!order.customer || typeof order.customer !== "object" || Array.isArray(order.customer)) {
-      continue;
-    }
-    const customer = order.customer as Record<string, unknown>;
-    const email = String(customer.email || "").trim().toLowerCase();
-    if (email !== user.email.toLowerCase()) continue;
-    push(
-      toAddressBookEntry({
-        name: customer.name,
-        phone: customer.phone,
-        addressLine1: customer.addressLine1,
-        addressLine2: customer.addressLine2,
-        city: customer.city,
-        state: customer.state,
-        zipCode: customer.zipCode,
-        address: customer.address,
-      })
-    );
-    if (out.length >= 5) break;
   }
 
   return out;
@@ -2506,7 +2460,7 @@ async function handleUserServiceRequest(
 
   const existingOpen = await prisma.orderServiceRequest.findFirst({
     where: {
-      orderId,
+      orderId: order.orderId,
       type: requestType,
       status: { notIn: Array.from(TERMINAL_SERVICE_REQUEST_STATUSES) },
     },
@@ -2544,7 +2498,7 @@ async function handleUserServiceRequest(
     data: {
       requestId,
       requestNumber,
-      orderId,
+      orderId: order.orderId,
       merchantId: order.merchantId || null,
       type: requestType,
       reason,
@@ -3241,27 +3195,23 @@ async function handleUserPaymentConfirm(
 }
 
 async function handleUserOrderQuery(
-  user: { email: string },
+  user: { email: string; name?: string | null; phone?: string | null },
   draft: Record<string, unknown>,
   merchantContext?: MerchantChatContext | null
 ) {
   const inputOrderId = String(draft.orderId || "").trim().toLowerCase();
   const activeOnly = Boolean(draft.activeOnly);
-  const visibleStatuses = activeOnly
-    ? ["paid", "Processing", "Shipped"]
-    : ["paid", "Processing", "Shipped", "Delivered"];
-  const orders = await prisma.order.findMany({
-    where: {
-      customer: {
-        path: ["email"],
-        equals: user.email.toLowerCase(),
-      },
-      ...(merchantContext?.id ? { merchantId: merchantContext.id } : {}),
-      status: { in: visibleStatuses },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 5,
+  const ordersResult = await queryCustomerOrders({
+    customerEmail: user.email,
+    customerPhone: user.phone,
+    customerName: user.name,
+    merchantId: merchantContext?.id || null,
+    orderRef: inputOrderId || null,
+    scope: activeOnly ? "active" : "history",
+    page: 1,
+    pageSize: inputOrderId ? 20 : 5,
   });
+  const orders = ordersResult.items;
 
   const userOrders = orders.filter((order) => {
     if (!inputOrderId) return true;
@@ -4995,7 +4945,11 @@ export async function processMerchantWhatsAppMessage(input: {
       };
     } else {
       result = await handleUserOrderQuery(
-        { email: userProfile.email },
+        {
+          email: userProfile.email,
+          name: userProfile.name,
+          phone: userProfile.phone,
+        },
         draft,
         merchantContext
       );
@@ -5191,7 +5145,11 @@ export async function processMerchantWhatsAppMessage(input: {
       result = await handleOrderQueryActive(merchant);
     } else if (userProfile) {
       result = await handleUserOrderQuery(
-        { email: userProfile.email },
+        {
+          email: userProfile.email,
+          name: userProfile.name,
+          phone: userProfile.phone,
+        },
         { ...draft, activeOnly: true },
         merchantContext
       );
