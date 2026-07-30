@@ -458,12 +458,18 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             </h3>
                             <OrderStatusBadge status={order.status} />
                           </div>
-                          <p className="text-[10px] text-brand-stone/50 font-mono">
-                            Provider #{order.id}
-                          </p>
                           {(order as any).appOrderId ? (
                             <p className="text-[10px] text-brand-stone/50 font-mono">
-                              App Ref #{(order as any).appOrderId}
+                              Order #{(order as any).appOrderId}
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-brand-stone/50 font-mono">
+                              Order #{order.id}
+                            </p>
+                          )}
+                          {(order as any).appOrderId ? (
+                            <p className="text-[10px] text-brand-stone/50 font-mono">
+                              Payment Ref #{order.id}
                             </p>
                           ) : null}
                           {(trackingNumber || shippingProvider || estimatedDelivery) && (

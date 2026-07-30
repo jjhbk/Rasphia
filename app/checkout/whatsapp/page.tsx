@@ -511,7 +511,14 @@ export default function WhatsAppCheckoutPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium">{primaryProduct?.name || session.productName}</p>
-                      <p className="mt-1 text-xs text-brand-stone">Order ID: {session.orderId}</p>
+                      <p className="mt-1 text-xs text-brand-stone">
+                        Order ID: {session.appOrderId || session.orderId}
+                      </p>
+                      {session.appOrderId ? (
+                        <p className="mt-1 text-xs text-brand-stone">
+                          Payment order ref: {session.orderId}
+                        </p>
+                      ) : null}
                     </div>
                     <p className="text-sm font-semibold">
                       {formatPrice(computedAmount, session.currency)}

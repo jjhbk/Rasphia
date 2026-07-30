@@ -424,18 +424,18 @@ function buildUnclearIntentTemplate(merchantStatus?: string) {
     "Example: discover merchants city=Hyderabad query=wallpapers",
     "5) Query my orders",
     "Example: my orders",
-    "Example: track order orderId=ORD123",
+    "Example: track order orderId=wa_merchant_1722330000_1234",
     "6) Create an order and pay",
     "Example: buy productName=Canvas Lamp quantity=2 shippingAddress=Flat 4B, MG Road, Hyderabad 500001",
     "If saved addresses are shown, select with: addressOption=1",
     "7) Confirm payment",
-    "Example: confirm payment orderId=sp_ord_ab12cd34ef56",
+    "Example: confirm payment orderId=wa_merchant_1722330000_1234",
     "8) Request refund",
-    "Example: refund orderId=sp_ord_ab12cd34ef56 reason=Received damaged item",
+    "Example: refund orderId=wa_merchant_1722330000_1234 reason=Received damaged item",
     "9) Request replacement",
-    "Example: replacement orderId=sp_ord_ab12cd34ef56 reason=Wrong size received",
+    "Example: replacement orderId=wa_merchant_1722330000_1234 reason=Wrong size received",
     "10) Request cancellation",
-    "Example: cancel order orderId=sp_ord_ab12cd34ef56 reason=Ordered by mistake",
+    "Example: cancel order orderId=wa_merchant_1722330000_1234 reason=Ordered by mistake",
     "11) Wishlist",
     "Example: add wishlist productName=Guts Wallpaper",
     "Example: remove wishlist productName=Guts Wallpaper",
@@ -510,15 +510,15 @@ function buildInitialUsageInstructions(args: {
     "Example: buy productName=Canvas Lamp quantity=2 shippingAddress=Flat 4B, MG Road, Hyderabad 500001",
     "If saved addresses are shown, select with: addressOption=1",
     "5) Confirm payment",
-    "Example: confirm payment orderId=sp_ord_ab12cd34ef56",
+    "Example: confirm payment orderId=wa_merchant_1722330000_1234",
     "6) Track orders",
     "Example: my orders",
     "7) Request refund",
-    "Example: refund orderId=sp_ord_ab12cd34ef56 reason=Received damaged item",
+    "Example: refund orderId=wa_merchant_1722330000_1234 reason=Received damaged item",
     "8) Request replacement",
-    "Example: replacement orderId=sp_ord_ab12cd34ef56 reason=Wrong size received",
+    "Example: replacement orderId=wa_merchant_1722330000_1234 reason=Wrong size received",
     "9) Request cancellation",
-    "Example: cancel order orderId=sp_ord_ab12cd34ef56 reason=Ordered by mistake",
+    "Example: cancel order orderId=wa_merchant_1722330000_1234 reason=Ordered by mistake",
     "10) Wishlist",
     "Example: add wishlist productName=Guts Wallpaper",
     "",
@@ -1233,9 +1233,10 @@ async function buildWhatsAppPaymentConfirmationReply(args: {
   orderId: string;
   invoiceWarning?: string | null;
 }) {
-  const order = await prisma.order.findUnique({
-    where: { orderId: args.orderId },
+  const order = await findOrderByCustomerReference({
+    reference: args.orderId,
     select: {
+      receipt: true,
       orderId: true,
       status: true,
       amount: true,
@@ -1263,9 +1264,10 @@ async function buildWhatsAppPaymentConfirmationReply(args: {
     : "";
 
   const lines = [
-    `Payment confirmed for ${order.orderId}.`,
+    `Payment confirmed for ${getCustomerFacingOrderId(order)}.`,
     `Order status: ${String(order.status || "paid").toUpperCase()}`,
     `Amount: ${formatInr(Number(order.amount || 0))}`,
+    `Payment order ref: ${order.orderId}`,
     ...(productSummary ? [`Items: ${productSummary}`] : []),
     ...(order.verifiedAt
       ? [`Verified at: ${new Date(order.verifiedAt).toLocaleString("en-IN")}`]
@@ -2004,6 +2006,7 @@ function parseShippingAddress(address: string): AddressBookEntry | null {
 function buildOrderDetailLines(
   order: {
     orderId: string;
+    receipt?: string | null;
     status: string;
     amount: number;
     currency?: string | null;
@@ -2036,11 +2039,13 @@ function buildOrderDetailLines(
   if (order.trackingUrl) links.push(`Tracking URL: ${order.trackingUrl}`);
   const titlePrefix = options?.index ? `${options.index}) ` : "";
 
+  const customerFacingOrderId = String(order.receipt || order.orderId || "").trim();
   const lines = [
-    `${titlePrefix}Order ID: ${order.orderId}`,
+    `${titlePrefix}Order ID: ${customerFacingOrderId}`,
     `Status: ${order.status}`,
     `Amount: ${moneyPrefix}${order.amount}`,
     options?.merchantName ? `Merchant: ${options.merchantName}` : "",
+    order.orderId ? `Payment Order Ref: ${order.orderId}` : "",
     trackingLine ? `Tracking: ${trackingLine}` : "",
     order.estimatedDelivery
       ? `Estimated delivery: ${new Date(order.estimatedDelivery).toLocaleDateString()}`
@@ -2056,6 +2061,25 @@ function buildOrderDetailLines(
   ].filter(Boolean);
 
   return lines.join("\n");
+}
+
+function getCustomerFacingOrderId(order: { receipt?: string | null; orderId?: string | null }) {
+  return String(order.receipt || order.orderId || "").trim();
+}
+
+async function findOrderByCustomerReference<T extends object>(args: {
+  reference: string;
+  select?: T;
+}) {
+  const reference = String(args.reference || "").trim();
+  if (!reference) return null;
+  return prisma.order.findFirst({
+    where: {
+      OR: [{ receipt: reference }, { orderId: reference }, { id: reference }],
+    },
+    orderBy: { createdAt: "desc" },
+    ...(args.select ? { select: args.select } : {}),
+  });
 }
 
 async function getSavedAddressesForUser(user: {
@@ -2408,15 +2432,15 @@ async function handleUserServiceRequest(
   const orderId = String(draft.orderId || "").trim();
   const reason = String(draft.reason || "").trim();
   const details = String(draft.details || "").trim();
-  const order = await prisma.order.findUnique({
-    where: { orderId },
+  const order = await findOrderByCustomerReference({
+    reference: orderId,
     select: {
       id: true,
       orderId: true,
+      receipt: true,
       status: true,
       amount: true,
       currency: true,
-      receipt: true,
       merchantId: true,
       customer: true,
       products: true,
@@ -2433,10 +2457,12 @@ async function handleUserServiceRequest(
     };
   }
 
+  const customerFacingOrderId = getCustomerFacingOrderId(order);
+
   if (merchantContext?.id && String(order.merchantId || "") !== merchantContext.id) {
     return {
       done: true,
-      reply: `Order ${orderId} does not belong to merchant ${merchantContext.name}.`,
+      reply: `Order ${customerFacingOrderId} does not belong to merchant ${merchantContext.name}.`,
       nextIntent: undefined,
       nextDraft: {},
     };
@@ -2543,7 +2569,7 @@ async function handleUserServiceRequest(
         : requestType === "replacement"
         ? "Replacement"
         : "Cancellation"
-    } request submitted successfully.\nRequest number: ${requestNumber}\nOrder ID: ${orderId}\nStatus: requested`,
+    } request submitted successfully.\nRequest number: ${requestNumber}\nOrder ID: ${customerFacingOrderId}\nStatus: requested`,
     nextIntent: undefined,
     nextDraft: {},
   };
@@ -2822,12 +2848,13 @@ async function handleUserOrderCreate(
     const qrImageLink = buildUpiQrImageLink(seedhapeOrder.id);
     const primaryPayLink = upiChooserLink || links.hostedStatusUrl;
     paymentMessageLines = [
-      `Order ready: ${seedhapeOrder.id}`,
+      `Order ready: ${externalOrderId}`,
       `Merchant: ${merchant?.name || merchantId}`,
       `Item: ${product.name} x${quantity}`,
       `Amount: ₹${totalRupees}`,
       `UPI name: ${upiVerifiedName}`,
       `Delivery: ${checkoutCustomer.address}`,
+      `Payment order ref: ${seedhapeOrder.id}`,
       "",
       "Pay now:",
       primaryPayLink,
@@ -2837,7 +2864,7 @@ async function handleUserOrderCreate(
     }
     paymentMessageLines.push(
       "",
-      `Next step: confirm payment orderId=${seedhapeOrder.id}`
+      `Next step: confirm payment orderId=${externalOrderId}`
     );
   }
 
@@ -2901,31 +2928,26 @@ async function handleUserOrderCreate(
     });
 
     paymentMessageLines = [
-      `Order ready: ${createdOrder.orderId}`,
+      `Order ready: ${createdOrder.receipt || createdOrder.orderId}`,
       `Merchant: ${merchant?.name || merchantId}`,
       `Item: ${product.name} x${quantity}`,
       `Amount: ₹${totalRupees}`,
       `Delivery: ${checkoutCustomer.address}`,
+      `Payment order ref: ${createdOrder.orderId}`,
       "",
       "Pay on Rasphia:",
       hostedCheckoutUrl,
       "",
       "After payment, Rasphia checkout will verify the order automatically.",
-      `If you come back here, you can also reply: confirm payment orderId=${createdOrder.orderId}`,
+      `If you come back here, you can also reply: confirm payment orderId=${createdOrder.receipt || createdOrder.orderId}`,
     ];
   }
 
   await upsertWhatsAppCheckoutCustomerProfile(checkoutCustomer);
 
-  const lines = [
-    ...paymentMessageLines.slice(0, 1),
-    `Ref: ${createdOrder.receipt || "n/a"}`,
-    ...paymentMessageLines.slice(1),
-  ];
-
   return {
     done: true,
-    reply: lines.join("\n"),
+    reply: paymentMessageLines.join("\n"),
     nextIntent: undefined,
     nextDraft: {},
   };
@@ -2986,7 +3008,7 @@ async function handleUserPaymentConfirm(
         const merchantName =
           merchantNameById.get(String(order.merchantId || "").trim()) ||
           String(order.merchantId || "Store");
-        return `${index + 1}. ${order.orderId} • ₹${order.amount} • ${merchantName}`;
+        return `${index + 1}. ${getCustomerFacingOrderId(order)} • ₹${order.amount} • ${merchantName}`;
       }),
       "",
       "Next step:",
@@ -3000,13 +3022,13 @@ async function handleUserPaymentConfirm(
       nextIntent: "user_payment_confirm" as WaIntent,
       nextDraft: {
         __orderOptions: pendingOrders.slice(0, 10).map((order) => ({
-          orderId: order.orderId,
+          orderId: getCustomerFacingOrderId(order),
         })),
       },
     };
   }
 
-  const order = await prisma.order.findUnique({ where: { orderId } });
+  const order = await findOrderByCustomerReference({ reference: orderId });
   if (!order) {
     return {
       done: true,
@@ -3015,6 +3037,8 @@ async function handleUserPaymentConfirm(
       nextDraft: {},
     };
   }
+
+  const customerFacingOrderId = getCustomerFacingOrderId(order);
 
   const orderEmail = customerEmailFromOrderCustomer(order.customer);
   const orderName = customerNameFromOrderCustomer(order.customer);
@@ -3043,7 +3067,7 @@ async function handleUserPaymentConfirm(
     if (String(order.status || "").toLowerCase() === "paid") {
       return {
         done: true,
-        reply: `Payment already confirmed for ${orderId}.`,
+        reply: `Payment already confirmed for ${customerFacingOrderId}.`,
         nextIntent: undefined,
         nextDraft: {},
       };
@@ -3064,7 +3088,7 @@ async function handleUserPaymentConfirm(
     }
 
     await finalizeOrderAsPaid({
-      orderId,
+      orderId: order.orderId,
       paymentId: `x402_${txHash}`,
       by: user.email,
       note: `x402 payment confirmed via WhatsApp${payerAddress ? ` (payer ${payerAddress})` : ""}`,
@@ -3100,7 +3124,7 @@ async function handleUserPaymentConfirm(
       return {
         done: true,
         reply: [
-          `I still show order ${orderId} as pending.`,
+          `I still show order ${customerFacingOrderId} as pending.`,
           "Next step: reopen your Rasphia checkout page and complete payment there.",
           hostedCheckoutUrl,
           "",
@@ -3122,7 +3146,7 @@ async function handleUserPaymentConfirm(
       if (paymentStatus === "cancelled" || paymentStatus === "expired") {
         return {
           done: true,
-          reply: `Order ${orderId} is ${paymentStatus.toUpperCase()}. Create a new order to continue.`,
+          reply: `Order ${customerFacingOrderId} is ${paymentStatus.toUpperCase()}. Create a new order to continue.`,
           nextIntent: undefined,
           nextDraft: {},
         };
@@ -3142,8 +3166,8 @@ async function handleUserPaymentConfirm(
     }
 
     const result = await finalizeOrderAsPaid({
-      orderId,
-      paymentId: order.paymentId || `razorpay_link_${orderId}`,
+      orderId: order.orderId,
+      paymentId: order.paymentId || `razorpay_link_${order.orderId}`,
       by: user.email,
       note: "Razorpay payment link confirmed via WhatsApp",
       verifiedAt: new Date(),
@@ -3152,7 +3176,7 @@ async function handleUserPaymentConfirm(
     return {
       done: true,
       reply: await buildWhatsAppPaymentConfirmationReply({
-        orderId,
+        orderId: customerFacingOrderId,
         invoiceWarning: result.invoiceWarning,
       }),
       nextIntent: undefined,
@@ -3161,7 +3185,7 @@ async function handleUserPaymentConfirm(
   }
 
   const merchantConfig = await getMerchantSeedhapeConfig(merchantId);
-  const providerStatus = await getSeedhapeOrderStatusWithConfig(orderId, {
+  const providerStatus = await getSeedhapeOrderStatusWithConfig(order.orderId, {
     apiKey: merchantConfig.apiKey,
     baseUrl: merchantConfig.baseUrl,
   });
@@ -3169,7 +3193,7 @@ async function handleUserPaymentConfirm(
     if (providerStatus.status === "EXPIRED" || providerStatus.status === "REJECTED") {
       return {
         done: true,
-        reply: `Order ${orderId} is ${providerStatus.status}. Create a new order to continue.`,
+        reply: `Order ${customerFacingOrderId} is ${providerStatus.status}. Create a new order to continue.`,
         nextIntent: undefined,
         nextDraft: {},
       };
@@ -3183,8 +3207,8 @@ async function handleUserPaymentConfirm(
   }
 
   const result = await finalizeOrderAsPaid({
-    orderId,
-    paymentId: order.paymentId || `seedhape_${orderId}`,
+    orderId: order.orderId,
+    paymentId: order.paymentId || `seedhape_${order.orderId}`,
     by: user.email,
     note: `SeedhaPe payment ${providerStatus.status.toLowerCase()} via WhatsApp`,
     verifiedAt: providerStatus.verifiedAt
@@ -3195,7 +3219,7 @@ async function handleUserPaymentConfirm(
   return {
     done: true,
     reply: await buildWhatsAppPaymentConfirmationReply({
-      orderId,
+      orderId: customerFacingOrderId,
       invoiceWarning: result.invoiceWarning,
     }),
     nextIntent: undefined,
@@ -3228,7 +3252,7 @@ async function handleUserOrderQuery(
       return false;
     }
     if (!inputOrderId) return true;
-    return String(order.orderId || "").toLowerCase().includes(inputOrderId);
+    return String(getCustomerFacingOrderId(order) || "").toLowerCase().includes(inputOrderId);
   });
 
   if (!userOrders.length) {
@@ -3285,7 +3309,7 @@ async function handleUserOrderQuery(
     nextIntent: undefined,
     nextDraft: {
       __orderOptions: userOrders.slice(0, 5).map((order) => ({
-        orderId: order.orderId,
+        orderId: getCustomerFacingOrderId(order),
       })),
     },
   };
@@ -4019,7 +4043,7 @@ async function handleOrderQueryActive(merchant: { id: string; status: string }) 
     nextIntent: undefined,
     nextDraft: {
       __orderOptions: filtered.slice(0, 5).map((o) => ({
-        orderId: o.orderId,
+        orderId: getCustomerFacingOrderId(o),
       })),
     },
   };
@@ -4064,9 +4088,7 @@ async function handleOrderUpdateStatus(
   }
 
   const payload = parsed.data;
-  const order = await prisma.order.findUnique({
-    where: { orderId: payload.orderId },
-  });
+  const order = await findOrderByCustomerReference({ reference: payload.orderId });
   if (!order) {
     return {
       done: true,
@@ -4075,6 +4097,8 @@ async function handleOrderUpdateStatus(
       nextDraft: {},
     };
   }
+
+  const customerFacingOrderId = getCustomerFacingOrderId(order);
 
   const { ids, names } = await getMerchantProductOwnershipSets(merchant.id);
   if (!isOrderOwnedByMerchant(order, merchant.id, ids, names)) {
@@ -4089,7 +4113,7 @@ async function handleOrderUpdateStatus(
   if (!options?.skipConfirmation) {
     return {
       done: false,
-      reply: `You are about to update order ${payload.orderId} to ${payload.status}. Reply YES to confirm or NO to cancel.`,
+      reply: `You are about to update order ${customerFacingOrderId} to ${payload.status}. Reply YES to confirm or NO to cancel.`,
       nextIntent: "order_update_status" as WaIntent,
       nextDraft: draft,
       pendingConfirmation: {
@@ -4114,7 +4138,7 @@ async function handleOrderUpdateStatus(
   ];
 
   await prisma.order.update({
-    where: { orderId: payload.orderId },
+    where: { orderId: order.orderId },
     data: {
       status: payload.status,
       ...(payload.status === "Shipped" && { shippedAt: new Date() }),
@@ -4126,7 +4150,7 @@ async function handleOrderUpdateStatus(
 
   return {
     done: true,
-    reply: `Order ${payload.orderId} updated to ${payload.status}.`,
+    reply: `Order ${customerFacingOrderId} updated to ${payload.status}.`,
     nextIntent: undefined,
     nextDraft: {},
   };
