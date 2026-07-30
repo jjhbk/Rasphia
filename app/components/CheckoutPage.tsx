@@ -32,6 +32,7 @@ type CheckoutPaymentOrder = {
   merchantId?: string;
   merchantName?: string;
   productName?: string;
+  productIds?: string[];
   amount: number;
   currency: string;
   status: string;
@@ -59,7 +60,13 @@ type CheckoutPaymentOrder = {
 interface CheckoutPageProps {
   products: Product[];
   user: UserProfile;
-  onPlaceOrder: (customer: CheckoutCustomer, paymentId: string) => void;
+  onPlaceOrder: (customer: CheckoutCustomer, paymentIds: string[]) => void;
+  onPaymentGroupVerified?: (payload: {
+    customer: CheckoutCustomer;
+    paymentId: string;
+    merchantId?: string;
+    productIds: string[];
+  }) => void;
   onCancel: () => void;
 }
 
@@ -67,6 +74,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   products,
   user,
   onPlaceOrder,
+  onPaymentGroupVerified,
   onCancel,
 }) => {
   const unsupportedCreateOrder = async (
@@ -104,6 +112,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const pendingPaymentsRef = useRef<CheckoutPaymentOrder[]>([]);
   const successHandledRef = useRef<Set<string>>(new Set());
+  const completedPaymentIdsRef = useRef<string[]>([]);
 
   const SHIPPING_COST = 0;
   const subtotal = products.reduce((sum, p, idx) => {
@@ -212,6 +221,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       }
       const [first, ...rest] = orders;
       successHandledRef.current.clear();
+      completedPaymentIdsRef.current = [];
       setActivePayment(first);
       pendingPaymentsRef.current = rest;
       setPendingCustomer(normalizedCustomer);
@@ -240,6 +250,22 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   ) => {
     if (!activePayment) {
       throw new Error("Active payment context is missing.");
+    }
+
+    const completedPaymentId =
+      activePayment.seedhapeOrderId || activePayment.razorpayOrderId || orderId;
+    if (!completedPaymentIdsRef.current.includes(completedPaymentId)) {
+      completedPaymentIdsRef.current.push(completedPaymentId);
+    }
+    if (normalizedCustomer) {
+      onPaymentGroupVerified?.({
+        customer: normalizedCustomer,
+        paymentId: completedPaymentId,
+        merchantId: activePayment.merchantId,
+        productIds: Array.isArray(activePayment.productIds)
+          ? activePayment.productIds
+          : [],
+      });
     }
 
     if (pendingPaymentsRef.current.length > 0) {
@@ -276,7 +302,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
     if (normalizedCustomer) {
       onPlaceOrder(
         normalizedCustomer,
-        `${activePayment.provider}_${activePayment.seedhapeOrderId || activePayment.razorpayOrderId || orderId}`
+        [...completedPaymentIdsRef.current]
       );
     }
     setActivePayment(null);

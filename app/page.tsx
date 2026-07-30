@@ -42,6 +42,13 @@ import { products as initialProducts } from "./data/products";
 
 import PersonaFlowModal from "./components/persona/PersonalFlowModal";
 import usePersona from "@/hooks/userPersona";
+import {
+  deriveCartId,
+  mergePersistedCarts,
+  normalizePersistedCart,
+  persistedCartEquals,
+  toPersistedCartProducts,
+} from "@/app/lib/cart-persistence";
 
 const initialMessage: Message = {
   author: "ai",
@@ -69,29 +76,11 @@ function isSameCart(
   a: Array<{ id?: string; _id?: string; name?: string; quantity?: number; price?: number }>,
   b: Array<{ id?: string; _id?: string; name?: string; quantity?: number; price?: number }>
 ) {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i += 1) {
-    const x = a[i];
-    const y = b[i];
-    const xId = String(x?.id || x?._id || "");
-    const yId = String(y?.id || y?._id || "");
-    if (
-      xId !== yId ||
-      String(x?.name || "") !== String(y?.name || "") ||
-      Number(x?.quantity || 1) !== Number(y?.quantity || 1) ||
-      Number(x?.price || 0) !== Number(y?.price || 0)
-    ) {
-      return false;
-    }
-  }
-  return true;
+  return persistedCartEquals(a, b);
 }
 
 function deriveCartIdFromProduct(raw: { id?: string; _id?: string; name?: string }) {
-  const explicit = String(raw?.id || raw?._id || "").trim();
-  if (explicit) return explicit;
-  const name = String(raw?.name || "").trim().toLowerCase();
-  return name ? `name:${name.replace(/\s+/g, "_")}` : "";
+  return deriveCartId(raw);
 }
 
 const App: React.FC = () => {
@@ -159,6 +148,8 @@ const App: React.FC = () => {
   const [cartStorageKey, setCartStorageKey] = useState(
     `${CART_STORAGE_PREFIX}:guest`
   );
+  const cartRemoteHydratedRef = useRef(false);
+  const lastSavedCartRef = useRef("[]");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -482,9 +473,99 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!cartStorageKey || typeof window === "undefined") return;
-    window.localStorage.setItem(cartStorageKey, JSON.stringify(cart));
+    const normalizedCart = normalizePersistedCart(cart);
+    const serializedCart = JSON.stringify(normalizedCart);
+    window.localStorage.setItem(cartStorageKey, serializedCart);
     window.dispatchEvent(new Event(CART_SYNC_EVENT));
-  }, [cart, cartStorageKey]);
+
+    const email = String(session?.user?.email || "").trim().toLowerCase();
+    if (!email || !cartRemoteHydratedRef.current || serializedCart === lastSavedCartRef.current) {
+      return;
+    }
+
+    const saveTimer = window.setTimeout(async () => {
+      try {
+        const res = await fetch("/api/user/cart", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cart: normalizedCart }),
+        });
+        if (res.ok) {
+          lastSavedCartRef.current = serializedCart;
+        }
+      } catch (error) {
+        console.error("[cart] Failed to save cart", error);
+      }
+    }, 250);
+
+    return () => window.clearTimeout(saveTimer);
+  }, [cart, cartStorageKey, session?.user?.email]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const email = String(session?.user?.email || "").trim().toLowerCase();
+    if (!email) {
+      cartRemoteHydratedRef.current = true;
+      lastSavedCartRef.current = JSON.stringify(normalizePersistedCart(cart));
+      return;
+    }
+
+    cartRemoteHydratedRef.current = false;
+    let cancelled = false;
+
+    const hydrateRemoteCart = async () => {
+      const guestKey = `${CART_STORAGE_PREFIX}:guest`;
+      const userKey = `${CART_STORAGE_PREFIX}:${email}`;
+      const parseLocalCart = (key: string) => {
+        try {
+          return normalizePersistedCart(JSON.parse(window.localStorage.getItem(key) || "[]"));
+        } catch {
+          return [];
+        }
+      };
+
+      const guestCart = parseLocalCart(guestKey);
+      const localUserCart = parseLocalCart(userKey);
+
+      try {
+        const response = await fetch("/api/user/cart", { cache: "no-store" });
+        const payload = await response.json().catch(() => ({ cart: [] }));
+        if (cancelled) return;
+
+        const mergedCart = mergePersistedCarts(payload?.cart, localUserCart, guestCart);
+        const mergedProducts = toPersistedCartProducts(mergedCart);
+        const serialized = JSON.stringify(normalizePersistedCart(mergedCart));
+
+        window.localStorage.setItem(userKey, serialized);
+        if (guestCart.length) {
+          window.localStorage.removeItem(guestKey);
+        }
+        window.localStorage.setItem(CART_LAST_KEY, userKey);
+        window.dispatchEvent(new Event(CART_SYNC_EVENT));
+        setCart((prev) => (isSameCart(prev, mergedProducts) ? prev : mergedProducts));
+        lastSavedCartRef.current = serialized;
+
+        if (!persistedCartEquals(payload?.cart, mergedCart)) {
+          await fetch("/api/user/cart", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cart: mergedCart }),
+          });
+        }
+      } catch (error) {
+        console.error("[cart] Failed to hydrate saved cart", error);
+      } finally {
+        if (!cancelled) {
+          cartRemoteHydratedRef.current = true;
+        }
+      }
+    };
+
+    hydrateRemoteCart();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.email]);
 
   // select chat
   const handleSelectChat = async (chatId: string) => {
@@ -731,20 +812,10 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
 
   const handlePlaceOrder = async (
     customer: CheckoutCustomer,
-    paymentId: string
+    _paymentIds: string[]
   ) => {
     if (!checkoutProducts) return;
     try {
-      await fetch("/api/orders/update-status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          paymentId,
-          email: customer.email,
-          status: "Processing",
-        }),
-      });
-
       const res = await fetch(
         `/api/orders?email=${encodeURIComponent(customer.email)}`
       );
@@ -788,10 +859,32 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
             .join(", ")}! We'll keep you updated on shipping.`,
         },
       ]);
-      setCart([]);
+      const checkedOutIds = new Set(
+        checkoutProducts
+          .map((p) => String(p.id || p._id || "").trim())
+          .filter(Boolean)
+      );
+      setCart((prev) =>
+        prev.filter((item) => !checkedOutIds.has(String(item.id || item._id || "").trim()))
+      );
     } catch (err) {
       console.error("Error updating order:", err);
     }
+  };
+
+  const handlePaymentGroupVerified = ({
+    productIds,
+  }: {
+    customer: CheckoutCustomer;
+    paymentId: string;
+    merchantId?: string;
+    productIds: string[];
+  }) => {
+    const paidProductIds = new Set(productIds.map((id) => String(id || "").trim()).filter(Boolean));
+    if (!paidProductIds.size) return;
+    setCart((prev) =>
+      prev.filter((item) => !paidProductIds.has(String(item.id || item._id || "").trim()))
+    );
   };
 
   // Wishlist persistence
@@ -897,6 +990,7 @@ ${analysis.aiResult?.summary || analysis.aiResult?.summary || ""}
         products={checkoutProducts}
         user={currentUser}
         onPlaceOrder={handlePlaceOrder}
+        onPaymentGroupVerified={handlePaymentGroupVerified}
         onCancel={handleCancelCheckout}
       />
     );

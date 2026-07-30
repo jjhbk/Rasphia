@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import BrandLogo from "@/app/components/brand/BrandLogo";
 import { toHighQualityImageUrl } from "@/app/utils/imageQuality";
 import { signIn, useSession } from "next-auth/react";
@@ -9,6 +9,12 @@ import { ShoppingCart, X } from "lucide-react";
 import CheckoutPage from "@/app/components/CheckoutPage";
 import type { CheckoutCustomer, Product, UserProfile } from "@/app/types";
 import FloatingWhatsAppButton from "@/app/components/FloatingWhatsAppButton";
+import {
+  mergePersistedCarts,
+  normalizePersistedCart,
+  normalizePersistedCartItem,
+  persistedCartEquals,
+} from "@/app/lib/cart-persistence";
 
 type StorefrontProduct = {
   _id: string;
@@ -79,39 +85,23 @@ const CHAT_STORAGE_PREFIX = "rasphia_storefront_chat_v1";
 const CHAT_CACHE_STORAGE_PREFIX = "rasphia_storefront_chat_cache_v1";
 
 function normalizeCartItem(raw: any): CartItem | null {
-  const name = String(raw?.name || "").trim();
-  const id =
-    String(raw?.id || raw?._id || "").trim() ||
-    (name ? `name:${name.toLowerCase().replace(/\s+/g, "_")}` : "");
-  if (!id || !name) return null;
+  const normalized = normalizePersistedCartItem(raw);
+  if (!normalized) return null;
   return {
-    _id: raw?._id ? String(raw._id) : undefined,
-    id,
-    name,
-    brand: raw?.brand ? String(raw.brand) : null,
-    price: Number(raw?.price || 0),
-    imageUrl: raw?.imageUrl ? String(raw.imageUrl) : null,
-    quantity: Math.max(1, Number(raw?.quantity || 1)),
-    merchantSlug: String(raw?.merchantSlug || "").trim(),
-    merchantName: String(raw?.merchantName || "").trim(),
+    _id: normalized._id,
+    id: normalized.id,
+    name: normalized.name,
+    brand: normalized.brand || null,
+    price: Number(normalized.price || 0),
+    imageUrl: normalized.imageUrl || null,
+    quantity: Math.max(1, Number(normalized.quantity || 1)),
+    merchantSlug: String(normalized.merchantSlug || "").trim(),
+    merchantName: String(normalized.merchantName || "").trim(),
   };
 }
 
 function isSameCart(a: CartItem[], b: CartItem[]) {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i += 1) {
-    const x = a[i];
-    const y = b[i];
-    if (
-      x.id !== y.id ||
-      x.quantity !== y.quantity ||
-      Number(x.price || 0) !== Number(y.price || 0) ||
-      (x.name || "") !== (y.name || "")
-    ) {
-      return false;
-    }
-  }
-  return true;
+  return persistedCartEquals(a, b);
 }
 
 export default function MerchantStorefrontPublicPage({
@@ -152,6 +142,8 @@ export default function MerchantStorefrontPublicPage({
   const [userCartStorageKey, setUserCartStorageKey] = useState(
     `${CART_STORAGE_PREFIX}:guest`
   );
+  const cartRemoteHydratedRef = useRef(false);
+  const lastSavedCartRef = useRef("[]");
 
   useEffect(() => {
     const userEmail = String(session?.user?.email || "").trim();
@@ -301,9 +293,101 @@ export default function MerchantStorefrontPublicPage({
 
   useEffect(() => {
     if (!userCartStorageKey || typeof window === "undefined") return;
-    window.localStorage.setItem(userCartStorageKey, JSON.stringify(cart));
+    const normalizedCart = normalizePersistedCart(cart);
+    const serializedCart = JSON.stringify(normalizedCart);
+    window.localStorage.setItem(userCartStorageKey, serializedCart);
     window.dispatchEvent(new Event(CART_SYNC_EVENT));
-  }, [cart, userCartStorageKey]);
+
+    const email = String(session?.user?.email || "").trim().toLowerCase();
+    if (!email || !cartRemoteHydratedRef.current || serializedCart === lastSavedCartRef.current) {
+      return;
+    }
+
+    const saveTimer = window.setTimeout(async () => {
+      try {
+        const res = await fetch("/api/user/cart", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cart: normalizedCart }),
+        });
+        if (res.ok) {
+          lastSavedCartRef.current = serializedCart;
+        }
+      } catch (error) {
+        console.error("[cart] Failed to save storefront cart", error);
+      }
+    }, 250);
+
+    return () => window.clearTimeout(saveTimer);
+  }, [cart, userCartStorageKey, session?.user?.email]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const email = String(session?.user?.email || "").trim().toLowerCase();
+    if (!email) {
+      cartRemoteHydratedRef.current = true;
+      lastSavedCartRef.current = JSON.stringify(normalizePersistedCart(cart));
+      return;
+    }
+
+    cartRemoteHydratedRef.current = false;
+    let cancelled = false;
+
+    const hydrateRemoteCart = async () => {
+      const guestKey = `${CART_STORAGE_PREFIX}:guest`;
+      const userKey = `${CART_STORAGE_PREFIX}:${email}`;
+      const parseLocalCart = (key: string) => {
+        try {
+          return normalizePersistedCart(JSON.parse(window.localStorage.getItem(key) || "[]"));
+        } catch {
+          return [];
+        }
+      };
+
+      const guestCart = parseLocalCart(guestKey);
+      const localUserCart = parseLocalCart(userKey);
+
+      try {
+        const response = await fetch("/api/user/cart", { cache: "no-store" });
+        const payload = await response.json().catch(() => ({ cart: [] }));
+        if (cancelled) return;
+
+        const mergedCart = mergePersistedCarts(payload?.cart, localUserCart, guestCart);
+        const mergedItems = mergedCart
+          .map((item) => normalizeCartItem(item))
+          .filter((item): item is CartItem => Boolean(item));
+        const serialized = JSON.stringify(normalizePersistedCart(mergedCart));
+
+        window.localStorage.setItem(userKey, serialized);
+        if (guestCart.length) {
+          window.localStorage.removeItem(guestKey);
+        }
+        window.localStorage.setItem(CART_LAST_KEY, userKey);
+        window.dispatchEvent(new Event(CART_SYNC_EVENT));
+        setCart((prev) => (isSameCart(prev, mergedItems) ? prev : mergedItems));
+        lastSavedCartRef.current = serialized;
+
+        if (!persistedCartEquals(payload?.cart, mergedCart)) {
+          await fetch("/api/user/cart", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cart: mergedCart }),
+          });
+        }
+      } catch (error) {
+        console.error("[cart] Failed to hydrate storefront cart", error);
+      } finally {
+        if (!cancelled) {
+          cartRemoteHydratedRef.current = true;
+        }
+      }
+    };
+
+    hydrateRemoteCart();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.email]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -624,7 +708,7 @@ export default function MerchantStorefrontPublicPage({
 
   const handlePlaceOrder = async (
     customer: CheckoutCustomer,
-    _paymentId: string
+    _paymentIds: string[]
   ) => {
     if (!checkoutProducts?.length) return;
     const checkedOutIds = new Set(
@@ -658,11 +742,26 @@ export default function MerchantStorefrontPublicPage({
       address: customer.address,
       addressBook: nextAddressBook,
     }));
+    setCheckoutProducts(null);
+    setCartFeedback("Order placed successfully.");
     setCart((prev) =>
       prev.filter((item) => !checkedOutIds.has(String(item.id || item._id || "").trim()))
     );
-    setCheckoutProducts(null);
-    setCartFeedback("Order placed successfully.");
+  };
+
+  const handlePaymentGroupVerified = ({
+    productIds,
+  }: {
+    customer: CheckoutCustomer;
+    paymentId: string;
+    merchantId?: string;
+    productIds: string[];
+  }) => {
+    const paidProductIds = new Set(productIds.map((id) => String(id || "").trim()).filter(Boolean));
+    if (!paidProductIds.size) return;
+    setCart((prev) =>
+      prev.filter((item) => !paidProductIds.has(String(item.id || item._id || "").trim()))
+    );
   };
 
   if (checkoutProducts) {
@@ -671,6 +770,7 @@ export default function MerchantStorefrontPublicPage({
         products={checkoutProducts}
         user={currentUser}
         onPlaceOrder={handlePlaceOrder}
+        onPaymentGroupVerified={handlePaymentGroupVerified}
         onCancel={handleCancelCheckout}
       />
     );

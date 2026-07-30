@@ -33,6 +33,19 @@ type AddressBookEntry = {
   address: string;
 };
 
+type ResolvedRequestedItem = {
+  productId: string;
+  quantity: number;
+  product: {
+    id: string;
+    merchantId: string | null;
+    name: string;
+    brand: string | null;
+    price: number | null;
+    imageUrl: string | null;
+  };
+};
+
 type PaymentOrderResponse = {
   id: string;
   provider: "seedhape" | "razorpay";
@@ -41,6 +54,7 @@ type PaymentOrderResponse = {
   merchantId: string;
   merchantName: string;
   productName: string;
+  productIds: string[];
   amount: number;
   currency: string;
   status: string;
@@ -256,22 +270,53 @@ export async function POST(req: Request) {
       },
     });
 
-    const paymentOrders: PaymentOrderResponse[] = [];
-    for (const item of requestedItems) {
-      const p = productMap.get(item.productId)!;
-      const merchantId = String(p.merchantId || "").trim();
+    const resolvedItems: ResolvedRequestedItem[] = requestedItems.map((item) => {
+      const product = productMap.get(item.productId)!;
+      return {
+        productId: item.productId,
+        quantity: item.quantity,
+        product: {
+          id: String(product.id || "").trim(),
+          merchantId: product.merchantId,
+          name: String(product.name || "").trim(),
+          brand: product.brand || null,
+          price: product.price ?? null,
+          imageUrl: product.imageUrl || null,
+        },
+      };
+    });
+
+    const groupedByMerchant = new Map<string, ResolvedRequestedItem[]>();
+    for (const item of resolvedItems) {
+      const merchantId = String(item.product.merchantId || "").trim();
       if (!merchantId) {
         return NextResponse.json(
-          { error: `Product ${p.name} is not linked to an approved merchant.` },
+          { error: `Product ${item.product.name} is not linked to an approved merchant.` },
           { status: 409 }
         );
       }
+      const existing = groupedByMerchant.get(merchantId) || [];
+      existing.push(item);
+      groupedByMerchant.set(merchantId, existing);
+    }
 
-      const itemTotal = Number(p.price || 0) * item.quantity;
+    const paymentOrders: PaymentOrderResponse[] = [];
+    for (const [merchantId, merchantItems] of groupedByMerchant.entries()) {
+      const itemTotal = merchantItems.reduce(
+        (sum, item) => sum + Number(item.product.price || 0) * item.quantity,
+        0
+      );
       const amountInPaise = Math.max(100, Math.round(itemTotal * 100));
       const receipt = `pay_${merchantId}_${Date.now()}_${Math.floor(
         Math.random() * 10000
       )}`;
+      const orderSummary =
+        merchantItems.length === 1
+          ? `${merchantItems[0].product.name} x${merchantItems[0].quantity}`
+          : `${merchantItems[0].product.name} + ${merchantItems.length - 1} more item${
+              merchantItems.length > 2 ? "s" : ""
+            }`;
+      const primaryProduct = merchantItems[0].product;
 
       const requestedProvider = String(paymentProvider || "").trim().toLowerCase();
       if (requestedProvider && requestedProvider !== "seedhape" && requestedProvider !== "razorpay") {
@@ -333,7 +378,7 @@ export async function POST(req: Request) {
               : "Merchant payment setup missing.";
           return NextResponse.json(
             {
-              error: `Merchant payment setup is incomplete for ${p.name}. (${message})`,
+              error: `Merchant payment setup is incomplete for ${orderSummary}. (${message})`,
             },
             { status: 409 }
           );
@@ -354,7 +399,7 @@ export async function POST(req: Request) {
               : "Fallback provider unavailable.";
           return NextResponse.json(
             {
-              error: `Merchant payment setup is incomplete for ${p.name}. (${primaryMessage}; fallback: ${secondaryMessage})`,
+              error: `Merchant payment setup is incomplete for ${orderSummary}. (${primaryMessage}; fallback: ${secondaryMessage})`,
             },
             { status: 409 }
           );
@@ -382,7 +427,7 @@ export async function POST(req: Request) {
         const seedhapeOrder = await createSeedhapeOrderWithConfig(
           {
             amount: amountInPaise,
-            description: `${p.name} x${item.quantity}`,
+            description: orderSummary,
             externalOrderId: receipt,
             expectedSenderName: String(customer.name || "").trim() || undefined,
             customerEmail: sessionEmail,
@@ -392,8 +437,8 @@ export async function POST(req: Request) {
               source: "web_checkout",
               merchantId,
               customerEmail: sessionEmail,
-              productId: p.id,
-              quantity: item.quantity,
+              productIds: merchantItems.map((item) => item.product.id).join(","),
+              quantities: merchantItems.map((item) => String(item.quantity)).join(","),
             },
           },
           {
@@ -417,7 +462,8 @@ export async function POST(req: Request) {
           appOrderId: null,
           merchantId,
           merchantName: merchantNameMap.get(merchantId) || merchantId,
-          productName: p.name,
+          productName: orderSummary,
+          productIds: merchantItems.map((item) => item.product.id),
           amount: seedhapeOrder.amount,
           currency: seedhapeOrder.currency,
           status: seedhapeOrder.status,
@@ -441,9 +487,9 @@ export async function POST(req: Request) {
               source: "web_checkout",
               merchantId,
               customerEmail: sessionEmail,
-              productId: p.id,
-              quantity: String(item.quantity),
-              productName: p.name,
+              productIds: merchantItems.map((item) => item.product.id).join(","),
+              quantities: merchantItems.map((item) => String(item.quantity)).join(","),
+              productName: orderSummary,
             },
           },
           {
@@ -463,7 +509,8 @@ export async function POST(req: Request) {
           appOrderId: null,
           merchantId,
           merchantName: merchantNameMap.get(merchantId) || merchantId,
-          productName: p.name,
+          productName: orderSummary,
+          productIds: merchantItems.map((item) => item.product.id),
           amount: Number(razorpayOrder.amount || amountInPaise),
           currency: String(razorpayOrder.currency || currency),
           status: String(razorpayOrder.status || "created"),
@@ -485,16 +532,14 @@ export async function POST(req: Request) {
           receipt,
           status: "created",
           mode: orderMode,
-          products: [
-            {
-              productId: p.id,
-              name: p.name,
-              brand: p.brand,
-              price: p.price,
-              imageUrl: p.imageUrl,
-              quantity: item.quantity,
-            },
-          ],
+          products: merchantItems.map((item) => ({
+            productId: item.product.id,
+            name: item.product.name,
+            brand: item.product.brand,
+            price: item.product.price,
+            imageUrl: item.product.imageUrl,
+            quantity: item.quantity,
+          })),
           customer: {
             name: customer.name,
             email: sessionEmail,
@@ -527,12 +572,12 @@ export async function POST(req: Request) {
         },
       });
 
-      paymentOrders.push({
-        ...(responseOrder as PaymentOrderResponse),
-        internalOrderId: createdOrder.id,
-        appOrderId: createdOrder.receipt || null,
-        status: providerStatus,
-      });
+        paymentOrders.push({
+          ...(responseOrder as PaymentOrderResponse),
+          internalOrderId: createdOrder.id,
+          appOrderId: createdOrder.receipt || null,
+          status: providerStatus,
+        });
     }
 
     return NextResponse.json({ orders: paymentOrders }, { status: 200 });
