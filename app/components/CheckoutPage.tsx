@@ -244,16 +244,17 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   };
 
   const handleVerifiedPaymentSuccess = (
+    payment: CheckoutPaymentOrder,
     orderId: string,
     normalizedCustomer?: CheckoutCustomer,
     invoiceWarning?: string | null
   ) => {
-    if (!activePayment) {
-      throw new Error("Active payment context is missing.");
-    }
-
     const completedPaymentId =
-      activePayment.seedhapeOrderId || activePayment.razorpayOrderId || orderId;
+      payment.seedhapeOrderId || payment.razorpayOrderId || orderId;
+    if (successHandledRef.current.has(completedPaymentId)) {
+      return;
+    }
+    successHandledRef.current.add(completedPaymentId);
     if (!completedPaymentIdsRef.current.includes(completedPaymentId)) {
       completedPaymentIdsRef.current.push(completedPaymentId);
     }
@@ -261,9 +262,9 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       onPaymentGroupVerified?.({
         customer: normalizedCustomer,
         paymentId: completedPaymentId,
-        merchantId: activePayment.merchantId,
-        productIds: Array.isArray(activePayment.productIds)
-          ? activePayment.productIds
+        merchantId: payment.merchantId,
+        productIds: Array.isArray(payment.productIds)
+          ? payment.productIds
           : [],
       });
     }
@@ -311,7 +312,8 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const checkPaymentStatus = async (orderId: string, normalizedCustomer?: CheckoutCustomer) => {
     const activeOrder = activePayment && activePayment.id === orderId ? activePayment : null;
     if (!activeOrder) {
-      throw new Error("Active payment context is missing.");
+      setPaymentStatusText("This payment session has already advanced. Please check your order status.");
+      return;
     }
     const verifyBody =
       activeOrder.provider === "razorpay"
@@ -335,6 +337,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
     const verify = await verifyRes.json();
     if (verify.status === "ok") {
       handleVerifiedPaymentSuccess(
+        activeOrder,
         orderId,
         normalizedCustomer,
         typeof verify.invoiceWarning === "string" ? verify.invoiceWarning : null
@@ -415,6 +418,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
             throw new Error(verify.message || "Razorpay verification failed.");
           }
           handleVerifiedPaymentSuccess(
+            payment,
             razorpayOrderId,
             normalizedCustomer,
             typeof verify.invoiceWarning === "string" ? verify.invoiceWarning : null
