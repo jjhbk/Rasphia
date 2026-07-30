@@ -1236,6 +1236,7 @@ async function buildWhatsAppPaymentConfirmationReply(args: {
   const order = await findOrderByCustomerReference({
     reference: args.orderId,
     select: {
+      id: true,
       receipt: true,
       orderId: true,
       status: true,
@@ -2005,6 +2006,7 @@ function parseShippingAddress(address: string): AddressBookEntry | null {
 
 function buildOrderDetailLines(
   order: {
+    id?: string;
     orderId: string;
     receipt?: string | null;
     status: string;
@@ -2039,13 +2041,14 @@ function buildOrderDetailLines(
   if (order.trackingUrl) links.push(`Tracking URL: ${order.trackingUrl}`);
   const titlePrefix = options?.index ? `${options.index}) ` : "";
 
-  const customerFacingOrderId = String(order.receipt || order.orderId || "").trim();
+  const customerFacingOrderId = String(order.id || order.receipt || order.orderId || "").trim();
   const lines = [
     `${titlePrefix}Order ID: ${customerFacingOrderId}`,
     `Status: ${order.status}`,
     `Amount: ${moneyPrefix}${order.amount}`,
     options?.merchantName ? `Merchant: ${options.merchantName}` : "",
     order.orderId ? `Payment Order Ref: ${order.orderId}` : "",
+    order.receipt ? `Legacy App Ref: ${order.receipt}` : "",
     trackingLine ? `Tracking: ${trackingLine}` : "",
     order.estimatedDelivery
       ? `Estimated delivery: ${new Date(order.estimatedDelivery).toLocaleDateString()}`
@@ -2063,8 +2066,12 @@ function buildOrderDetailLines(
   return lines.join("\n");
 }
 
-function getCustomerFacingOrderId(order: { receipt?: string | null; orderId?: string | null }) {
-  return String(order.receipt || order.orderId || "").trim();
+function getCustomerFacingOrderId(order: {
+  id?: string | null;
+  receipt?: string | null;
+  orderId?: string | null;
+}) {
+  return String(order.id || order.receipt || order.orderId || "").trim();
 }
 
 async function findOrderByCustomerReference<T extends object>(args: {
@@ -2848,7 +2855,7 @@ async function handleUserOrderCreate(
     const qrImageLink = buildUpiQrImageLink(seedhapeOrder.id);
     const primaryPayLink = upiChooserLink || links.hostedStatusUrl;
     paymentMessageLines = [
-      `Order ready: ${externalOrderId}`,
+      "Order ready:",
       `Merchant: ${merchant?.name || merchantId}`,
       `Item: ${product.name} x${quantity}`,
       `Amount: ₹${totalRupees}`,
@@ -2864,7 +2871,7 @@ async function handleUserOrderCreate(
     }
     paymentMessageLines.push(
       "",
-      `Next step: confirm payment orderId=${externalOrderId}`
+      "Next step: confirm payment orderId=<orderId>"
     );
   }
 
@@ -2928,7 +2935,7 @@ async function handleUserOrderCreate(
     });
 
     paymentMessageLines = [
-      `Order ready: ${createdOrder.receipt || createdOrder.orderId}`,
+      `Order ready: ${createdOrder.id}`,
       `Merchant: ${merchant?.name || merchantId}`,
       `Item: ${product.name} x${quantity}`,
       `Amount: ₹${totalRupees}`,
@@ -2939,8 +2946,12 @@ async function handleUserOrderCreate(
       hostedCheckoutUrl,
       "",
       "After payment, Rasphia checkout will verify the order automatically.",
-      `If you come back here, you can also reply: confirm payment orderId=${createdOrder.receipt || createdOrder.orderId}`,
+      `If you come back here, you can also reply: confirm payment orderId=${createdOrder.id}`,
     ];
+  }
+  if (orderMode === "seedhape") {
+    paymentMessageLines[0] = `Order ready: ${createdOrder.id}`;
+    paymentMessageLines[paymentMessageLines.length - 1] = `Next step: confirm payment orderId=${createdOrder.id}`;
   }
 
   await upsertWhatsAppCheckoutCustomerProfile(checkoutCustomer);
@@ -2960,10 +2971,19 @@ async function handleUserPaymentConfirm(
   const orderId = String(draft.orderId || "").trim();
   if (!orderId) {
     const orders = await prisma.order.findMany({
+      where: {
+        customer: {
+          path: ["email"],
+          equals: user.email.toLowerCase(),
+        },
+        status: { in: ["created", "pending"] },
+      },
       orderBy: { createdAt: "desc" },
       take: 150,
       select: {
+        id: true,
         orderId: true,
+        receipt: true,
         status: true,
         amount: true,
         merchantId: true,
@@ -2971,12 +2991,7 @@ async function handleUserPaymentConfirm(
       },
     });
 
-    const pendingOrders = orders.filter((order) => {
-      const email = customerEmailFromOrderCustomer(order.customer);
-      if (email !== user.email.toLowerCase()) return false;
-      const status = String(order.status || "").toLowerCase();
-      return status === "created" || status === "pending";
-    });
+    const pendingOrders = orders;
 
     if (!pendingOrders.length) {
       return {
@@ -3041,9 +3056,7 @@ async function handleUserPaymentConfirm(
   const customerFacingOrderId = getCustomerFacingOrderId(order);
 
   const orderEmail = customerEmailFromOrderCustomer(order.customer);
-  const orderName = customerNameFromOrderCustomer(order.customer);
-  const callerName = String(user.name || "").trim().toLowerCase();
-  if (orderEmail !== user.email.toLowerCase() && (orderName && orderName !== callerName)) {
+  if (!orderEmail || orderEmail !== user.email.toLowerCase()) {
     return {
       done: true,
       reply: "You are not allowed to verify this order.",
@@ -3235,22 +3248,21 @@ async function handleUserOrderQuery(
   const inputOrderId = String(draft.orderId || "").trim().toLowerCase();
   const activeOnly = Boolean(draft.activeOnly);
   const orders = await prisma.order.findMany({
+    where: {
+      customer: {
+        path: ["email"],
+        equals: user.email.toLowerCase(),
+      },
+      ...(merchantContext?.id ? { merchantId: merchantContext.id } : {}),
+      ...(activeOnly
+        ? { status: { in: ["created", "paid", "Processing", "Shipped"] } }
+        : {}),
+    },
     orderBy: { createdAt: "desc" },
     take: 150,
   });
 
   const userOrders = orders.filter((order) => {
-    const email = customerEmailFromOrderCustomer(order.customer);
-    if (email !== user.email.toLowerCase()) return false;
-    if (merchantContext?.id && String(order.merchantId || "") !== merchantContext.id) {
-      return false;
-    }
-    if (
-      activeOnly &&
-      !["created", "paid", "Processing", "Shipped"].includes(String(order.status || ""))
-    ) {
-      return false;
-    }
     if (!inputOrderId) return true;
     return String(getCustomerFacingOrderId(order) || "").toLowerCase().includes(inputOrderId);
   });

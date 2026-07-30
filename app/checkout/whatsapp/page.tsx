@@ -512,13 +512,16 @@ export default function WhatsAppCheckoutPage() {
                     <div>
                       <p className="text-sm font-medium">{primaryProduct?.name || session.productName}</p>
                       <p className="mt-1 text-xs text-brand-stone">
-                        Order ID: {session.appOrderId || session.orderId}
+                        Order ID: {session.internalOrderId}
                       </p>
                       {session.appOrderId ? (
                         <p className="mt-1 text-xs text-brand-stone">
-                          Payment order ref: {session.orderId}
+                          Legacy app ref: {session.appOrderId}
                         </p>
                       ) : null}
+                      <p className="mt-1 text-xs text-brand-stone">
+                        Payment order ref: {session.orderId}
+                      </p>
                     </div>
                     <p className="text-sm font-semibold">
                       {formatPrice(computedAmount, session.currency)}

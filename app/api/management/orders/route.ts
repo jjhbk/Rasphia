@@ -46,8 +46,7 @@ function normalizeOrderIdentifiers<T extends { id: string; orderId: string; rece
 ) {
   return {
     ...order,
-    // Preserve existing consumers while exposing explicit ids.
-    id: order.orderId,
+    id: order.id,
     internalOrderId: order.id,
     providerOrderId: order.orderId,
     appOrderId: order.receipt,
@@ -144,7 +143,12 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const order = await prisma.order.findUnique({ where: { orderId } });
+    const order = await prisma.order.findFirst({
+      where: {
+        OR: [{ id: String(orderId) }, { orderId: String(orderId) }, { receipt: String(orderId) }],
+      },
+      orderBy: { createdAt: "desc" },
+    });
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
@@ -193,7 +197,7 @@ export async function PATCH(req: NextRequest) {
         : history;
 
     await prisma.order.update({
-      where: { orderId },
+      where: { id: order.id },
       data: {
         status: nextStatus,
         ...(trackingNumber !== undefined && {

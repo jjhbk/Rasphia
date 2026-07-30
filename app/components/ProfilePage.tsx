@@ -103,9 +103,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
 
         const normalizedOrders: Order[] = (ordersData || []).map((o: any) => ({
           ...o,
-          id: o.providerOrderId ?? o.orderId ?? o.order_id ?? o.id ?? o._id,
-          internalOrderId: o.internalOrderId ?? null,
-          providerOrderId: o.providerOrderId ?? o.orderId ?? o.order_id ?? o.id ?? o._id,
+          id: o.internalOrderId ?? o.id ?? o._id,
+          internalOrderId: o.internalOrderId ?? o.id ?? o._id ?? null,
+          providerOrderId: o.providerOrderId ?? o.orderId ?? o.order_id ?? null,
           appOrderId: o.appOrderId ?? o.receipt ?? null,
           products: Array.isArray(o.products)
             ? o.products
@@ -458,9 +458,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             </h3>
                             <OrderStatusBadge status={order.status} />
                           </div>
-                          {(order as any).appOrderId ? (
+                          {(order as any).internalOrderId ? (
                             <p className="text-[10px] text-brand-stone/50 font-mono">
-                              Order #{(order as any).appOrderId}
+                              Order #{(order as any).internalOrderId}
                             </p>
                           ) : (
                             <p className="text-[10px] text-brand-stone/50 font-mono">
@@ -469,7 +469,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                           )}
                           {(order as any).appOrderId ? (
                             <p className="text-[10px] text-brand-stone/50 font-mono">
-                              Payment Ref #{order.id}
+                              Legacy App Ref #{(order as any).appOrderId}
+                            </p>
+                          ) : null}
+                          {(order as any).providerOrderId ? (
+                            <p className="text-[10px] text-brand-stone/50 font-mono">
+                              Payment Ref #{(order as any).providerOrderId}
                             </p>
                           ) : null}
                           {(trackingNumber || shippingProvider || estimatedDelivery) && (

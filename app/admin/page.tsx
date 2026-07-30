@@ -350,7 +350,27 @@ export default function ManagementDashboard() {
       const data = await res.json();
       const rows: Array<Record<string, unknown>> = Array.isArray(data) ? data : [];
       const normalized: ManagementOrder[] = rows.map((o) => ({
-        id: String(o.orderId || o.order_id || o.id || o._id || ""),
+        id: String(o.internalOrderId || o.id || o._id || ""),
+        internalOrderId:
+          typeof o.internalOrderId === "string"
+            ? o.internalOrderId
+            : typeof o.id === "string"
+            ? o.id
+            : null,
+        providerOrderId:
+          typeof o.providerOrderId === "string"
+            ? o.providerOrderId
+            : typeof o.orderId === "string"
+            ? o.orderId
+            : typeof o.order_id === "string"
+            ? o.order_id
+            : null,
+        appOrderId:
+          typeof o.appOrderId === "string"
+            ? o.appOrderId
+            : typeof o.receipt === "string"
+            ? o.receipt
+            : null,
         status: String(o.status || ""),
         amount: typeof o.amount === "number" ? o.amount : undefined,
         currency:
@@ -1679,10 +1699,13 @@ export default function ManagementDashboard() {
                                             Provider: {o.customer?.paymentProvider || o.mode || "—"}
                                           </p>
                                           <p className="text-sm text-brand-stone">
-                                            Provider Order: {o.providerOrderId || o.id || "—"}
+                                            Order ID: {o.internalOrderId || o.id || "—"}
                                           </p>
                                           <p className="text-sm text-brand-stone">
-                                            App Ref: {o.appOrderId || o.receipt || "—"}
+                                            Provider Order: {o.providerOrderId || "—"}
+                                          </p>
+                                          <p className="text-sm text-brand-stone">
+                                            Legacy App Ref: {o.appOrderId || o.receipt || "—"}
                                           </p>
                                           <p className="text-sm text-brand-stone">Payment ID: {o.paymentId || "—"}</p>
                                           <p className="text-sm text-brand-stone">Receipt: {o.receipt || "—"}</p>

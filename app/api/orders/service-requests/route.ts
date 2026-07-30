@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
       include: {
         order: {
           select: {
+            id: true,
             orderId: true,
             status: true,
             products: true,
@@ -43,7 +44,13 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json(requests, { status: 200 });
+    const normalized = requests.map((request) => ({
+      ...request,
+      orderId: request.order?.id || request.orderId,
+      providerOrderId: request.order?.orderId || request.orderId,
+    }));
+
+    return NextResponse.json(normalized, { status: 200 });
   } catch (error: unknown) {
     const message =
       error instanceof Error
@@ -72,8 +79,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const order = await prisma.order.findUnique({
-      where: { orderId: String(orderId) },
+    const order = await prisma.order.findFirst({
+      where: {
+        OR: [{ id: String(orderId) }, { orderId: String(orderId) }, { receipt: String(orderId) }],
+      },
+      orderBy: { createdAt: "desc" },
       select: {
         orderId: true,
         id: true,
@@ -116,7 +126,7 @@ export async function POST(req: NextRequest) {
 
     const existingOpen = await prisma.orderServiceRequest.findFirst({
       where: {
-        orderId: String(orderId),
+        orderId: order.orderId,
         type: normalizedType,
         status: { notIn: Array.from(TERMINAL_REQUEST_STATUSES) },
       },
@@ -193,7 +203,7 @@ export async function POST(req: NextRequest) {
       data: {
         requestId,
         requestNumber,
-        orderId: String(orderId),
+        orderId: order.orderId,
         merchantId: order.merchantId || null,
         type: normalizedType,
         reason: String(reason).trim(),

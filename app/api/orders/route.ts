@@ -7,8 +7,7 @@ function normalizeOrderIdentifiers<T extends { id: string; orderId: string; rece
 ) {
   return {
     ...order,
-    // Backward-compatible alias used across the current frontend.
-    id: order.orderId,
+    id: order.id,
     internalOrderId: order.id,
     providerOrderId: order.orderId,
     appOrderId: order.receipt,
