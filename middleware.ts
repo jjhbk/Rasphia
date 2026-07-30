@@ -16,9 +16,11 @@ export function middleware(req: NextRequest) {
     "/api/whatsapp/verify-otp",
     "/api/razorpay-webhook",
     "/api/seedhape-webhook",
+    "/api/verify-payment",
     "/api/upi-launch",
     "/api/upi-qr",
     "/api/contact",
+    "/api/whatsapp-checkout/session",
   ];
 
   if (publicApiPrefixes.some((prefix) => path.startsWith(prefix))) {

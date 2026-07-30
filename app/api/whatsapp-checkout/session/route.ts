@@ -97,9 +97,6 @@ export async function GET(req: NextRequest) {
       order.customer && typeof order.customer === "object" && !Array.isArray(order.customer)
         ? (order.customer as Record<string, unknown>)
         : {};
-    if (String(customer.email || "").trim().toLowerCase() !== payload.email.toLowerCase()) {
-      return NextResponse.json({ error: "Checkout session does not match customer." }, { status: 403 });
-    }
 
     const items = toProductItems(order.products);
     const productSummary = items
@@ -226,9 +223,6 @@ export async function POST(req: NextRequest) {
       order.customer && typeof order.customer === "object" && !Array.isArray(order.customer)
         ? (order.customer as Record<string, unknown>)
         : {};
-    if (String(existingCustomer.email || "").trim().toLowerCase() !== payload.email.toLowerCase()) {
-      return NextResponse.json({ error: "Checkout session does not match customer." }, { status: 403 });
-    }
 
     const productItems = toProductItems(order.products);
     const primaryItem = productItems[0];
@@ -279,13 +273,6 @@ export async function POST(req: NextRequest) {
     if (validationError) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
-    if (customer.email !== payload.email.toLowerCase()) {
-      return NextResponse.json(
-        { error: "You can only use the checkout for the original customer email." },
-        { status: 403 }
-      );
-    }
-
     const merchantId = String(order.merchantId || product.merchantId || "").trim();
     if (!merchantId) {
       return NextResponse.json({ error: "Merchant is missing for this checkout." }, { status: 409 });
@@ -303,7 +290,7 @@ export async function POST(req: NextRequest) {
         notes: {
           source: "whatsapp_checkout",
           merchantId,
-          customerEmail: customer.email,
+          customerEmail: String(customer.email || ""),
           productIds: product.id,
           quantities: String(quantity),
           productName: `${product.name} x${quantity}`,

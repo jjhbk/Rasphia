@@ -306,9 +306,6 @@ export default function WhatsAppCheckoutPage() {
               Rasphia Checkout
             </p>
             <h1 className="mt-2 text-2xl font-semibold">Complete your order</h1>
-            <p className="mt-2 text-sm text-brand-stone">
-              This checkout mirrors the website flow and preloads your details when available.
-            </p>
 
             {isLoading ? (
               <p className="mt-6 text-sm text-brand-stone">Loading checkout…</p>
@@ -471,9 +468,6 @@ export default function WhatsAppCheckoutPage() {
                     <ShieldCheck className="h-4 w-4 text-brand-sage" />
                     Secure Razorpay checkout on Rasphia
                   </div>
-                  <p className="mt-2 text-brand-stone">
-                    Your payment verification and invoice generation follow the same Rasphia website flow.
-                  </p>
                 </div>
 
                 {session.paid ? (
