@@ -388,6 +388,7 @@ model Merchant {
   name         String
   phone        String
   email        String             @unique
+  gstin        String?
   address      String
   addressLine1 String             @map("address_line_1")
   addressLine2 String             @map("address_line_2")
@@ -404,6 +405,10 @@ model Merchant {
   seedhapeWebhookPath String?     @unique @map("seedhape_webhook_path")
   seedhapeBaseUrl String?         @map("seedhape_base_url")
   seedhapeConfiguredAt DateTime?  @map("seedhape_configured_at")
+  razorpayKeyIdEncrypted String?  @map("razorpay_key_id_encrypted")
+  razorpayKeySecretEncrypted String? @map("razorpay_key_secret_encrypted")
+  razorpayConfiguredAt DateTime?  @map("razorpay_configured_at")
+  preferredPaymentProvider String? @map("preferred_payment_provider")
   bahiApiKeyEncrypted String?     @map("bahi_api_key_encrypted")
   bahiWebhookSecretEncrypted String? @map("bahi_webhook_secret_encrypted")
   bahiMerchantId String?          @map("bahi_merchant_id")

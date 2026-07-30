@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
-import { syncOrderInvoiceWithBahi } from "@/app/lib/order-invoice";
+import { generateInternalInvoiceForOrder } from "@/app/lib/order-invoice";
 
 type FinalizeOrderPaymentInput = {
   orderId: string;
@@ -91,10 +91,10 @@ export async function finalizeOrderAsPaid(input: FinalizeOrderPaymentInput) {
   });
 
   try {
-    await syncOrderInvoiceWithBahi(input.orderId);
+    await generateInternalInvoiceForOrder(input.orderId);
   } catch (error) {
-    // Never fail payment finalization because downstream invoice sync failed.
-    console.error("[order-payment] Bahi invoice sync failed", {
+    // Never fail payment finalization because downstream invoice generation failed.
+    console.error("[order-payment] Internal invoice generation failed", {
       orderId: input.orderId,
       message: error instanceof Error ? error.message : String(error),
     });

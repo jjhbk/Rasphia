@@ -23,7 +23,9 @@ async function resolveMerchantId(req: NextRequest, body?: Record<string, unknown
     where:
       access.role === "admin" && merchantIdParam
         ? { id: merchantIdParam }
-        : { email: access.email },
+        : access.merchantId
+        ? { id: access.merchantId }
+        : { email: { equals: access.email, mode: "insensitive" } },
     select: { id: true },
   });
   if (!merchant) throw new Error("Merchant profile not found");

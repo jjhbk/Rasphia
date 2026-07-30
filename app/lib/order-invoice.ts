@@ -1,57 +1,61 @@
 import { Prisma } from "@prisma/client";
+import { randomUUID } from "crypto";
+import { put } from "@vercel/blob";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { prisma } from "@/app/lib/prisma";
-import { generateBahiInvoice, type BahiWebhookLineItem } from "@/app/lib/bahi";
-import { getMerchantBahiConfig } from "@/app/lib/merchant-bahi";
+import { sendInvoiceEmailForOrder } from "@/app/lib/invoice-email";
 
-type OrderProductSnapshot = {
-  name?: string;
-  description?: string;
-  quantity?: number;
-  price?: number;
-};
-
-type OrderCustomerSnapshot = {
-  name?: string;
-  email?: string;
-  phone?: string;
-};
-
-function toPaise(value: number) {
-  return Math.max(1, Math.round(Math.max(0, Number(value || 0)) * 100));
+function buildInvoiceNumber(slug: string, sequence: number) {
+  const safeSlug = String(slug || "merchant")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 20) || "merchant";
+  return `INV-${safeSlug}-${String(sequence).padStart(4, "0")}`;
 }
 
-function normalizePhone(phoneRaw: string) {
-  const raw = String(phoneRaw || "").trim();
-  if (/^\+[0-9]{10,15}$/.test(raw)) return raw;
+type InvoiceLineItem = {
+  name: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+};
 
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length >= 10 && digits.length <= 15) {
-    return `+${digits}`;
-  }
-
-  return "+10000000000";
+function formatCurrency(amount: number, currency = "INR") {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
 }
 
-function buildLineItems(order: {
-  products: unknown;
-  amount: number;
-}): BahiWebhookLineItem[] {
-  const snapshots = Array.isArray(order.products)
-    ? (order.products as Array<OrderProductSnapshot>)
+function toInvoiceLineItems(products: unknown, orderAmount: number) {
+  const snapshots = Array.isArray(products)
+    ? (products as Array<{
+        name?: string;
+        description?: string;
+        quantity?: number;
+        price?: number;
+      }>)
     : [];
 
   const items = snapshots
-    .map((p) => {
-      const quantity = Math.max(1, Number(p.quantity || 1));
-      const unit = Number(p.price || 0);
+    .map((item) => {
+      const quantity = Math.max(1, Number(item.quantity || 1));
+      const unitPrice = Math.max(0, Number(item.price || 0));
       return {
-        name: String(p.name || "Order Item").trim() || "Order Item",
-        description: String(p.description || "").trim(),
+        name: String(item.name || "Order Item").trim() || "Order Item",
+        description: String(item.description || "").trim(),
         quantity,
-        unit_price_paise: toPaise(unit || order.amount / quantity),
-      };
+        unitPrice,
+        totalPrice: quantity * unitPrice,
+      } satisfies InvoiceLineItem;
     })
-    .filter((item) => item.name && item.quantity > 0 && item.unit_price_paise > 0);
+    .filter((item) => item.totalPrice > 0);
 
   if (items.length > 0) return items;
 
@@ -60,12 +64,120 @@ function buildLineItems(order: {
       name: "Order total",
       description: "Auto-generated order line item",
       quantity: 1,
-      unit_price_paise: toPaise(order.amount),
+      unitPrice: Math.max(0, Number(orderAmount || 0)),
+      totalPrice: Math.max(0, Number(orderAmount || 0)),
     },
-  ];
+  ] satisfies InvoiceLineItem[];
 }
 
-export async function syncOrderInvoiceWithBahi(orderId: string) {
+async function generateInvoicePdf(input: {
+  invoiceNumber: string;
+  merchantName: string;
+  merchantEmail: string;
+  merchantAddress: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  items: InvoiceLineItem[];
+  totalAmount: number;
+  currency: string;
+  issuedAt: Date;
+}) {
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([595, 842]);
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const { height } = page.getSize();
+
+  let y = height - 60;
+  page.drawText("Rasphia Invoice", {
+    x: 40,
+    y,
+    size: 24,
+    font: fontBold,
+    color: rgb(0.12, 0.12, 0.16),
+  });
+  y -= 28;
+  page.drawText(input.invoiceNumber, { x: 40, y, size: 12, font });
+  y -= 18;
+  page.drawText(`Issued: ${input.issuedAt.toLocaleString("en-IN")}`, {
+    x: 40,
+    y,
+    size: 10,
+    font,
+  });
+
+  y -= 34;
+  page.drawText(`Merchant: ${input.merchantName}`, {
+    x: 40,
+    y,
+    size: 12,
+    font: fontBold,
+  });
+  y -= 18;
+  page.drawText(`Email: ${input.merchantEmail}`, { x: 40, y, size: 11, font });
+  y -= 18;
+  page.drawText(`Address: ${input.merchantAddress}`, { x: 40, y, size: 11, font });
+
+  y -= 30;
+  page.drawText(`Customer: ${input.customerName}`, {
+    x: 40,
+    y,
+    size: 12,
+    font: fontBold,
+  });
+  y -= 18;
+  page.drawText(`Email: ${input.customerEmail}`, { x: 40, y, size: 11, font });
+  y -= 18;
+  page.drawText(`Phone: ${input.customerPhone}`, { x: 40, y, size: 11, font });
+
+  y -= 32;
+  page.drawText("Items", { x: 40, y, size: 14, font: fontBold });
+  y -= 20;
+
+  for (const item of input.items) {
+    page.drawText(
+      `${item.name} x${item.quantity} - ${formatCurrency(item.totalPrice, input.currency)}`,
+      { x: 44, y, size: 11, font }
+    );
+    y -= 16;
+    if (item.description) {
+      page.drawText(item.description.slice(0, 90), {
+        x: 56,
+        y,
+        size: 9,
+        font,
+        color: rgb(0.35, 0.35, 0.4),
+      });
+      y -= 14;
+    }
+    if (y < 120) break;
+  }
+
+  y -= 16;
+  page.drawText(
+    `Total: ${formatCurrency(input.totalAmount, input.currency)}`,
+    { x: 40, y, size: 14, font: fontBold }
+  );
+
+  return Buffer.from(await pdf.save());
+}
+
+async function uploadInvoicePdfToBlob(input: {
+  merchantId: string;
+  invoiceNumber: string;
+  pdfBytes: Buffer;
+}) {
+  const filename = `${input.invoiceNumber}.pdf`;
+  const blob = await put(`invoices/${input.merchantId}/${filename}`, input.pdfBytes, {
+    access: "public",
+    contentType: "application/pdf",
+    addRandomSuffix: false,
+  });
+  return blob.url;
+}
+
+export async function generateInternalInvoiceForOrder(orderId: string) {
   const order = await prisma.order.findUnique({
     where: { orderId },
     select: {
@@ -73,11 +185,12 @@ export async function syncOrderInvoiceWithBahi(orderId: string) {
       orderId: true,
       merchantId: true,
       amount: true,
+      currency: true,
       verifiedAt: true,
-      customer: true,
-      products: true,
       invoiceNumber: true,
       statusHistory: true,
+      customer: true,
+      products: true,
     },
   });
 
@@ -88,91 +201,218 @@ export async function syncOrderInvoiceWithBahi(orderId: string) {
     where: { id: order.merchantId },
     select: {
       id: true,
+      slug: true,
       name: true,
       email: true,
       address: true,
-      bahiAutoReceiptEnabled: true,
     },
   });
 
-  if (!merchant || !merchant.bahiAutoReceiptEnabled) return;
+  if (!merchant) return;
 
-  const config = await getMerchantBahiConfig(merchant.id);
+  const existingInvoiceCount = await prisma.order.count({
+    where: {
+      merchantId: merchant.id,
+      invoiceNumber: { not: null },
+    },
+  });
 
-  const customer = (order.customer || {}) as OrderCustomerSnapshot;
-  const customerName = String(customer.name || "Customer").trim() || "Customer";
-  const customerEmail =
-    String(customer.email || "").trim() || `${order.orderId}@example.com`;
-  const customerPhone = normalizePhone(String(customer.phone || ""));
+  const invoiceNumber = buildInvoiceNumber(merchant.slug, existingInvoiceCount + 1);
+  const invoiceId = randomUUID();
+  const customer = (order.customer || {}) as {
+    name?: string;
+    email?: string;
+    phone?: string;
+  };
+  const invoiceDate = order.verifiedAt || new Date();
+  const invoiceItems = toInvoiceLineItems(order.products, order.amount);
+  const pdfBytes = await generateInvoicePdf({
+    invoiceNumber,
+    merchantName: merchant.name,
+    merchantEmail: merchant.email,
+    merchantAddress: merchant.address,
+    customerName: String(customer.name || "Customer").trim() || "Customer",
+    customerEmail: String(customer.email || "").trim(),
+    customerPhone: String(customer.phone || "").trim(),
+    items: invoiceItems,
+    totalAmount: Number(order.amount || 0),
+    currency: order.currency || "INR",
+    issuedAt: invoiceDate,
+  });
+  const invoicePdfUrl = await uploadInvoicePdfToBlob({
+    merchantId: merchant.id,
+    invoiceNumber,
+    pdfBytes,
+  });
 
-  const totalAmountPaise = toPaise(order.amount);
+  const statusHistory = Array.isArray(order.statusHistory)
+    ? (order.statusHistory as Array<Record<string, unknown>>)
+    : [];
+  const nextStatusHistory = [
+    ...statusHistory,
+    {
+      status: "invoice_generated",
+      note: `Internal invoice generated (${invoiceNumber})`,
+      by: "internal_invoice",
+      at: new Date().toISOString(),
+    },
+  ];
+
+  await prisma.order.update({
+    where: { id: order.id },
+    data: {
+      invoiceId,
+      invoiceNumber,
+      invoicePdfUrl,
+      invoiceGeneratedAt: order.verifiedAt || new Date(),
+      invoiceSyncStatus: "generated_internal",
+      invoiceSyncError: null,
+      invoiceSyncedAt: new Date(),
+      statusHistory: nextStatusHistory as Prisma.InputJsonValue,
+      updatedAt: new Date(),
+    },
+  });
 
   try {
-    const result = await generateBahiInvoice({
-      baseUrl: config.baseUrl,
-      webhookSecret: config.webhookSecret,
-      payload: {
-        event_type: "order.completed",
-        timestamp: new Date().toISOString(),
-        order_id: order.orderId,
-        total_amount_paise: totalAmountPaise,
-        payment_timestamp: (order.verifiedAt || new Date()).toISOString(),
-        merchant: {
-          merchant_id: config.bahiMerchantId,
-          business_name: merchant.name,
-          gstin: null,
-          upi_id: config.bahiUpiId,
-          address: merchant.address,
-          email: merchant.email,
-        },
-        customer: {
-          name: customerName,
-          email: customerEmail,
-          phone: customerPhone,
-        },
-        line_items: buildLineItems({ products: order.products, amount: order.amount }),
+    await sendInvoiceEmailForOrder(order.orderId, {
+      attachment: {
+        filename: `${invoiceNumber}.pdf`,
+        content: pdfBytes,
       },
     });
+  } catch (error) {
+    console.error("[order-invoice] Invoice email send failed", {
+      orderId: order.orderId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
+export type MerchantInvoiceSummary = {
+  invoice_id: string | null;
+  merchant_id: string;
+  invoice_number: string | null;
+  customer_name: string;
+  customer_email: string;
+  total_amount_paise: number;
+  pdf_url: string | null;
+  created_at: string;
+  email_sent_at: string | null;
+  order_id: string;
+};
+
+export async function listMerchantInternalInvoices(input: {
+  merchantId: string;
+  since?: Date;
+  limit?: number;
+}) {
+  const orders = await prisma.order.findMany({
+    where: {
+      merchantId: input.merchantId,
+      invoiceNumber: { not: null },
+      ...(input.since ? { invoiceGeneratedAt: { gt: input.since } } : {}),
+    },
+    orderBy: { invoiceGeneratedAt: "desc" },
+    take: Math.min(Math.max(input.limit || 100, 1), 200),
+    select: {
+      orderId: true,
+      merchantId: true,
+      invoiceId: true,
+      invoiceNumber: true,
+      invoicePdfUrl: true,
+      invoiceGeneratedAt: true,
+      amount: true,
+      customer: true,
+      statusHistory: true,
+    },
+  });
+
+  return orders.map((order) => {
+    const customer = (order.customer || {}) as {
+      name?: string;
+      email?: string;
+    };
     const statusHistory = Array.isArray(order.statusHistory)
       ? (order.statusHistory as Array<Record<string, unknown>>)
       : [];
-    const nextStatusHistory = [
-      ...statusHistory,
-      {
-        status: "invoice_generated",
-        note: `Bahi invoice generated${
-          result.data.invoice_number ? ` (${result.data.invoice_number})` : ""
-        }`,
-        by: "bahi_sync",
-        at: new Date().toISOString(),
-      },
-    ];
+    const lastEmailEvent = [...statusHistory]
+      .reverse()
+      .find((entry) => String(entry.status || "").trim() === "invoice_emailed");
+    return {
+      invoice_id: order.invoiceId || null,
+      merchant_id: String(order.merchantId || ""),
+      invoice_number: order.invoiceNumber || null,
+      customer_name: String(customer.name || "Customer"),
+      customer_email: String(customer.email || ""),
+      total_amount_paise: Math.round(Number(order.amount || 0) * 100),
+      pdf_url: order.invoicePdfUrl || null,
+      created_at: (order.invoiceGeneratedAt || new Date()).toISOString(),
+      email_sent_at:
+        typeof lastEmailEvent?.at === "string" ? String(lastEmailEvent.at) : null,
+      order_id: order.orderId,
+    } satisfies MerchantInvoiceSummary;
+  });
+}
 
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        invoiceId: String(result.data.invoice_id || "").trim() || null,
-        invoiceNumber: String(result.data.invoice_number || "").trim() || null,
-        invoicePdfUrl: String(result.data.pdf_url || "").trim() || null,
-        invoiceGeneratedAt: new Date(),
-        invoiceSyncStatus: result.statusCode === 409 ? "duplicate" : "generated",
-        invoiceSyncError: null,
-        invoiceSyncedAt: new Date(),
-        statusHistory: nextStatusHistory as Prisma.InputJsonValue,
-        updatedAt: new Date(),
+export async function getMerchantInternalInvoiceDashboard(merchantId: string) {
+  const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+
+  const yearStart = new Date(now);
+  yearStart.setMonth(0, 1);
+  yearStart.setHours(0, 0, 0, 0);
+
+  const [merchant, todayOrders, ytdOrders, recentInvoices] = await Promise.all([
+    prisma.merchant.findUnique({
+      where: { id: merchantId },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        email: true,
+        address: true,
       },
-    });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Bahi invoice sync failed";
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        invoiceSyncStatus: "failed",
-        invoiceSyncError: message.slice(0, 400),
-        invoiceSyncedAt: new Date(),
-        updatedAt: new Date(),
+    }),
+    prisma.order.findMany({
+      where: {
+        merchantId,
+        invoiceNumber: { not: null },
+        invoiceGeneratedAt: { gte: todayStart },
       },
-    });
-  }
+      select: { amount: true },
+    }),
+    prisma.order.findMany({
+      where: {
+        merchantId,
+        invoiceNumber: { not: null },
+        invoiceGeneratedAt: { gte: yearStart },
+      },
+      select: { amount: true },
+    }),
+    listMerchantInternalInvoices({ merchantId, limit: 50 }),
+  ]);
+
+  const todayRevenue = todayOrders.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const ytdRevenue = ytdOrders.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const threshold = 4000000;
+  const thresholdPercentage = threshold > 0 ? (ytdRevenue / threshold) * 100 : 0;
+  const monthsElapsed = (Date.now() - yearStart.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+  const monthlyRate = monthsElapsed > 0 ? ytdRevenue / monthsElapsed : 0;
+  const monthsToThreshold =
+    monthlyRate > 0 && ytdRevenue < threshold
+      ? (threshold - ytdRevenue) / monthlyRate
+      : ytdRevenue >= threshold
+      ? 0
+      : null;
+
+  return {
+    merchant,
+    today_revenue: todayRevenue,
+    today_count: todayOrders.length,
+    ytd_revenue: ytdRevenue,
+    threshold_percentage: thresholdPercentage,
+    months_to_threshold: monthsToThreshold,
+    recent_invoices: recentInvoices,
+  };
 }

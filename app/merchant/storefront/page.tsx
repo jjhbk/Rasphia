@@ -123,6 +123,13 @@ type MerchantSeedhapeSettings = {
   generatedWebhookSecret?: string | null;
 };
 
+type MerchantRazorpaySettings = {
+  configured: boolean;
+  keyIdMasked: string | null;
+  configuredAt: string | null;
+  preferredPaymentProvider: "seedhape" | "razorpay" | null;
+};
+
 type MerchantBahiSettings = {
   configured: boolean;
   apiKeyMasked: string | null;
@@ -169,6 +176,15 @@ export default function MerchantStorefrontPage() {
   const [seedhapeSuccess, setSeedhapeSuccess] = useState<string | null>(null);
   const [webhookCopied, setWebhookCopied] = useState(false);
   const [rotatedWebhookSecret, setRotatedWebhookSecret] = useState<string | null>(null);
+  const [razorpay, setRazorpay] = useState<MerchantRazorpaySettings | null>(null);
+  const [razorpayForm, setRazorpayForm] = useState({
+    razorpayKeyId: "",
+    razorpayKeySecret: "",
+    preferredPaymentProvider: "razorpay" as "seedhape" | "razorpay",
+  });
+  const [razorpayError, setRazorpayError] = useState<string | null>(null);
+  const [razorpaySuccess, setRazorpaySuccess] = useState<string | null>(null);
+  const [isSavingRazorpay, setIsSavingRazorpay] = useState(false);
   const [bahi, setBahi] = useState<MerchantBahiSettings | null>(null);
   const [bahiForm, setBahiForm] = useState({
     bahiApiKey: "",
@@ -227,6 +243,17 @@ export default function MerchantStorefrontPage() {
               `Default webhook secret generated. Save it now: ${settings.generatedWebhookSecret}`
             );
           }
+        }
+        const razorpayRes = await fetch("/api/merchant/razorpay");
+        const razorpayData = await razorpayRes.json();
+        if (razorpayRes.ok && razorpayData?.razorpay) {
+          const settings = razorpayData.razorpay as MerchantRazorpaySettings;
+          setRazorpay(settings);
+          setRazorpayForm((prev) => ({
+            ...prev,
+            preferredPaymentProvider:
+              settings.preferredPaymentProvider || prev.preferredPaymentProvider,
+          }));
         }
         const bahiRes = await fetch("/api/merchant/bahi");
         const bahiData = await bahiRes.json();
@@ -476,6 +503,45 @@ export default function MerchantStorefrontPage() {
     }
   };
 
+  const saveRazorpaySettings = async () => {
+    try {
+      setIsSavingRazorpay(true);
+      setRazorpayError(null);
+      setRazorpaySuccess(null);
+      const payload: Record<string, unknown> = {
+        preferredPaymentProvider: razorpayForm.preferredPaymentProvider,
+      };
+      if (razorpayForm.razorpayKeyId.trim()) {
+        payload.razorpayKeyId = razorpayForm.razorpayKeyId.trim();
+      }
+      if (razorpayForm.razorpayKeySecret.trim()) {
+        payload.razorpayKeySecret = razorpayForm.razorpayKeySecret.trim();
+      }
+      const res = await fetch("/api/merchant/razorpay", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to save Razorpay settings");
+      const next = data?.razorpay as MerchantRazorpaySettings;
+      setRazorpay(next);
+      setRazorpayForm((prev) => ({
+        ...prev,
+        razorpayKeyId: "",
+        razorpayKeySecret: "",
+        preferredPaymentProvider:
+          next?.preferredPaymentProvider || prev.preferredPaymentProvider,
+      }));
+      setRazorpaySuccess("Razorpay settings updated.");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to save Razorpay settings";
+      setRazorpayError(msg);
+    } finally {
+      setIsSavingRazorpay(false);
+    }
+  };
+
   const saveBahiSettings = async () => {
     try {
       setIsSavingBahi(true);
@@ -678,7 +744,7 @@ export default function MerchantStorefrontPage() {
             >
               <CreditCard className="h-3.5 w-3.5" />
               Payments
-              {seedhape?.configured && (
+              {(seedhape?.configured || razorpay?.configured) && (
                 <span className="badge badge-success text-[10px] ml-0.5">Active</span>
               )}
             </button>
@@ -1038,6 +1104,65 @@ export default function MerchantStorefrontPage() {
         {/* ── Payments Tab ── */}
         {activeTab === "payments" && (
           <div className="max-w-2xl space-y-4 animate-fade-up">
+            <div
+              className={`alert ${
+                seedhape?.configured || razorpay?.configured
+                  ? "alert-success"
+                  : "alert-info"
+              }`}
+            >
+              {seedhape?.configured || razorpay?.configured ? (
+                <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-green-600" />
+              ) : (
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              )}
+              <div>
+                <p className="font-medium text-sm">
+                  {seedhape?.configured || razorpay?.configured
+                    ? "Customer payments are enabled"
+                    : "No customer payment provider configured yet"}
+                </p>
+                <p className="text-xs opacity-70 mt-0.5">
+                  Preferred checkout provider:{" "}
+                  {(razorpay?.preferredPaymentProvider || "razorpay") === "razorpay"
+                    ? "Razorpay"
+                    : "SeedhaPe"}
+                </p>
+              </div>
+            </div>
+
+            <div className={`alert ${razorpay?.configured ? "alert-success" : "alert-info"}`}>
+              {razorpay?.configured ? (
+                <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-green-600" />
+              ) : (
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              )}
+              <div>
+                <p className="font-medium text-sm">
+                  {razorpay?.configured ? "Razorpay is configured" : "Razorpay not configured"}
+                </p>
+                {razorpay?.configuredAt && (
+                  <p className="text-xs opacity-70 mt-0.5">
+                    Last updated: {new Date(razorpay.configuredAt).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {razorpayError && (
+              <div className="alert alert-danger">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                {razorpayError}
+              </div>
+            )}
+
+            {razorpaySuccess && (
+              <div className="alert alert-success">
+                <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-green-600" />
+                {razorpaySuccess}
+              </div>
+            )}
+
             {/* Status */}
             <div className={`alert ${seedhape?.configured ? "alert-success" : "alert-info"}`}>
               {seedhape?.configured ? (
@@ -1109,6 +1234,97 @@ export default function MerchantStorefrontPage() {
                 </div>
               </div>
             )}
+
+            <div className="panel">
+              <div className="panel-header">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-brand-terracotta" />
+                  <span className="text-sm font-semibold text-brand-charcoal">Razorpay Checkout</span>
+                </div>
+              </div>
+              <div className="panel-body space-y-4">
+                <p className="text-xs text-brand-stone">
+                  Configure Razorpay Standard Checkout for card, UPI, netbanking, and wallet payments on your storefront.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="input-label">Key ID</label>
+                    <input
+                      type="password"
+                      value={razorpayForm.razorpayKeyId}
+                      onChange={(e) =>
+                        setRazorpayForm((p) => ({
+                          ...p,
+                          razorpayKeyId: e.target.value,
+                        }))
+                      }
+                      placeholder={razorpay?.keyIdMasked || "rzp_live_xxxxx…"}
+                      className="input-field"
+                    />
+                    <p className="text-xs text-brand-stone mt-1">
+                      Leave blank to keep the existing key ID.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="input-label">Key Secret</label>
+                    <input
+                      type="password"
+                      value={razorpayForm.razorpayKeySecret}
+                      onChange={(e) =>
+                        setRazorpayForm((p) => ({
+                          ...p,
+                          razorpayKeySecret: e.target.value,
+                        }))
+                      }
+                      placeholder="Set or replace Razorpay key secret"
+                      className="input-field"
+                    />
+                    <p className="text-xs text-brand-stone mt-1">
+                      Used server-side to create orders and verify signatures.
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="input-label">Preferred Checkout Provider</label>
+                  <select
+                    value={razorpayForm.preferredPaymentProvider}
+                    onChange={(e) =>
+                      setRazorpayForm((p) => ({
+                        ...p,
+                        preferredPaymentProvider: e.target.value as "seedhape" | "razorpay",
+                      }))
+                    }
+                    className="input-field"
+                  >
+                    <option value="razorpay">Razorpay</option>
+                    <option value="seedhape">SeedhaPe</option>
+                  </select>
+                  <p className="text-xs text-brand-stone mt-1">
+                    Razorpay is the default for new merchants unless you switch it here.
+                  </p>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={saveRazorpaySettings}
+                    disabled={isSavingRazorpay}
+                    className="btn btn-primary"
+                  >
+                    {isSavingRazorpay ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        Saving…
+                      </>
+                    ) : (
+                      "Save Razorpay"
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
 
             {/* API credentials */}
             <div className="panel">

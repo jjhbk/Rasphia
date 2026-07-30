@@ -6,6 +6,11 @@ import {
   createSeedhapeOrderWithConfig,
 } from "@/app/lib/seedhape";
 import { getMerchantSeedhapeConfig } from "@/app/lib/merchant-seedhape";
+import {
+  getMerchantPreferredPaymentProvider,
+  getMerchantRazorpayConfig,
+} from "@/app/lib/merchant-razorpay";
+import { createRazorpayOrderWithConfig } from "@/app/lib/razorpay";
 
 type IncomingProduct = {
   id?: string;
@@ -29,9 +34,8 @@ type AddressBookEntry = {
 };
 
 type PaymentOrderResponse = {
-  id: string; // SeedhaPe order ID (backward-compatible)
-  seedhapeOrderId: string;
-  seedhapeBaseUrl: string;
+  id: string;
+  provider: "seedhape" | "razorpay";
   internalOrderId: string;
   appOrderId: string | null;
   merchantId: string;
@@ -40,11 +44,34 @@ type PaymentOrderResponse = {
   amount: number;
   currency: string;
   status: string;
-  upiUri: string;
-  qrCode: string;
-  expiresAt: string;
-  paymentLinks: ReturnType<typeof buildSeedhapePaymentLinks>;
+  seedhapeOrderId?: string;
+  seedhapeBaseUrl?: string;
+  upiUri?: string;
+  qrCode?: string;
+  expiresAt?: string;
+  paymentLinks?: ReturnType<typeof buildSeedhapePaymentLinks>;
+  razorpayOrderId?: string;
+  razorpayKeyId?: string;
+  checkoutPrefill?: {
+    name?: string;
+    email?: string;
+    contact?: string;
+  };
 };
+
+type SeedhapeMerchantConfig = Awaited<ReturnType<typeof getMerchantSeedhapeConfig>>;
+type RazorpayMerchantConfig = Awaited<ReturnType<typeof getMerchantRazorpayConfig>>;
+type SelectedPaymentConfig =
+  | {
+      provider: "seedhape";
+      seedhapeConfig: SeedhapeMerchantConfig;
+      razorpayConfig: null;
+    }
+  | {
+      provider: "razorpay";
+      seedhapeConfig: null;
+      razorpayConfig: RazorpayMerchantConfig;
+    };
 
 export async function POST(req: Request) {
   try {
@@ -52,7 +79,7 @@ export async function POST(req: Request) {
     const { sessionEmail, body, errorResponse } = await authGuard(req);
     if (errorResponse) return errorResponse;
 
-    const { products, customer } = body;
+    const { products, customer, paymentProvider } = body;
 
     if (!products || products.length === 0 || !customer) {
       return NextResponse.json(
@@ -162,10 +189,9 @@ export async function POST(req: Request) {
         })
       : [];
     const merchantNameMap = new Map(merchants.map((m) => [m.id, m.name]));
-    const merchantConfigCache = new Map<
-      string,
-      Awaited<ReturnType<typeof getMerchantSeedhapeConfig>>
-    >();
+    const merchantConfigCache = new Map<string, SeedhapeMerchantConfig>();
+    const merchantRazorpayConfigCache = new Map<string, RazorpayMerchantConfig>();
+    const merchantPreferenceCache = new Map<string, "seedhape" | "razorpay" | null>();
 
     const addressEntry: AddressBookEntry = {
       name: String(customer.name || "").trim(),
@@ -241,13 +267,70 @@ export async function POST(req: Request) {
         );
       }
 
-      let merchantConfig = merchantConfigCache.get(merchantId);
-      if (!merchantConfig) {
-        try {
-          merchantConfig = await getMerchantSeedhapeConfig(merchantId);
-        } catch (error) {
+      const itemTotal = Number(p.price || 0) * item.quantity;
+      const amountInPaise = Math.max(100, Math.round(itemTotal * 100));
+      const receipt = `pay_${merchantId}_${Date.now()}_${Math.floor(
+        Math.random() * 10000
+      )}`;
+
+      const requestedProvider = String(paymentProvider || "").trim().toLowerCase();
+      if (requestedProvider && requestedProvider !== "seedhape" && requestedProvider !== "razorpay") {
+        return NextResponse.json(
+          { error: "paymentProvider must be either seedhape or razorpay." },
+          { status: 400 }
+        );
+      }
+
+      let preferredProvider = merchantPreferenceCache.get(merchantId);
+      if (preferredProvider === undefined) {
+        preferredProvider = await getMerchantPreferredPaymentProvider(merchantId);
+        merchantPreferenceCache.set(merchantId, preferredProvider);
+      }
+
+      const provider = (requestedProvider ||
+        preferredProvider ||
+        "razorpay") as "seedhape" | "razorpay";
+
+      const trySeedhape = async () => {
+        let cfg = merchantConfigCache.get(merchantId);
+        if (!cfg) {
+          cfg = await getMerchantSeedhapeConfig(merchantId);
+          merchantConfigCache.set(merchantId, cfg);
+        }
+        return {
+          provider: "seedhape",
+          seedhapeConfig: cfg,
+          razorpayConfig: null,
+        } satisfies SelectedPaymentConfig;
+      };
+
+      const tryRazorpay = async () => {
+        let cfg = merchantRazorpayConfigCache.get(merchantId);
+        if (!cfg) {
+          cfg = await getMerchantRazorpayConfig(merchantId);
+          merchantRazorpayConfigCache.set(merchantId, cfg);
+        }
+        return {
+          provider: "razorpay",
+          seedhapeConfig: null,
+          razorpayConfig: cfg,
+        } satisfies SelectedPaymentConfig;
+      };
+
+      let selectedConfig: SelectedPaymentConfig;
+
+      try {
+        if (provider === "seedhape") {
+          selectedConfig = await trySeedhape();
+        } else {
+          selectedConfig = await tryRazorpay();
+        }
+      } catch (primaryError) {
+        if (requestedProvider) {
           const message =
-            error instanceof Error ? error.message : "Merchant payment setup missing.";
+            primaryError instanceof Error
+              ? primaryError.message
+              : "Merchant payment setup missing.";
           return NextResponse.json(
             {
               error: `Merchant payment setup is incomplete for ${p.name}. (${message})`,
@@ -255,48 +338,153 @@ export async function POST(req: Request) {
             { status: 409 }
           );
         }
-        merchantConfigCache.set(merchantId, merchantConfig);
+
+        try {
+          if (provider === "seedhape") {
+            selectedConfig = await tryRazorpay();
+          } else {
+            selectedConfig = await trySeedhape();
+          }
+        } catch (secondaryError) {
+          const primaryMessage =
+            primaryError instanceof Error ? primaryError.message : "Primary provider unavailable.";
+          const secondaryMessage =
+            secondaryError instanceof Error
+              ? secondaryError.message
+              : "Fallback provider unavailable.";
+          return NextResponse.json(
+            {
+              error: `Merchant payment setup is incomplete for ${p.name}. (${primaryMessage}; fallback: ${secondaryMessage})`,
+            },
+            { status: 409 }
+          );
+        }
       }
 
-      const itemTotal = Number(p.price || 0) * item.quantity;
-      const amountInPaise = Math.max(100, Math.round(itemTotal * 100));
-      const receipt = `seedhape_${merchantId}_${Date.now()}_${Math.floor(
-        Math.random() * 10000
-      )}`;
+      let providerOrderId = "";
+      let providerStatus = "created";
+      let orderMode = "products";
+      let customerPayload: Record<string, unknown> = {
+        name: customer.name,
+        email: sessionEmail,
+        phone: customer.phone,
+        address: customer.address,
+        addressLine1: customer.addressLine1,
+        addressLine2: customer.addressLine2,
+        city: customer.city,
+        state: customer.state,
+        zipCode: customer.zipCode,
+      };
 
-      const seedhapeOrder = await createSeedhapeOrderWithConfig(
-        {
-          amount: amountInPaise,
-          description: `${p.name} x${item.quantity}`,
-          externalOrderId: receipt,
-          expectedSenderName: String(customer.name || "").trim() || undefined,
-          customerEmail: sessionEmail,
-          customerPhone: String(customer.phone || "").trim() || undefined,
-          expiresInMinutes: 30,
-          metadata: {
-            source: "web_checkout",
-            merchantId,
+      let responseOrder: PaymentOrderResponse | null = null;
+      if (selectedConfig.provider === "seedhape") {
+        const { seedhapeConfig } = selectedConfig;
+        const seedhapeOrder = await createSeedhapeOrderWithConfig(
+          {
+            amount: amountInPaise,
+            description: `${p.name} x${item.quantity}`,
+            externalOrderId: receipt,
+            expectedSenderName: String(customer.name || "").trim() || undefined,
             customerEmail: sessionEmail,
-            productId: p.id,
-            quantity: item.quantity,
+            customerPhone: String(customer.phone || "").trim() || undefined,
+            expiresInMinutes: 30,
+            metadata: {
+              source: "web_checkout",
+              merchantId,
+              customerEmail: sessionEmail,
+              productId: p.id,
+              quantity: item.quantity,
+            },
           },
-        },
-        {
-          apiKey: merchantConfig.apiKey,
-          baseUrl: merchantConfig.baseUrl,
-        }
-      );
+          {
+            apiKey: seedhapeConfig.apiKey,
+            baseUrl: seedhapeConfig.baseUrl,
+          }
+        );
+        providerOrderId = seedhapeOrder.id;
+        providerStatus = seedhapeOrder.status;
+        orderMode = "seedhape";
+        customerPayload = {
+          ...customerPayload,
+          paymentQrCode: seedhapeOrder.qrCode,
+        };
+        responseOrder = {
+          id: seedhapeOrder.id,
+          provider: "seedhape",
+          seedhapeOrderId: seedhapeOrder.id,
+          seedhapeBaseUrl: seedhapeConfig.baseUrl,
+          internalOrderId: "",
+          appOrderId: null,
+          merchantId,
+          merchantName: merchantNameMap.get(merchantId) || merchantId,
+          productName: p.name,
+          amount: seedhapeOrder.amount,
+          currency: seedhapeOrder.currency,
+          status: seedhapeOrder.status,
+          upiUri: seedhapeOrder.upiUri,
+          qrCode: seedhapeOrder.qrCode,
+          expiresAt: seedhapeOrder.expiresAt,
+          paymentLinks: buildSeedhapePaymentLinks(
+            seedhapeOrder.id,
+            seedhapeOrder.upiUri,
+            seedhapeConfig.baseUrl
+          ),
+        };
+      } else {
+        const { razorpayConfig } = selectedConfig;
+        const razorpayOrder = await createRazorpayOrderWithConfig(
+          {
+            amount: amountInPaise,
+            currency,
+            receipt,
+            notes: {
+              source: "web_checkout",
+              merchantId,
+              customerEmail: sessionEmail,
+              productId: p.id,
+              quantity: String(item.quantity),
+              productName: p.name,
+            },
+          },
+          {
+            keyId: razorpayConfig.keyId,
+            keySecret: razorpayConfig.keySecret,
+          }
+        );
+        providerOrderId = razorpayOrder.id;
+        providerStatus = razorpayOrder.status;
+        orderMode = "razorpay";
+        responseOrder = {
+          id: razorpayOrder.id,
+          provider: "razorpay",
+          razorpayOrderId: razorpayOrder.id,
+          razorpayKeyId: razorpayConfig.keyId,
+          internalOrderId: "",
+          appOrderId: null,
+          merchantId,
+          merchantName: merchantNameMap.get(merchantId) || merchantId,
+          productName: p.name,
+          amount: Number(razorpayOrder.amount || amountInPaise),
+          currency: String(razorpayOrder.currency || currency),
+          status: String(razorpayOrder.status || "created"),
+          checkoutPrefill: {
+            name: String(customer.name || "").trim() || undefined,
+            email: sessionEmail,
+            contact: String(customer.phone || "").trim() || undefined,
+          },
+        };
+      }
 
       const createdOrder = await prisma.order.create({
         data: {
-          orderId: seedhapeOrder.id,
+          orderId: providerOrderId,
           merchantId,
           paymentId: null,
           amount: itemTotal,
           currency,
           receipt,
           status: "created",
-          mode: "seedhape",
+          mode: orderMode,
           products: [
             {
               productId: p.id,
@@ -317,7 +505,8 @@ export async function POST(req: Request) {
             city: customer.city,
             state: customer.state,
             zipCode: customer.zipCode,
-            paymentQrCode: seedhapeOrder.qrCode,
+            paymentProvider: selectedConfig.provider,
+            ...customerPayload,
           },
           trackingNumber: null,
           shippingProvider: null,
@@ -328,7 +517,7 @@ export async function POST(req: Request) {
           statusHistory: [
             {
               status: "created",
-              note: "Order created via SeedhaPe",
+              note: `Order created via ${selectedConfig.provider === "razorpay" ? "Razorpay" : "SeedhaPe"}`,
               by: sessionEmail,
               at: new Date().toISOString(),
             },
@@ -339,25 +528,10 @@ export async function POST(req: Request) {
       });
 
       paymentOrders.push({
-        id: seedhapeOrder.id,
-        seedhapeOrderId: seedhapeOrder.id,
-        seedhapeBaseUrl: merchantConfig.baseUrl,
+        ...(responseOrder as PaymentOrderResponse),
         internalOrderId: createdOrder.id,
         appOrderId: createdOrder.receipt || null,
-        merchantId,
-        merchantName: merchantNameMap.get(merchantId) || merchantId,
-        productName: p.name,
-        amount: seedhapeOrder.amount,
-        currency: seedhapeOrder.currency,
-        status: seedhapeOrder.status,
-        upiUri: seedhapeOrder.upiUri,
-        qrCode: seedhapeOrder.qrCode,
-        expiresAt: seedhapeOrder.expiresAt,
-        paymentLinks: buildSeedhapePaymentLinks(
-          seedhapeOrder.id,
-          seedhapeOrder.upiUri,
-          merchantConfig.baseUrl
-        ),
+        status: providerStatus,
       });
     }
 

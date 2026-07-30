@@ -6,6 +6,8 @@ import {
 } from "@/app/lib/seedhape";
 import { finalizeOrderAsPaid } from "@/app/lib/order-payment";
 import { getMerchantSeedhapeConfig } from "@/app/lib/merchant-seedhape";
+import { getMerchantRazorpayConfig } from "@/app/lib/merchant-razorpay";
+import { verifyRazorpayPaymentSignature } from "@/app/lib/razorpay";
 
 type CustomerPayload = {
   email?: string;
@@ -19,10 +21,24 @@ type CustomerPayload = {
   zipCode?: string;
 };
 
+type AddressBookEntry = {
+  name: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  address: string;
+};
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as {
       seedhape_order_id?: string;
+      razorpay_order_id?: string;
+      razorpay_payment_id?: string;
+      razorpay_signature?: string;
       orderId?: string;
       internal_order_id?: string;
       app_order_id?: string;
@@ -31,15 +47,18 @@ export async function POST(req: Request) {
     const seedhapeOrderId = String(
       body.seedhape_order_id || body.orderId || ""
     ).trim();
+    const razorpayOrderId = String(body.razorpay_order_id || "").trim();
+    const razorpayPaymentId = String(body.razorpay_payment_id || "").trim();
+    const razorpaySignature = String(body.razorpay_signature || "").trim();
     const internalOrderId = String(body.internal_order_id || "").trim();
     const appOrderId = String(body.app_order_id || "").trim();
 
-    if (!seedhapeOrderId && !internalOrderId && !appOrderId) {
+    if (!seedhapeOrderId && !razorpayOrderId && !internalOrderId && !appOrderId) {
       return NextResponse.json(
         {
           status: "error",
           message:
-            "Missing order identifiers. Provide seedhape_order_id, internal_order_id, or app_order_id.",
+            "Missing order identifiers. Provide a payment provider order id, internal_order_id, or app_order_id.",
         },
         { status: 400 }
       );
@@ -47,6 +66,7 @@ export async function POST(req: Request) {
 
     const order = await resolveOrderForVerification({
       seedhapeOrderId,
+      razorpayOrderId,
       internalOrderId,
       appOrderId,
     });
@@ -59,6 +79,64 @@ export async function POST(req: Request) {
 
     if (order.status === "paid") {
       return NextResponse.json({ status: "ok" }, { status: 200 });
+    }
+
+    if ((order.mode || "").toLowerCase().includes("razorpay")) {
+      if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+        return NextResponse.json(
+          {
+            status: "error",
+            message:
+              "Missing Razorpay verification fields. Provide razorpay_order_id, razorpay_payment_id, and razorpay_signature.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const merchantConfig = await resolveOrderMerchantRazorpayConfig(order);
+      const isValid = verifyRazorpayPaymentSignature({
+        orderId: razorpayOrderId,
+        paymentId: razorpayPaymentId,
+        signature: razorpaySignature,
+        keySecret: merchantConfig.keySecret,
+      });
+
+      if (!isValid) {
+        return NextResponse.json(
+          { status: "verification_failed", message: "Invalid Razorpay signature." },
+          { status: 400 }
+        );
+      }
+
+      const finalizeResult = await finalizeOrderAsPaid({
+        orderId: order.orderId,
+        paymentId: razorpayPaymentId,
+        by: body.customer?.email || "system",
+        note: "Razorpay payment verified",
+        verifiedAt: new Date(),
+      });
+
+      if (!finalizeResult.ok && finalizeResult.reason === "not_found") {
+        return NextResponse.json(
+          { status: "error", message: "Order not found" },
+          { status: 404 }
+        );
+      }
+
+      if (body.customer?.email) {
+        await upsertCustomerProfile(body.customer);
+      }
+
+      return NextResponse.json({
+        status: "ok",
+        providerStatus: "paid",
+        verifiedAt: new Date().toISOString(),
+        mapping: {
+          internalOrderId: order.id,
+          appOrderId: order.receipt || null,
+          razorpayOrderId: order.orderId,
+        },
+      });
     }
 
     const merchantConfig = await resolveOrderMerchantSeedhapeConfig(order);
@@ -145,6 +223,7 @@ export async function POST(req: Request) {
 
 async function resolveOrderForVerification(input: {
   seedhapeOrderId?: string;
+  razorpayOrderId?: string;
   internalOrderId?: string;
   appOrderId?: string;
 }) {
@@ -153,6 +232,12 @@ async function resolveOrderForVerification(input: {
       where: { orderId: input.seedhapeOrderId },
     });
     if (bySeedhape) return bySeedhape;
+  }
+  if (input.razorpayOrderId) {
+    const byRazorpay = await prisma.order.findUnique({
+      where: { orderId: input.razorpayOrderId },
+    });
+    if (byRazorpay) return byRazorpay;
   }
   if (input.internalOrderId) {
     const byInternal = await prisma.order.findUnique({
@@ -174,7 +259,7 @@ async function upsertCustomerProfile(customer: CustomerPayload) {
   if (!customer.email) return;
 
   const email = customer.email;
-  const addressEntry = {
+  const addressEntry: AddressBookEntry = {
     name: String(customer.name || "").trim(),
     phone: String(customer.phone || "").trim(),
     addressLine1: String(customer.addressLine1 || "").trim(),
@@ -205,13 +290,15 @@ async function upsertCustomerProfile(customer: CustomerPayload) {
     where: { email },
     select: { addressBook: true },
   });
-  const existingAddressBook = Array.isArray(existingProfile?.addressBook)
-    ? existingProfile.addressBook
+  const existingAddressBook: AddressBookEntry[] = Array.isArray(
+    existingProfile?.addressBook
+  )
+    ? (existingProfile.addressBook as AddressBookEntry[])
     : [];
   const mergedAddressBook = existingAddressBook.some(
-    (entry: any) => entry.address === addressEntry.address
+    (entry) => entry.address === addressEntry.address
   )
-    ? existingAddressBook.map((entry: any) =>
+    ? existingAddressBook.map((entry) =>
         entry.address === addressEntry.address ? addressEntry : entry
       )
     : [addressEntry, ...existingAddressBook];
@@ -257,4 +344,27 @@ async function resolveOrderMerchantSeedhapeConfig(order: {
     throw new Error("Merchant missing on order. Cannot verify provider status.");
   }
   return getMerchantSeedhapeConfig(merchantId);
+}
+
+async function resolveOrderMerchantRazorpayConfig(order: {
+  merchantId: string | null;
+  products: unknown;
+}) {
+  let merchantId = String(order.merchantId || "").trim();
+  if (!merchantId && Array.isArray(order.products) && order.products.length > 0) {
+    const firstProductId = String(
+      (order.products[0] as { productId?: string })?.productId || ""
+    ).trim();
+    if (firstProductId) {
+      const product = await prisma.product.findUnique({
+        where: { id: firstProductId },
+        select: { merchantId: true },
+      });
+      merchantId = String(product?.merchantId || "").trim();
+    }
+  }
+  if (!merchantId) {
+    throw new Error("Merchant missing on order. Cannot verify provider status.");
+  }
+  return getMerchantRazorpayConfig(merchantId);
 }

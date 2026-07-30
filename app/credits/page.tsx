@@ -5,11 +5,17 @@ import { useSession } from "next-auth/react";
 
 declare global {
   interface Window {
-    Razorpay: any;
+    Razorpay: new (options: Record<string, unknown>) => { open: () => void };
   }
 }
 
 const CREDITS_PER_INR = 1;
+
+type RazorpayCheckoutResponse = {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+};
 
 const loadRazorpay = () =>
   new Promise<void>((resolve, reject) => {
@@ -127,7 +133,7 @@ const CreditsCheckout = () => {
         },
         theme: { color: "#2C2420" },
 
-        handler: async (response: any) => {
+        handler: async (response: RazorpayCheckoutResponse) => {
           try {
             const verifyRes = await fetch("/api/extension/verify-payment", {
               method: "POST",
@@ -141,8 +147,8 @@ const CreditsCheckout = () => {
             setPaymentId(response.razorpay_payment_id);
             setCreditedCredits(selectedCredits);
             setPaymentSuccess(true);
-          } catch (err: any) {
-            setPaymentError(err.message || "Payment verification failed");
+          } catch (err: unknown) {
+            setPaymentError(err instanceof Error ? err.message : "Payment verification failed");
           } finally {
             setIsProcessing(false);
           }
@@ -154,8 +160,8 @@ const CreditsCheckout = () => {
       };
 
       new window.Razorpay(options).open();
-    } catch (err: any) {
-      setPaymentError(err.message || "Payment failed");
+    } catch (err: unknown) {
+      setPaymentError(err instanceof Error ? err.message : "Payment failed");
       setIsProcessing(false);
     }
   };
@@ -272,11 +278,11 @@ const CreditsCheckout = () => {
             onSubmit={(e) => { e.preventDefault(); handlePayment(); }}
             className="space-y-4"
           >
-            {["name", "email", "phone"].map((field) => (
+            {(["name", "email", "phone"] as const).map((field) => (
               <input
                 key={field}
                 name={field}
-                value={(customer as any)[field]}
+                value={customer[field]}
                 onChange={handleInputChange}
                 placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
                 className={inputClass}
