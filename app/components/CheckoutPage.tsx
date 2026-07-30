@@ -385,7 +385,9 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
         } catch (err) {
           console.error("Razorpay verify error:", err);
           setPaymentStatusText(
-            "Payment completed, but verification failed. Please check order status in profile."
+            err instanceof Error
+              ? err.message
+              : "Payment completed, but verification failed. Please check order status in profile."
           );
           setIsProcessing(false);
         }

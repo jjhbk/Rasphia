@@ -25,12 +25,15 @@ type InvoiceLineItem = {
 };
 
 function formatCurrency(amount: number, currency = "INR") {
-  return new Intl.NumberFormat("en-IN", {
+  const formatted = new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency,
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(amount);
+
+  // pdf-lib's built-in WinAnsi fonts cannot encode the rupee symbol.
+  return formatted.replace(/\u20B9/g, "Rs ");
 }
 
 function toInvoiceLineItems(products: unknown, orderAmount: number) {

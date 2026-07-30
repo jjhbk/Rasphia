@@ -17,6 +17,11 @@ import {
 } from "@/app/lib/seedhape";
 import { finalizeOrderAsPaid } from "@/app/lib/order-payment";
 import { ensureMerchantSeedhapeDefaults, getMerchantSeedhapeConfig } from "@/app/lib/merchant-seedhape";
+import { getMerchantRazorpayConfig } from "@/app/lib/merchant-razorpay";
+import {
+  createRazorpayPaymentLinkWithConfig,
+  getRazorpayPaymentLinkWithConfig,
+} from "@/app/lib/razorpay";
 
 const geminiApiKey =
   process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "";
@@ -269,7 +274,7 @@ const FIELD_PROMPTS: Record<string, string> = {
   addressChoice:
     "Select a saved address by number (for example: addressOption=1), or share shippingAddress=...",
   paymentRail:
-    "Optional payment rail: paymentRail=seedhape (default) or paymentRail=x402.",
+    "Optional payment rail: paymentRail=razorpay (default), paymentRail=seedhape, or paymentRail=x402.",
   maxPrice: "Optionally share a max price.",
   tag: "Optionally share a tag (for example: gift, decor, skincare).",
   businessName: "Please share your business name.",
@@ -336,7 +341,7 @@ function buildIntentChecklist(intent: WaIntent, draft: Record<string, unknown>) 
   const optional = OPTIONAL_BY_INTENT[intent] || [];
   if (intent === "user_order_create") {
     const rail = normalizePaymentRail(draft.paymentRail);
-    if (rail.startsWith("x402")) {
+    if (rail.startsWith("x402") || rail.startsWith("razorpay")) {
       required = required.filter((field) => field !== "upiVerifiedName");
     }
   }
@@ -383,7 +388,7 @@ function buildUnclearIntentTemplate(merchantStatus?: string) {
     "Example: my orders",
     "Example: track order orderId=ORD123",
     "6) Create an order and pay",
-    "Example: buy productName=Canvas Lamp quantity=2 upiVerifiedName=Rahul Kumar shippingAddress=Flat 4B, MG Road, Hyderabad 500001",
+    "Example: buy productName=Canvas Lamp quantity=2 shippingAddress=Flat 4B, MG Road, Hyderabad 500001",
     "If saved addresses are shown, select with: addressOption=1",
     "7) Confirm payment",
     "Example: confirm payment orderId=sp_ord_ab12cd34ef56",
@@ -459,7 +464,7 @@ function buildInitialUsageInstructions(args: {
     "3a) Enter merchant chat context",
     "Example: shop acme-decor",
     "4) Create order + get payment link",
-    "Example: buy productName=Canvas Lamp quantity=2 upiVerifiedName=Rahul Kumar shippingAddress=Flat 4B, MG Road, Hyderabad 500001",
+    "Example: buy productName=Canvas Lamp quantity=2 shippingAddress=Flat 4B, MG Road, Hyderabad 500001",
     "If saved addresses are shown, select with: addressOption=1",
     "5) Confirm payment",
     "Example: confirm payment orderId=sp_ord_ab12cd34ef56",
@@ -525,7 +530,7 @@ function buildRoleSpecificQuickGuide(role: "merchant" | "user") {
     "*User Quick Guide*",
     "1) Register: register userName=... userEmail=...",
     "2) Discover: discover products query=... maxPrice=...",
-    "3) Buy: buy productName=... quantity=... upiVerifiedName=... shippingAddress=...",
+    "3) Buy: buy productName=... quantity=... shippingAddress=... paymentRail=razorpay",
     "4) My orders: my orders",
     "5) Track one: track order orderId=...",
     "6) Service request: refund/replacement/cancel orderId=... reason=...",
@@ -728,10 +733,11 @@ function missingRequired(intent: WaIntent, draft: Record<string, unknown>) {
 
 function normalizePaymentRail(value: unknown) {
   const raw = String(value || "").trim().toLowerCase();
-  if (!raw) return "seedhape_whatsapp";
+  if (!raw) return "razorpay_whatsapp";
   if (raw.includes("x402") || raw.includes("agentic")) return "x402_agentic";
+  if (raw.includes("razorpay")) return "razorpay_whatsapp";
   if (raw.includes("seedhape")) return "seedhape_whatsapp";
-  return "seedhape_whatsapp";
+  return "razorpay_whatsapp";
 }
 
 async function getMerchantByPhone(phone: string) {
@@ -2174,53 +2180,165 @@ async function handleUserOrderCreate(
   }
 
   const externalOrderId = `wa_${Date.now()}`;
-  let merchantConfig: Awaited<ReturnType<typeof getMerchantSeedhapeConfig>>;
-  try {
-    merchantConfig = await getMerchantSeedhapeConfig(merchantId);
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Merchant payment not configured.";
-    return {
-      done: true,
-      reply: `Merchant payment setup is incomplete for this product. (${message})`,
-      nextIntent: undefined,
-      nextDraft: {},
-    };
-  }
+  const customerName = String(user.name || "").trim();
+  const customerPhone = String(user.phone || "").trim();
+  let providerOrderId = "";
+  let orderMode = "";
+  let paymentMessageLines: string[] = [];
+  let customerPayload: Record<string, unknown> = {
+    name: customerName,
+    email: user.email,
+    phone: customerPhone,
+    address: shippingAddress,
+    channel: "whatsapp",
+  };
 
-  const seedhapeOrder = await createSeedhapeOrderWithConfig(
-    {
-      amount: totalPaise,
-      description: `WhatsApp order: ${product.name} x${quantity}`,
-      externalOrderId,
-      expectedSenderName: upiVerifiedName || String(user.name || "").trim() || undefined,
-      customerEmail: user.email,
-      customerPhone: String(user.phone || "").trim() || undefined,
-      expiresInMinutes: 30,
-      metadata: {
-        source: "whatsapp",
-        customerEmail: user.email,
-        merchantId,
-        productId: product.id,
-        quantity,
-      },
-    },
-    {
-      apiKey: merchantConfig.apiKey,
-      baseUrl: merchantConfig.baseUrl,
+  if (paymentRail === "razorpay_whatsapp") {
+    let merchantConfig: Awaited<ReturnType<typeof getMerchantRazorpayConfig>>;
+    try {
+      merchantConfig = await getMerchantRazorpayConfig(merchantId);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Merchant payment not configured.";
+      return {
+        done: true,
+        reply: `Merchant Razorpay setup is incomplete for this product. (${message})`,
+        nextIntent: undefined,
+        nextDraft: {},
+      };
     }
-  );
+
+    const paymentLink = await createRazorpayPaymentLinkWithConfig(
+      {
+        amount: totalPaise,
+        currency: "INR",
+        referenceId: externalOrderId,
+        description: `WhatsApp order: ${product.name} x${quantity}`,
+        customer: {
+          name: customerName || undefined,
+          email: user.email || undefined,
+          contact: customerPhone || undefined,
+        },
+        notes: {
+          source: "whatsapp",
+          merchantId,
+          customerEmail: user.email,
+          productId: product.id,
+          quantity: String(quantity),
+          productName: product.name,
+        },
+        expireBy: Math.floor(Date.now() / 1000) + 30 * 60,
+      },
+      {
+        keyId: merchantConfig.keyId,
+        keySecret: merchantConfig.keySecret,
+      }
+    );
+
+    providerOrderId = paymentLink.id;
+    orderMode = "razorpay_whatsapp";
+    customerPayload = {
+      ...customerPayload,
+      paymentLinkUrl: paymentLink.short_url || null,
+      paymentRail: "razorpay",
+    };
+    paymentMessageLines = [
+      `Order created: ${paymentLink.id}`,
+      `Merchant: ${merchant?.name || merchantId}`,
+      `Item: ${product.name} x${quantity}`,
+      `Amount: ₹${totalRupees}`,
+      `Delivery address: ${shippingAddress}`,
+      "",
+      "Pay now:",
+      String(paymentLink.short_url || "").trim() || "Payment link unavailable",
+      "",
+      `After payment, reply: confirm payment orderId=${paymentLink.id}`,
+    ];
+  } else {
+    let merchantConfig: Awaited<ReturnType<typeof getMerchantSeedhapeConfig>>;
+    try {
+      merchantConfig = await getMerchantSeedhapeConfig(merchantId);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Merchant payment not configured.";
+      return {
+        done: true,
+        reply: `Merchant payment setup is incomplete for this product. (${message})`,
+        nextIntent: undefined,
+        nextDraft: {},
+      };
+    }
+
+    const seedhapeOrder = await createSeedhapeOrderWithConfig(
+      {
+        amount: totalPaise,
+        description: `WhatsApp order: ${product.name} x${quantity}`,
+        externalOrderId,
+        expectedSenderName: upiVerifiedName || customerName || undefined,
+        customerEmail: user.email,
+        customerPhone: customerPhone || undefined,
+        expiresInMinutes: 30,
+        metadata: {
+          source: "whatsapp",
+          customerEmail: user.email,
+          merchantId,
+          productId: product.id,
+          quantity,
+        },
+      },
+      {
+        apiKey: merchantConfig.apiKey,
+        baseUrl: merchantConfig.baseUrl,
+      }
+    );
+
+    providerOrderId = seedhapeOrder.id;
+    orderMode = "seedhape_whatsapp";
+    customerPayload = {
+      ...customerPayload,
+      upiVerifiedName: upiVerifiedName || null,
+      paymentQrCode: seedhapeOrder.qrCode,
+      paymentRail: "seedhape",
+    };
+
+    const links = buildSeedhapePaymentLinks(
+      seedhapeOrder.id,
+      seedhapeOrder.upiUri,
+      merchantConfig.baseUrl
+    );
+    const upiChooserLink = buildUpiChooserLink(seedhapeOrder.upiUri, seedhapeOrder.id);
+    const qrImageLink = buildUpiQrImageLink(seedhapeOrder.id);
+    const primaryPayLink = upiChooserLink || links.hostedStatusUrl;
+    paymentMessageLines = [
+      `Order created: ${seedhapeOrder.id}`,
+      `Merchant: ${merchant?.name || merchantId}`,
+      `Item: ${product.name} x${quantity}`,
+      `Amount: ₹${totalRupees}`,
+      `UPI verified name: ${upiVerifiedName}`,
+      `Delivery address: ${shippingAddress}`,
+      "",
+      "Pay now:",
+      primaryPayLink,
+    ];
+    if (qrImageLink) {
+      paymentMessageLines.push("", "Scan or save QR image:", qrImageLink);
+    }
+    paymentMessageLines.push(
+      "",
+      `After payment, reply: confirm payment orderId=${seedhapeOrder.id}`
+    );
+  }
 
   const createdOrder = await prisma.order.create({
     data: {
-      orderId: seedhapeOrder.id,
+      orderId: providerOrderId,
       merchantId,
       paymentId: null,
       amount: totalRupees,
       currency: "INR",
       receipt: externalOrderId,
       status: "created",
-      mode: "seedhape_whatsapp",
+      mode: orderMode,
       products: [
         {
           productId: product.id,
@@ -2231,19 +2349,11 @@ async function handleUserOrderCreate(
           quantity,
         },
       ],
-      customer: {
-        name: String(user.name || "").trim(),
-        email: user.email,
-        phone: String(user.phone || "").trim(),
-        address: shippingAddress,
-        upiVerifiedName: upiVerifiedName || null,
-        paymentQrCode: seedhapeOrder.qrCode,
-        channel: "whatsapp",
-      },
+      customer: customerPayload as Prisma.InputJsonValue,
       statusHistory: [
         {
           status: "created",
-          note: "Order created via WhatsApp with SeedhaPe",
+          note: `Order created via WhatsApp with ${orderMode === "razorpay_whatsapp" ? "Razorpay" : "SeedhaPe"}`,
           by: "whatsapp_user",
           at: new Date().toISOString(),
         },
@@ -2260,34 +2370,12 @@ async function handleUserOrderCreate(
     });
   }
 
-  const links = buildSeedhapePaymentLinks(
-    seedhapeOrder.id,
-    seedhapeOrder.upiUri,
-    merchantConfig.baseUrl
-  );
-  const upiChooserLink = buildUpiChooserLink(seedhapeOrder.upiUri, seedhapeOrder.id);
-  const qrImageLink = buildUpiQrImageLink(seedhapeOrder.id);
-  const primaryPayLink = upiChooserLink || links.hostedStatusUrl;
   const lines = [
-    `Order created: ${seedhapeOrder.id}`,
+    ...paymentMessageLines.slice(0, 1),
     `App order ID: ${createdOrder.receipt || "n/a"}`,
     `Internal order ID: ${createdOrder.id}`,
-    `Merchant: ${merchant?.name || merchantId}`,
-    `Item: ${product.name} x${quantity}`,
-    `Amount: ₹${totalRupees}`,
-    `UPI verified name: ${upiVerifiedName}`,
-    `Delivery address: ${shippingAddress}`,
-    "",
-    "Pay now:",
-    primaryPayLink,
+    ...paymentMessageLines.slice(1),
   ];
-  if (qrImageLink) {
-    lines.push("", "Scan or save QR image:", qrImageLink);
-  }
-  lines.push(
-    "",
-    `After payment, reply: confirm payment orderId=${seedhapeOrder.id}`
-  );
 
   return {
     done: true,
@@ -2439,6 +2527,47 @@ async function handleUserPaymentConfirm(
     return {
       done: true,
       reply: `x402 payment confirmed for ${orderId}. Your order is now marked paid.`,
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  if (mode.startsWith("razorpay")) {
+    const merchantConfig = await getMerchantRazorpayConfig(merchantId);
+    const paymentLink = await getRazorpayPaymentLinkWithConfig(orderId, {
+      keyId: merchantConfig.keyId,
+      keySecret: merchantConfig.keySecret,
+    });
+    const paymentStatus = String(paymentLink.status || "").toLowerCase();
+
+    if (paymentStatus !== "paid") {
+      if (paymentStatus === "cancelled" || paymentStatus === "expired") {
+        return {
+          done: true,
+          reply: `Order ${orderId} is ${paymentStatus.toUpperCase()}. Create a new order to continue.`,
+          nextIntent: undefined,
+          nextDraft: {},
+        };
+      }
+      return {
+        done: true,
+        reply: `Payment is still ${String(paymentLink.status || "pending").toUpperCase()}. Please complete payment and retry in a few seconds.`,
+        nextIntent: undefined,
+        nextDraft: {},
+      };
+    }
+
+    await finalizeOrderAsPaid({
+      orderId,
+      paymentId: order.paymentId || `razorpay_link_${orderId}`,
+      by: user.email,
+      note: "Razorpay payment link confirmed via WhatsApp",
+      verifiedAt: new Date(),
+    });
+
+    return {
+      done: true,
+      reply: `Payment confirmed for ${orderId}. Your order is now marked paid.`,
       nextIntent: undefined,
       nextDraft: {},
     };

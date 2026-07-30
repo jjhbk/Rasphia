@@ -124,7 +124,14 @@ export async function POST(req: Request) {
       }
 
       if (body.customer?.email) {
-        await upsertCustomerProfile(body.customer);
+        try {
+          await upsertCustomerProfile(body.customer);
+        } catch (error) {
+          console.error("[verify-payment] Customer profile upsert failed after Razorpay payment", {
+            orderId: order.orderId,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
 
       return NextResponse.json({
@@ -164,7 +171,14 @@ export async function POST(req: Request) {
       }
 
       if (body.customer?.email) {
-        await upsertCustomerProfile(body.customer);
+        try {
+          await upsertCustomerProfile(body.customer);
+        } catch (error) {
+          console.error("[verify-payment] Customer profile upsert failed after SeedhaPe payment", {
+            orderId: order.orderId,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
 
       return NextResponse.json({
@@ -211,7 +225,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
-    console.error("❌ Error verifying SeedhaPe payment:", error);
+    console.error("[verify-payment] Payment verification failed", error);
     const message =
       error instanceof Error ? error.message : "Payment verification failed";
     return NextResponse.json(
