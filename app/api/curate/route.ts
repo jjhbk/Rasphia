@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { GoogleGenAI, Type } from "@google/genai";
+import { GEMINI_MODEL } from "@/app/lib/gemini";
 import { embedQuery } from "@/app/lib/queryEmbeddings";
 import { Product } from "@/app/types";
 import { authGuard } from "@/app/lib/auth-guard";
@@ -250,7 +251,7 @@ Respond strictly in JSON using the schema.
     // GEMINI CALL
     // -------------------------------
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: GEMINI_MODEL,
       contents: prompt,
       config: {
         temperature: 0.7,

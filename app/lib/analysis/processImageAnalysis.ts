@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { v4 as uuid } from "uuid";
 import { put } from "@vercel/blob";
 import { GoogleGenAI } from "@google/genai";
+import { GEMINI_MODEL } from "@/app/lib/gemini";
 import { prisma } from "@/app/lib/prisma";
 import {
   BASE_RULES,
@@ -70,7 +71,7 @@ export async function processImageAnalysis(
 
   try {
     const result = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: GEMINI_MODEL,
       contents: [
         {
           role: "user",

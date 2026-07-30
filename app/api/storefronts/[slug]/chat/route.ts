@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
 import { randomUUID } from "crypto";
+import { GEMINI_MODEL } from "@/app/lib/gemini";
 import { prisma } from "@/app/lib/prisma";
 import {
   buildSeedhapePaymentLinks,
@@ -976,7 +977,7 @@ Rules:
 
     try {
       const response = await gemini.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: GEMINI_MODEL,
         contents: `${system}\n\nCatalog:\n${catalogContext}\n\nConversation:\n${conversationalHistory}\nUser: ${message}`,
         config: {
           temperature: 0.6,

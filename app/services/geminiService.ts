@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
 import { Product } from "../types";
+import { GEMINI_MODEL } from "@/app/lib/gemini";
 
 export const dynamic = "force-dynamic"; // Ensures fresh responses (optional)
 
@@ -126,7 +127,7 @@ Respond strictly in JSON format following the schema.
 
     // Call Gemini API
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: GEMINI_MODEL,
       contents: prompt,
       config: {
         responseMimeType: "application/json",

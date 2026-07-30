@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
+import { GEMINI_MODEL } from "@/app/lib/gemini";
 import { prisma } from "@/app/lib/prisma";
 import { ensureUniqueMerchantSlug } from "@/app/lib/merchantSlug";
 import { generateProductEmbedding } from "@/app/lib/generateEmbeddings";
@@ -1065,7 +1066,7 @@ async function inferIntent(
   ] as const;
 
   const response = await gemini.models.generateContent({
-    model: "gemini-2.0-flash",
+    model: GEMINI_MODEL,
     contents: [
       `You are an intent parser for Rasphia WhatsApp automation (user + merchant flows).
 Pick one intent from this enum only: ${WA_INTENTS.join(", ")}.
