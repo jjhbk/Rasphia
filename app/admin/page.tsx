@@ -27,6 +27,9 @@ import {
   ChevronUp,
   Download,
   FileText,
+  BarChart3,
+  MessageSquare,
+  Clock3,
 } from "lucide-react";
 import AdminProductForm from "../components/AdminProductForm";
 import Navbar from "../components/Navbar";
@@ -134,6 +137,37 @@ type MerchantImageAsset = {
   createdAt: string;
 };
 
+type MerchantAnalyticsSummary = {
+  totals: {
+    salesToday: number;
+    salesYesterday: number;
+    salesThisMonth: number;
+    salesLastMonth: number;
+    paidOrdersToday: number;
+    paidOrdersThisMonth: number;
+  };
+  topProducts: Array<{
+    productId: string;
+    name: string;
+    unitsSold: number;
+    revenue: number;
+  }>;
+  restockItems: Array<{
+    productId: string;
+    name: string;
+    stockQuantity: number;
+    isAvailable: boolean;
+  }>;
+  activeCartUsers: Array<{
+    email: string;
+    name: string;
+    itemCount: number;
+    quantity: number;
+    updatedAt: string;
+    items: string[];
+  }>;
+};
+
 const IMAGE_PAGE_SIZE = 10;
 
 function formatBytes(bytes: number) {
@@ -172,7 +206,7 @@ function getOrderStatusClass(status: string): string {
   return "status-created";
 }
 
-type Section = "products" | "orders" | "service" | "merchants" | "images" | "bulk";
+type Section = "insights" | "products" | "orders" | "service" | "merchants" | "images" | "bulk";
 
 export default function ManagementDashboard() {
   const { status: sessionStatus } = useSession();
@@ -214,6 +248,9 @@ export default function ManagementDashboard() {
   const [isUploadingProductImage, setIsUploadingProductImage] = useState(false);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [imageCopiedId, setImageCopiedId] = useState<string | null>(null);
+  const [analytics, setAnalytics] = useState<MerchantAnalyticsSummary | null>(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<Section>("products");
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
@@ -224,7 +261,15 @@ export default function ManagementDashboard() {
 
   useEffect(() => {
     if (!access) return;
+    setActiveSection(access.access === "merchant" ? "insights" : "products");
+  }, [access]);
+
+  useEffect(() => {
+    if (!access) return;
     if (access.access === "admin" || access.access === "merchant") {
+      if (access.access === "merchant") {
+        loadAnalytics();
+      }
       loadProducts();
       loadOrders();
       loadServiceRequests();
@@ -270,6 +315,27 @@ export default function ManagementDashboard() {
       setError("Could not load products");
     } finally {
       setIsLoadingProducts(false);
+    }
+  };
+
+  const loadAnalytics = async () => {
+    try {
+      setIsLoadingAnalytics(true);
+      setAnalyticsError(null);
+      const res = await fetch("/api/merchant/analytics");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to load analytics");
+      }
+      setAnalytics((data?.summary as MerchantAnalyticsSummary) || null);
+    } catch (analyticsLoadError: unknown) {
+      const message =
+        analyticsLoadError instanceof Error
+          ? analyticsLoadError.message
+          : "Failed to load analytics";
+      setAnalyticsError(message);
+    } finally {
+      setIsLoadingAnalytics(false);
     }
   };
 
@@ -829,6 +895,23 @@ export default function ManagementDashboard() {
   }
 
   const isAdmin = access.access === "admin";
+  const analyticsTodayLabel = new Date().toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const analyticsMonthLabel = new Date().toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "long",
+  });
+  const analyticsLastMonthLabel = new Date(
+    new Date().getFullYear(),
+    new Date().getMonth() - 1,
+    1
+  ).toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "long",
+  });
 
   /* ── Sidebar nav config ── */
   type SidebarItem = {
@@ -841,6 +924,12 @@ export default function ManagementDashboard() {
   };
 
   const sidebarItems = ([
+    {
+      id: "insights" as Section,
+      label: "Insights",
+      icon: <BarChart3 className="h-4 w-4" />,
+      merchantOnly: true,
+    },
     {
       id: "products" as Section,
       label: "Products",
@@ -989,7 +1078,11 @@ export default function ManagementDashboard() {
                   highlight={pendingMerchants.length > 0}
                 />
               ) : (
-                <StatCard label="Uploaded Images" value={imageTotal} icon={<ImageIcon className="h-4 w-4 text-brand-stone" />} />
+                <StatCard
+                  label="Sales Today"
+                  value={formatCurrency(analytics?.totals.salesToday || 0)}
+                  icon={<BarChart3 className="h-4 w-4 text-brand-stone" />}
+                />
               )}
             </div>
 
@@ -1005,15 +1098,26 @@ export default function ManagementDashboard() {
                     <Link href="/merchant/storefront" className="btn btn-primary btn-sm">
                       Storefront Settings
                     </Link>
-                    <Link href="/merchant/storefront#seedhape-payments" className="btn btn-secondary btn-sm">
-                      SeedhaPe
-                    </Link>
+                    <button onClick={loadAnalytics} className="btn btn-secondary btn-sm">
+                      {isLoadingAnalytics ? "Refreshing…" : "Refresh Insights"}
+                    </button>
                   </div>
                 </div>
                 <div className="panel-body py-3">
-                  <p className="text-xs text-brand-stone">
-                    Customize your store branding, chatbot, and payment credentials.
-                  </p>
+                  <div className="space-y-2">
+                    <p className="text-xs text-brand-stone">
+                      Customize your store branding and manage orders, catalog, and merchant insights from one place.
+                    </p>
+                    <div className="rounded-2xl border border-brand-sand/40 bg-brand-parchment/40 p-3">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-stone">
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        WhatsApp Merchant Flow
+                      </div>
+                      <p className="mt-2 text-sm text-brand-charcoal">
+                        Ask naturally in WhatsApp: <span className="font-medium">total sales today</span>, <span className="font-medium">best selling items</span>, <span className="font-medium">what needs restocking</span>, or <span className="font-medium">users with active carts</span>.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -1024,6 +1128,200 @@ export default function ManagementDashboard() {
               <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
               {error}
             </div>
+          )}
+
+          {activeSection === "insights" && !isAdmin && (
+            <section className="animate-fade-up space-y-4">
+              <div className="section-header">
+                <h2 className="section-title">Merchant Insights</h2>
+                <button onClick={loadAnalytics} className="btn btn-ghost btn-sm">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Refresh
+                </button>
+              </div>
+
+              {analyticsError ? (
+                <div className="alert alert-danger">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                  {analyticsError}
+                </div>
+              ) : null}
+
+              {isLoadingAnalytics && !analytics ? (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="panel">
+                      <div className="panel-body space-y-3">
+                        <div className="skeleton h-4 w-1/3" />
+                        <div className="skeleton h-8 w-2/3" />
+                        <div className="skeleton h-3 w-full" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : analytics ? (
+                <>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="panel">
+                      <div className="panel-body">
+                        <p className="text-xs uppercase tracking-[0.18em] text-brand-stone">Today</p>
+                        <p className="mt-2 text-2xl font-semibold text-brand-charcoal">
+                          {formatCurrency(analytics.totals.salesToday)}
+                        </p>
+                        <p className="mt-1 text-sm text-brand-stone">
+                          {analytics.totals.paidOrdersToday} paid orders on {analyticsTodayLabel}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="panel">
+                      <div className="panel-body">
+                        <p className="text-xs uppercase tracking-[0.18em] text-brand-stone">This Month</p>
+                        <p className="mt-2 text-2xl font-semibold text-brand-charcoal">
+                          {formatCurrency(analytics.totals.salesThisMonth)}
+                        </p>
+                        <p className="mt-1 text-sm text-brand-stone">
+                          {analytics.totals.paidOrdersThisMonth} paid orders in {analyticsMonthLabel}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="panel">
+                      <div className="panel-body">
+                        <p className="text-xs uppercase tracking-[0.18em] text-brand-stone">Last Month</p>
+                        <p className="mt-2 text-2xl font-semibold text-brand-charcoal">
+                          {formatCurrency(analytics.totals.salesLastMonth)}
+                        </p>
+                        <p className="mt-1 text-sm text-brand-stone">
+                          {analyticsLastMonthLabel} comparison window
+                        </p>
+                      </div>
+                    </div>
+                    <div className="panel">
+                      <div className="panel-body">
+                        <p className="text-xs uppercase tracking-[0.18em] text-brand-stone">Active Carts</p>
+                        <p className="mt-2 text-2xl font-semibold text-brand-charcoal">
+                          {analytics.activeCartUsers.length}
+                        </p>
+                        <p className="mt-1 text-sm text-brand-stone">
+                          Shoppers currently holding your items
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                    <div className="panel xl:col-span-1">
+                      <div className="panel-header">
+                        <div className="flex items-center gap-2">
+                          <BarChart3 className="h-4 w-4 text-brand-sage" />
+                          <span className="text-sm font-semibold text-brand-charcoal">Best Selling Items</span>
+                        </div>
+                      </div>
+                      <div className="panel-body space-y-3">
+                        {analytics.topProducts.length ? (
+                          analytics.topProducts.slice(0, 6).map((item, index) => (
+                            <div key={`${item.productId}-${index}`} className="rounded-2xl border border-brand-sand/30 bg-white p-3">
+                              <p className="text-sm font-medium text-brand-charcoal">{item.name}</p>
+                              <p className="mt-1 text-xs text-brand-stone">
+                                {item.unitsSold} units sold · {formatCurrency(item.revenue)}
+                              </p>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-brand-stone">No paid order data yet.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="panel xl:col-span-1">
+                      <div className="panel-header">
+                        <div className="flex items-center gap-2">
+                          <Clock3 className="h-4 w-4 text-brand-mustard" />
+                          <span className="text-sm font-semibold text-brand-charcoal">Needs Restocking</span>
+                        </div>
+                      </div>
+                      <div className="panel-body space-y-3">
+                        {analytics.restockItems.length ? (
+                          analytics.restockItems.slice(0, 8).map((item) => (
+                            <div key={item.productId} className="rounded-2xl border border-brand-sand/30 bg-white p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-medium text-brand-charcoal">{item.name}</p>
+                                <span className={`badge ${item.stockQuantity <= 0 ? "badge-warning" : "badge-neutral"}`}>
+                                  Stock {item.stockQuantity}
+                                </span>
+                              </div>
+                              {!item.isAvailable ? (
+                                <p className="mt-1 text-xs text-red-700">Currently unavailable</p>
+                              ) : null}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-brand-stone">Nothing urgent right now.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="panel xl:col-span-1">
+                      <div className="panel-header">
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4 text-brand-terracotta" />
+                          <span className="text-sm font-semibold text-brand-charcoal">Users With Active Carts</span>
+                        </div>
+                      </div>
+                      <div className="panel-body space-y-3">
+                        {analytics.activeCartUsers.length ? (
+                          analytics.activeCartUsers.slice(0, 8).map((user) => (
+                            <div key={user.email} className="rounded-2xl border border-brand-sand/30 bg-white p-3">
+                              <p className="text-sm font-medium text-brand-charcoal">{user.name}</p>
+                              <p className="text-xs text-brand-stone">{user.email}</p>
+                              <p className="mt-1 text-xs text-brand-stone">
+                                {user.quantity} items · updated {new Date(user.updatedAt).toLocaleString()}
+                              </p>
+                              {user.items.length ? (
+                                <p className="mt-1 text-xs text-brand-stone">
+                                  {user.items.join(", ")}
+                                </p>
+                              ) : null}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-brand-stone">No active carts found for your catalog yet.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="panel">
+                    <div className="panel-header">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="h-4 w-4 text-brand-terracotta" />
+                        <span className="text-sm font-semibold text-brand-charcoal">WhatsApp Merchant Commands</span>
+                      </div>
+                    </div>
+                    <div className="panel-body grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {[
+                        "total sales today",
+                        "total sales last month",
+                        "best selling items",
+                        "what needs restocking",
+                        "users with active carts",
+                        "active orders",
+                      ].map((command) => (
+                        <div key={command} className="rounded-2xl border border-brand-sand/30 bg-white px-4 py-3 text-sm text-brand-charcoal">
+                          {command}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="panel">
+                  <div className="empty-state">
+                    <BarChart3 className="empty-state-icon" />
+                    <p className="empty-state-text">Insights will appear here once your store has products, carts, or orders.</p>
+                  </div>
+                </div>
+              )}
+            </section>
           )}
 
           {/* ── Products Section ── */}
@@ -1897,7 +2195,7 @@ function StatCard({
   highlight,
 }: {
   label: string;
-  value: number;
+  value: React.ReactNode;
   icon: React.ReactNode;
   highlight?: boolean;
 }) {

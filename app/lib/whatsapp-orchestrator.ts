@@ -22,6 +22,7 @@ import {
   createRazorpayPaymentLinkWithConfig,
   getRazorpayPaymentLinkWithConfig,
 } from "@/app/lib/razorpay";
+import { getMerchantAnalyticsSummary } from "@/app/lib/merchant-analytics";
 
 const geminiApiKey =
   process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "";
@@ -51,6 +52,7 @@ export const WA_INTENTS = [
   "order_query_active",
   "order_update_status",
   "merchant_bulk_upload_help",
+  "merchant_analytics_query",
   "help",
   "unknown",
 ] as const;
@@ -233,6 +235,7 @@ const REQUIRED_BY_INTENT: Record<WaIntent, string[]> = {
   order_query_active: [],
   order_update_status: ["orderId", "status"],
   merchant_bulk_upload_help: [],
+  merchant_analytics_query: [],
   help: [],
   unknown: [],
 };
@@ -258,6 +261,7 @@ const OPTIONAL_BY_INTENT: Partial<Record<WaIntent, string[]>> = {
   product_update: ["price", "stockQuantity", "category", "brand", "description", "imageUrl"],
   merchant_storefront_update: ["storeName", "logoUrl", "coverImageUrl"],
   stock_query: ["productName"],
+  merchant_analytics_query: ["analyticsQuery"],
 };
 
 const FIELD_PROMPTS: Record<string, string> = {
@@ -298,6 +302,8 @@ const FIELD_PROMPTS: Record<string, string> = {
   details: "Optionally share extra details for this request.",
   merchantSlug: "Share merchant slug to continue in that merchant chat context.",
   activeOnly: "Set activeOnly=true to fetch active orders only.",
+  analyticsQuery:
+    "Ask about sales, best sellers, low stock, or users with active carts.",
   status:
     "Please share the target status (created, paid, Processing, Shipped, Delivered, Cancelled, Refunded, Replacement).",
 };
@@ -332,6 +338,7 @@ function prettyFieldName(field: string) {
     details: "Details",
     merchantSlug: "Merchant Slug",
     activeOnly: "Active Orders Only",
+    analyticsQuery: "Analytics Query",
   };
   return labels[field] || `${field.charAt(0).toUpperCase()}${field.slice(1)}`;
 }
@@ -424,7 +431,12 @@ function buildUnclearIntentTemplate(merchantStatus?: string) {
     "5) Orders",
     "Example: Active orders",
     "Example: Update order status orderId=ORD123 status=Shipped",
-    "6) Bulk product import (CSV)",
+    "6) Business insights",
+    "Example: total sales today",
+    "Example: best selling items",
+    "Example: what needs restocking",
+    "Example: users with active carts",
+    "7) Bulk product import (CSV)",
     "Example: bulk upload help",
     "",
     "Notes:",
@@ -513,29 +525,47 @@ function buildInitialUsageInstructions(args: {
 function buildRoleSpecificQuickGuide(role: "merchant" | "user") {
   if (role === "merchant") {
     return [
-      "*Merchant Quick Guide*",
-      "1) Add product: add product name=... category=... price=... stockQuantity=...",
-      "2) Update product: update product productName=... price=... stockQuantity=...",
-      "3) Check stock: stock query <product name>",
-      "4) Active orders: active orders",
-      "5) Update order: update order status orderId=... status=Shipped",
-      "6) Bulk CSV help: bulk upload help",
-      "7) Storefront settings: update storefront storeName=... logoUrl=https://... coverImageUrl=https://...",
-      "8) Restart chat: clear context",
-      "9) Switch role: switch to user",
+      "*Merchant Command Center*",
+      "Catalog",
+      "- Add product: add product name=... category=... price=... stockQuantity=...",
+      "- Update product: update product productName=... price=... stockQuantity=...",
+      "- Check stock: stock query <product name>",
+      "",
+      "Orders",
+      "- See active orders: active orders",
+      "- Update an order: update order status orderId=... status=Shipped",
+      "",
+      "Business insights",
+      "- total sales today",
+      "- total sales last month",
+      "- best selling items",
+      "- what needs restocking",
+      "- users with active carts",
+      "",
+      "Setup",
+      "- Storefront settings: update storefront storeName=... logoUrl=https://... coverImageUrl=https://...",
+      "- Bulk CSV help: bulk upload help",
+      "- Restart chat: clear context",
+      "- Switch role: switch to user",
     ].join("\n");
   }
 
   return [
-    "*User Quick Guide*",
-    "1) Register: register userName=... userEmail=...",
-    "2) Discover: discover products query=... maxPrice=...",
-    "3) Buy: buy productName=... quantity=... shippingAddress=... paymentRail=razorpay",
-    "4) My orders: my orders",
-    "5) Track one: track order orderId=...",
-    "6) Service request: refund/replacement/cancel orderId=... reason=...",
-    "7) Restart chat: clear context",
-    "8) Switch role: switch to merchant",
+    "*Shopping Quick Guide*",
+    "Start",
+    "- Register: register userName=... userEmail=...",
+    "- Discover: discover products query=... maxPrice=...",
+    "- Enter a merchant shop: shop <merchant-slug>",
+    "",
+    "Buy and track",
+    "- Buy: buy productName=... quantity=... shippingAddress=... paymentRail=razorpay",
+    "- My orders: my orders",
+    "- Track one: track order orderId=...",
+    "",
+    "Support",
+    "- Service request: refund/replacement/cancel orderId=... reason=...",
+    "- Restart chat: clear context",
+    "- Switch role: switch to merchant",
   ].join("\n");
 }
 
@@ -719,7 +749,7 @@ function missingRequired(intent: WaIntent, draft: Record<string, unknown>) {
   let required = REQUIRED_BY_INTENT[intent] || [];
   if (intent === "user_order_create") {
     const rail = normalizePaymentRail(draft.paymentRail);
-    if (rail.startsWith("x402")) {
+    if (rail.startsWith("x402") || rail.startsWith("razorpay")) {
       required = required.filter((field) => field !== "upiVerifiedName");
     }
   }
@@ -954,6 +984,22 @@ function fallbackIntent(message: string): IntentParse {
   if (text.includes("wishlist")) {
     return { intent: "user_wishlist_add", fields: {} };
   }
+  if (
+    (text.includes("sales") && (text.includes("today") || text.includes("month") || text.includes("revenue"))) ||
+    text.includes("best selling") ||
+    text.includes("best-selling") ||
+    text.includes("top selling") ||
+    text.includes("restock") ||
+    text.includes("low stock") ||
+    text.includes("active carts") ||
+    text.includes("active cart") ||
+    text.includes("abandoned cart")
+  ) {
+    return {
+      intent: "merchant_analytics_query",
+      fields: { analyticsQuery: message.trim() },
+    };
+  }
   if (text.includes("discover merchant") || text.includes("find merchant")) {
     return { intent: "user_discover_merchants", fields: {} };
   }
@@ -1063,6 +1109,7 @@ async function inferIntent(
     "orderId",
     "merchantSlug",
     "activeOnly",
+    "analyticsQuery",
     "reason",
     "details",
     "status",
@@ -1118,6 +1165,7 @@ Return strict JSON with shape:
     "orderId": string|null,
     "merchantSlug": string|null,
     "activeOnly": boolean|null,
+    "analyticsQuery": string|null,
     "reason": string|null,
     "details": string|null,
     "status": string|null
@@ -1162,6 +1210,124 @@ function parseStringArray(input: unknown) {
   return input
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter((item) => item.length > 0);
+}
+
+async function buildWhatsAppPaymentConfirmationReply(args: {
+  orderId: string;
+  invoiceWarning?: string | null;
+}) {
+  const order = await prisma.order.findUnique({
+    where: { orderId: args.orderId },
+    select: {
+      orderId: true,
+      status: true,
+      amount: true,
+      currency: true,
+      verifiedAt: true,
+      invoiceNumber: true,
+      invoicePdfUrl: true,
+      invoiceSyncStatus: true,
+      customer: true,
+      products: true,
+    },
+  });
+
+  if (!order) {
+    return `Payment confirmed for ${args.orderId}.`;
+  }
+
+  const customer = (order.customer || {}) as {
+    email?: string;
+  };
+  const productSummary = Array.isArray(order.products)
+    ? (order.products as Array<{ name?: string; quantity?: number }>)
+        .map((item) => `${String(item.name || "Item")} x${Math.max(1, Number(item.quantity || 1))}`)
+        .join(", ")
+    : "";
+
+  const lines = [
+    `Payment confirmed for ${order.orderId}.`,
+    `Order status: ${String(order.status || "paid").toUpperCase()}`,
+    `Amount: ${formatInr(Number(order.amount || 0))}`,
+    ...(productSummary ? [`Items: ${productSummary}`] : []),
+    ...(order.verifiedAt
+      ? [`Verified at: ${new Date(order.verifiedAt).toLocaleString("en-IN")}`]
+      : []),
+  ];
+
+  if (args.invoiceWarning) {
+    lines.push(args.invoiceWarning);
+    lines.push("Invoice status: generation or email failed. Please contact support if needed.");
+    return lines.join("\n");
+  }
+
+  if (order.invoiceNumber) {
+    lines.push(`Invoice status: generated (${order.invoiceNumber})`);
+    if (customer.email) {
+      lines.push(`Invoice email: sent to ${customer.email}`);
+    }
+    if (order.invoicePdfUrl) {
+      lines.push("Invoice:");
+      lines.push(order.invoicePdfUrl);
+    }
+    return lines.join("\n");
+  }
+
+  lines.push(
+    order.invoiceSyncStatus
+      ? `Invoice status: ${order.invoiceSyncStatus}`
+      : "Invoice status: pending"
+  );
+  return lines.join("\n");
+}
+
+function formatInr(amount: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(Number(amount || 0));
+}
+
+function detectMerchantAnalyticsTopic(text: string) {
+  const normalized = String(text || "").trim().toLowerCase();
+  if (!normalized) return "overview" as const;
+  if (
+    normalized.includes("best selling") ||
+    normalized.includes("best-selling") ||
+    normalized.includes("top selling") ||
+    normalized.includes("top products")
+  ) {
+    return "best_sellers" as const;
+  }
+  if (
+    normalized.includes("restock") ||
+    normalized.includes("low stock") ||
+    normalized.includes("out of stock")
+  ) {
+    return "restock" as const;
+  }
+  if (
+    normalized.includes("active carts") ||
+    normalized.includes("active cart") ||
+    normalized.includes("abandoned cart")
+  ) {
+    return "active_carts" as const;
+  }
+  if (normalized.includes("last month")) {
+    return "sales_last_month" as const;
+  }
+  if (normalized.includes("this month")) {
+    return "sales_this_month" as const;
+  }
+  if (normalized.includes("yesterday")) {
+    return "sales_yesterday" as const;
+  }
+  if (normalized.includes("today")) {
+    return "sales_today" as const;
+  }
+  return "overview" as const;
 }
 
 async function handleUserRegister(phone: string, draft: Record<string, unknown>) {
@@ -2223,6 +2389,8 @@ async function handleUserOrderCreate(
           source: "whatsapp",
           merchantId,
           customerEmail: user.email,
+          customerPhone: customerPhone || "",
+          shippingAddress,
           productId: product.id,
           quantity: String(quantity),
           productName: product.name,
@@ -2526,7 +2694,7 @@ async function handleUserPaymentConfirm(
 
     return {
       done: true,
-      reply: `x402 payment confirmed for ${orderId}. Your order is now marked paid.`,
+      reply: await buildWhatsAppPaymentConfirmationReply({ orderId }),
       nextIntent: undefined,
       nextDraft: {},
     };
@@ -2557,7 +2725,7 @@ async function handleUserPaymentConfirm(
       };
     }
 
-    await finalizeOrderAsPaid({
+    const result = await finalizeOrderAsPaid({
       orderId,
       paymentId: order.paymentId || `razorpay_link_${orderId}`,
       by: user.email,
@@ -2567,7 +2735,10 @@ async function handleUserPaymentConfirm(
 
     return {
       done: true,
-      reply: `Payment confirmed for ${orderId}. Your order is now marked paid.`,
+      reply: await buildWhatsAppPaymentConfirmationReply({
+        orderId,
+        invoiceWarning: result.invoiceWarning,
+      }),
       nextIntent: undefined,
       nextDraft: {},
     };
@@ -2595,7 +2766,7 @@ async function handleUserPaymentConfirm(
     };
   }
 
-  await finalizeOrderAsPaid({
+  const result = await finalizeOrderAsPaid({
     orderId,
     paymentId: order.paymentId || `seedhape_${orderId}`,
     by: user.email,
@@ -2607,7 +2778,10 @@ async function handleUserPaymentConfirm(
 
   return {
     done: true,
-    reply: `Payment confirmed for ${orderId}. Your order is now marked paid.`,
+    reply: await buildWhatsAppPaymentConfirmationReply({
+      orderId,
+      invoiceWarning: result.invoiceWarning,
+    }),
     nextIntent: undefined,
     nextDraft: {},
   };
@@ -3542,6 +3716,162 @@ async function handleOrderUpdateStatus(
   };
 }
 
+async function handleMerchantAnalyticsQuery(
+  merchant: { id: string; email: string; status: string },
+  draft: Record<string, unknown>,
+  rawText: string
+) {
+  if (merchant.status !== "approved") {
+    return {
+      done: true,
+      reply:
+        "Your merchant account is pending approval. Business insights will be enabled once approved.",
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  const summary = await getMerchantAnalyticsSummary({
+    merchantId: merchant.id,
+    merchantEmail: merchant.email,
+  });
+  const topic = detectMerchantAnalyticsTopic(
+    String(draft.analyticsQuery || rawText || "").trim()
+  );
+  const now = new Date();
+  const todayLabel = now.toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const thisMonthLabel = now.toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "long",
+  });
+  const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthLabel = lastMonthDate.toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "long",
+  });
+
+  if (topic === "sales_today") {
+    return {
+      done: true,
+      reply: [
+        `Sales today (${todayLabel})`,
+        `Revenue: ${formatInr(summary.totals.salesToday)}`,
+        `Paid orders: ${summary.totals.paidOrdersToday}`,
+        `Yesterday: ${formatInr(summary.totals.salesYesterday)}`,
+      ].join("\n"),
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  if (topic === "sales_this_month") {
+    return {
+      done: true,
+      reply: [
+        `Sales this month (${thisMonthLabel})`,
+        `Revenue: ${formatInr(summary.totals.salesThisMonth)}`,
+        `Paid orders: ${summary.totals.paidOrdersThisMonth}`,
+      ].join("\n"),
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  if (topic === "sales_last_month" || topic === "sales_yesterday") {
+    return {
+      done: true,
+      reply:
+        topic === "sales_yesterday"
+          ? [
+              `Sales yesterday`,
+              `Revenue: ${formatInr(summary.totals.salesYesterday)}`,
+              `Today so far (${todayLabel}): ${formatInr(summary.totals.salesToday)}`,
+            ].join("\n")
+          : [
+              `Sales last month (${lastMonthLabel})`,
+              `Revenue: ${formatInr(summary.totals.salesLastMonth)}`,
+              `This month so far (${thisMonthLabel}): ${formatInr(summary.totals.salesThisMonth)}`,
+            ].join("\n"),
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  if (topic === "best_sellers") {
+    const lines = summary.topProducts.length
+      ? summary.topProducts
+          .slice(0, 5)
+          .map(
+            (item, index) =>
+              `${index + 1}) ${item.name}: ${item.unitsSold} units, ${formatInr(item.revenue)}`
+          )
+      : ["No paid order data yet."];
+    return {
+      done: true,
+      reply: [`Best selling items`, ...lines].join("\n"),
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  if (topic === "restock") {
+    const lines = summary.restockItems.length
+      ? summary.restockItems
+          .slice(0, 8)
+          .map(
+            (item, index) =>
+              `${index + 1}) ${item.name}: stock ${item.stockQuantity}${item.isAvailable ? "" : " (unavailable)"}`
+          )
+      : ["No low-stock items right now."];
+    return {
+      done: true,
+      reply: [`Items that need restocking`, ...lines].join("\n"),
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  if (topic === "active_carts") {
+    const lines = summary.activeCartUsers.length
+      ? summary.activeCartUsers.slice(0, 8).map((user, index) => {
+          const itemList = user.items.length ? ` - ${user.items.join(", ")}` : "";
+          return `${index + 1}) ${user.name} (${user.email}): ${user.quantity} items${itemList}`;
+        })
+      : ["No active carts found for your catalog right now."];
+    return {
+      done: true,
+      reply: [`Users with active carts`, ...lines].join("\n"),
+      nextIntent: undefined,
+      nextDraft: {},
+    };
+  }
+
+  return {
+    done: true,
+    reply: [
+      `Business snapshot`,
+      `Today (${todayLabel}): ${formatInr(summary.totals.salesToday)} from ${summary.totals.paidOrdersToday} paid orders`,
+      `This month (${thisMonthLabel}): ${formatInr(summary.totals.salesThisMonth)}`,
+      `Last month (${lastMonthLabel}): ${formatInr(summary.totals.salesLastMonth)}`,
+      summary.topProducts[0]
+        ? `Top item: ${summary.topProducts[0].name} (${summary.topProducts[0].unitsSold} units)`
+        : `Top item: No paid orders yet`,
+      summary.restockItems[0]
+        ? `Needs restock: ${summary.restockItems[0].name} (stock ${summary.restockItems[0].stockQuantity})`
+        : `Needs restock: Nothing urgent`,
+      `Active carts: ${summary.activeCartUsers.length}`,
+      "",
+      `You can also ask: total sales today, total sales last month, best selling items, what needs restocking, users with active carts.`,
+    ].join("\n"),
+    nextIntent: undefined,
+    nextDraft: {},
+  };
+}
+
 export async function processMerchantWhatsAppMessage(input: {
   fromPhone: string;
   recipientPhone?: string;
@@ -3931,6 +4261,7 @@ export async function processMerchantWhatsAppMessage(input: {
     "order_query_active",
     "order_update_status",
     "merchant_bulk_upload_help",
+    "merchant_analytics_query",
   ]);
   const userIntents = new Set<WaIntent>([
     "user_register",
@@ -3961,7 +4292,12 @@ export async function processMerchantWhatsAppMessage(input: {
     /\bbanner\b/.test(lowerInbound) ||
     /\border\s+update\b/.test(lowerInbound) ||
     /\bactive orders\b/.test(lowerInbound) ||
-    /\bupload\b/.test(lowerInbound);
+    /\bupload\b/.test(lowerInbound) ||
+    /\bsales\b/.test(lowerInbound) ||
+    /\brevenue\b/.test(lowerInbound) ||
+    /\bbest selling\b/.test(lowerInbound) ||
+    /\brestock\b/.test(lowerInbound) ||
+    /\bactive carts?\b/.test(lowerInbound);
   const asksUserRole =
     /\buser\b/.test(lowerInbound) ||
     /\bwishlist\b/.test(lowerInbound) ||
@@ -4327,6 +4663,18 @@ export async function processMerchantWhatsAppMessage(input: {
       };
     } else {
       result = await handleMerchantBulkUploadHelp(merchant);
+    }
+  } else if (intent === "merchant_analytics_query") {
+    if (!merchant) {
+      result = {
+        done: false,
+        reply:
+          "Merchant profile not found for this number. Share businessName and email to register merchant.",
+        nextIntent: "merchant_register",
+        nextDraft: draft,
+      };
+    } else {
+      result = await handleMerchantAnalyticsQuery(merchant, draft, inboundContextText);
     }
   } else if (intent === "merchant_storefront_update") {
     if (!merchant) {
