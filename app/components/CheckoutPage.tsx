@@ -70,6 +70,24 @@ interface CheckoutPageProps {
   onCancel: () => void;
 }
 
+function buildCustomerFromProfile(user: UserProfile): CheckoutCustomer {
+  const primaryAddress = Array.isArray(user.addressBook) && user.addressBook.length > 0
+    ? user.addressBook[0]
+    : null;
+
+  return {
+    name: user.name || "",
+    email: user.email || "",
+    phone: user.phone || "",
+    address: primaryAddress?.address || "",
+    addressLine1: primaryAddress?.addressLine1 || "",
+    addressLine2: primaryAddress?.addressLine2 || "",
+    city: primaryAddress?.city || "",
+    state: primaryAddress?.state || "",
+    zipCode: primaryAddress?.zipCode || "",
+  };
+}
+
 const CheckoutPage: React.FC<CheckoutPageProps> = ({
   products,
   user,
@@ -123,17 +141,9 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const totalAmount = subtotal + SHIPPING_COST;
 
   useEffect(() => {
-    setCustomer({
-      name: user.name || "",
-      email: user.email || "",
-      phone: user.phone || "",
-      address: user.address || "",
-      addressLine1: "",
-      addressLine2: "",
-      city: "",
-      state: "",
-      zipCode: "",
-    });
+    const profileCustomer = buildCustomerFromProfile(user);
+    setCustomer(profileCustomer);
+    setSelectedSavedAddress(profileCustomer.address || "");
     const initialQuantities: Record<string, number> = {};
     products.forEach((p, idx) => {
       initialQuantities[`${p._id || p.name}-${idx}`] = 1;
@@ -144,6 +154,9 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setCustomer((prev) => ({ ...prev, [name]: value }));
+    if (selectedSavedAddress) {
+      setSelectedSavedAddress("");
+    }
     if (formError) setFormError(null);
   };
 

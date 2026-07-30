@@ -41,6 +41,19 @@ function isAllowedStatus(value: string): value is OrderStatus {
   ].includes(value);
 }
 
+function normalizeOrderIdentifiers<T extends { id: string; orderId: string; receipt: string | null }>(
+  order: T
+) {
+  return {
+    ...order,
+    // Preserve existing consumers while exposing explicit ids.
+    id: order.orderId,
+    internalOrderId: order.id,
+    providerOrderId: order.orderId,
+    appOrderId: order.receipt,
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const access = await getManagementAccessFromRequest(req);
@@ -49,7 +62,7 @@ export async function GET(req: NextRequest) {
       const orders = await prisma.order.findMany({
         orderBy: { createdAt: "desc" },
       });
-      return NextResponse.json(orders, { status: 200 });
+      return NextResponse.json(orders.map(normalizeOrderIdentifiers), { status: 200 });
     }
 
     const merchantProducts = await prisma.product.findMany({
@@ -77,7 +90,7 @@ export async function GET(req: NextRequest) {
       canMerchantManageOrder(productIds, productNames, order.products)
     );
 
-    return NextResponse.json(filtered, { status: 200 });
+    return NextResponse.json(filtered.map(normalizeOrderIdentifiers), { status: 200 });
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : "Failed to fetch orders";

@@ -48,6 +48,9 @@ type AccessResponse = {
 
 type ManagementOrder = {
   id: string;
+  internalOrderId?: string | null;
+  providerOrderId?: string | null;
+  appOrderId?: string | null;
   status: string;
   amount?: number;
   currency?: string;
@@ -1674,6 +1677,12 @@ export default function ManagementDashboard() {
                                           </p>
                                           <p className="text-sm text-brand-charcoal">
                                             Provider: {o.customer?.paymentProvider || o.mode || "—"}
+                                          </p>
+                                          <p className="text-sm text-brand-stone">
+                                            Provider Order: {o.providerOrderId || o.id || "—"}
+                                          </p>
+                                          <p className="text-sm text-brand-stone">
+                                            App Ref: {o.appOrderId || o.receipt || "—"}
                                           </p>
                                           <p className="text-sm text-brand-stone">Payment ID: {o.paymentId || "—"}</p>
                                           <p className="text-sm text-brand-stone">Receipt: {o.receipt || "—"}</p>

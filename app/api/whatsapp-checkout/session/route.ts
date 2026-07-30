@@ -144,10 +144,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Checkout session not found." }, { status: 404 });
     }
 
-    const customer =
-      order.customer && typeof order.customer === "object" && !Array.isArray(order.customer)
-        ? (order.customer as Record<string, unknown>)
-        : {};
     const profile = await prisma.userProfile.findUnique({
       where: { email: payload.email.toLowerCase() },
       select: {
@@ -184,21 +180,15 @@ export async function GET(req: NextRequest) {
         quantity: Math.max(1, Number(item.quantity || 1)),
       })),
       customer: {
-        name: String(profile?.name || customer.name || "").trim(),
+        name: String(profile?.name || "").trim(),
         email: payload.email.toLowerCase(),
-        phone: String(profile?.phone || customer.phone || "").trim(),
-        address: String(
-          preferredAddressBookEntry?.address || profile?.address || customer.address || ""
-        ).trim(),
-        addressLine1: String(
-          preferredAddressBookEntry?.addressLine1 || customer.addressLine1 || ""
-        ).trim(),
-        addressLine2: String(
-          preferredAddressBookEntry?.addressLine2 || customer.addressLine2 || ""
-        ).trim(),
-        city: String(preferredAddressBookEntry?.city || customer.city || "").trim(),
-        state: String(preferredAddressBookEntry?.state || customer.state || "").trim(),
-        zipCode: String(preferredAddressBookEntry?.zipCode || customer.zipCode || "").trim(),
+        phone: String(profile?.phone || "").trim(),
+        address: String(preferredAddressBookEntry?.address || "").trim(),
+        addressLine1: String(preferredAddressBookEntry?.addressLine1 || "").trim(),
+        addressLine2: String(preferredAddressBookEntry?.addressLine2 || "").trim(),
+        city: String(preferredAddressBookEntry?.city || "").trim(),
+        state: String(preferredAddressBookEntry?.state || "").trim(),
+        zipCode: String(preferredAddressBookEntry?.zipCode || "").trim(),
       },
       savedAddresses,
       invoice: {
@@ -288,10 +278,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Checkout session not found." }, { status: 404 });
     }
 
-    const existingCustomer =
-      order.customer && typeof order.customer === "object" && !Array.isArray(order.customer)
-        ? (order.customer as Record<string, unknown>)
-        : {};
     const profile = await prisma.userProfile.findUnique({
       where: { email: payload.email.toLowerCase() },
       select: {
@@ -337,29 +323,21 @@ export async function POST(req: NextRequest) {
     }
 
     const customer: CustomerPayload = {
-      name: String(body.customer?.name || profile?.name || existingCustomer.name || "").trim(),
+      name: String(body.customer?.name || profile?.name || "").trim(),
       email: String(body.customer?.email || payload.email || "").trim().toLowerCase(),
-      phone: String(body.customer?.phone || profile?.phone || existingCustomer.phone || "").trim(),
+      phone: String(body.customer?.phone || profile?.phone || "").trim(),
       addressLine1: String(
-        body.customer?.addressLine1 ||
-          preferredAddressBookEntry?.addressLine1 ||
-          existingCustomer.addressLine1 ||
-          ""
+        body.customer?.addressLine1 || preferredAddressBookEntry?.addressLine1 || ""
       ).trim(),
       addressLine2: String(
-        body.customer?.addressLine2 ||
-          preferredAddressBookEntry?.addressLine2 ||
-          existingCustomer.addressLine2 ||
-          ""
+        body.customer?.addressLine2 || preferredAddressBookEntry?.addressLine2 || ""
       ).trim(),
-      city: String(body.customer?.city || preferredAddressBookEntry?.city || existingCustomer.city || "").trim(),
-      state: String(body.customer?.state || preferredAddressBookEntry?.state || existingCustomer.state || "").trim(),
-      zipCode: String(
-        body.customer?.zipCode || preferredAddressBookEntry?.zipCode || existingCustomer.zipCode || ""
-      ).trim(),
+      city: String(body.customer?.city || preferredAddressBookEntry?.city || "").trim(),
+      state: String(body.customer?.state || preferredAddressBookEntry?.state || "").trim(),
+      zipCode: String(body.customer?.zipCode || preferredAddressBookEntry?.zipCode || "").trim(),
     };
     customer.address =
-      String(body.customer?.address || preferredAddressBookEntry?.address || profile?.address || "").trim() ||
+      String(body.customer?.address || preferredAddressBookEntry?.address || "").trim() ||
       buildAddress(customer);
 
     const validationError = validateCustomer(customer);
@@ -429,7 +407,6 @@ export async function POST(req: NextRequest) {
           },
         ],
         customer: {
-          ...existingCustomer,
           name: customer.name,
           email: customer.email,
           phone: customer.phone,

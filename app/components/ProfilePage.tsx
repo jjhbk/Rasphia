@@ -103,7 +103,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
 
         const normalizedOrders: Order[] = (ordersData || []).map((o: any) => ({
           ...o,
-          id: o.orderId ?? o.order_id ?? o.id ?? o._id,
+          id: o.providerOrderId ?? o.orderId ?? o.order_id ?? o.id ?? o._id,
+          internalOrderId: o.internalOrderId ?? null,
+          providerOrderId: o.providerOrderId ?? o.orderId ?? o.order_id ?? o.id ?? o._id,
+          appOrderId: o.appOrderId ?? o.receipt ?? null,
           products: Array.isArray(o.products)
             ? o.products
             : o.product
@@ -455,7 +458,14 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             </h3>
                             <OrderStatusBadge status={order.status} />
                           </div>
-                          <p className="text-[10px] text-brand-stone/50 font-mono">#{order.id}</p>
+                          <p className="text-[10px] text-brand-stone/50 font-mono">
+                            Provider #{order.id}
+                          </p>
+                          {(order as any).appOrderId ? (
+                            <p className="text-[10px] text-brand-stone/50 font-mono">
+                              App Ref #{(order as any).appOrderId}
+                            </p>
+                          ) : null}
                           {(trackingNumber || shippingProvider || estimatedDelivery) && (
                             <div className="mt-1.5 text-xs text-brand-stone/70 space-y-0.5">
                               {shippingProvider && <p>Carrier: {shippingProvider}</p>}
