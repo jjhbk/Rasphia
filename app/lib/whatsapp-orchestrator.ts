@@ -265,47 +265,47 @@ const OPTIONAL_BY_INTENT: Partial<Record<WaIntent, string[]>> = {
 };
 
 const FIELD_PROMPTS: Record<string, string> = {
-  userName: "Please share your name.",
-  userEmail: "Please share your email address.",
-  personaText: "Please share your persona/preferences in one line.",
+  userName: "Next step: send your name.",
+  userEmail: "Next step: send your email address.",
+  personaText: "Next step: describe your preferences in one line.",
   personaTags: "Optionally share persona tags separated by commas.",
-  query: "Please share what you want to discover.",
+  query: "Next step: tell me what you want to find.",
   quantity: "Optionally share quantity (default is 1).",
   upiVerifiedName:
-    "Please share your UPI verified name exactly as shown in your UPI app.",
+    "Next step: send your UPI verified name exactly as shown in your UPI app.",
   shippingAddress:
-    "Please share your full delivery address for this order.",
+    "Next step: send your full delivery address.",
   addressChoice:
-    "Select a saved address by number (for example: addressOption=1), or share shippingAddress=...",
+    "Next step: choose a saved address by number, for example addressOption=1, or send shippingAddress=...",
   paymentRail:
     "Optional payment rail: paymentRail=razorpay (default), paymentRail=seedhape, or paymentRail=x402.",
   maxPrice: "Optionally share a max price.",
   tag: "Optionally share a tag (for example: gift, decor, skincare).",
-  businessName: "Please share your business name.",
-  email: "Please share your business email address.",
-  addressLine1: "Please share address line 1.",
-  addressLine2: "Please share address line 2.",
-  city: "Please share your city.",
-  state: "Please share your state.",
-  zipCode: "Please share your ZIP/postal code.",
+  businessName: "Next step: send your business name.",
+  email: "Next step: send your business email address.",
+  addressLine1: "Next step: send address line 1.",
+  addressLine2: "Next step: send address line 2.",
+  city: "Next step: send your city.",
+  state: "Next step: send your state.",
+  zipCode: "Next step: send your ZIP or postal code.",
   locationLink: "Optionally share your Google Maps location link.",
-  storeName: "Please share your storefront display name.",
-  logoUrl: "Please share the storefront logo image URL.",
-  coverImageUrl: "Please share the storefront cover image URL.",
-  name: "Please share the product name.",
-  category: "Please share the product category.",
-  price: "Please share the product price.",
-  stockQuantity: "Please share stock quantity (number).",
-  productName: "Please share the product name.",
-  orderId: "Please share the order ID.",
-  reason: "Please share the reason for this request.",
+  storeName: "Next step: send your storefront display name.",
+  logoUrl: "Next step: send the storefront logo URL.",
+  coverImageUrl: "Next step: send the storefront cover image URL.",
+  name: "Next step: send the product name.",
+  category: "Next step: send the product category.",
+  price: "Next step: send the product price.",
+  stockQuantity: "Next step: send stock quantity.",
+  productName: "Next step: send the product name.",
+  orderId: "Next step: send the order ID.",
+  reason: "Next step: send the reason.",
   details: "Optionally share extra details for this request.",
   merchantSlug: "Share merchant slug to continue in that merchant chat context.",
   activeOnly: "Set activeOnly=true to fetch active orders only.",
   analyticsQuery:
     "Ask about sales, best sellers, low stock, or users with active carts.",
   status:
-    "Please share the target status (created, paid, Processing, Shipped, Delivered, Cancelled, Refunded, Replacement).",
+    "Next step: send the target status: created, paid, Processing, Shipped, Delivered, Cancelled, Refunded, or Replacement.",
 };
 
 function prettyFieldName(field: string) {
@@ -363,11 +363,18 @@ function buildIntentChecklist(intent: WaIntent, draft: Record<string, unknown>) 
     return filled ? "[x]" : "[ ]";
   };
 
+  const requiredLines = required.map(
+    (field) => `${mark(field)} ${prettyFieldName(field)}`
+  );
+  const optionalLines = optional
+    .filter((field) => !required.includes(field))
+    .map((field) => `${mark(field)} ${prettyFieldName(field)} (optional)`);
+
   return [
     "",
-    "Checklist:",
-    ...required.map((field) => `- ${mark(field)} ${prettyFieldName(field)} (required)`),
-    ...optional.map((field) => `- ${mark(field)} ${prettyFieldName(field)} (optional)`),
+    "Needed now:",
+    ...requiredLines,
+    ...(optionalLines.length ? ["", "Optional:", ...optionalLines] : []),
   ].join("\n");
 }
 
@@ -525,48 +532,34 @@ function buildInitialUsageInstructions(args: {
 function buildRoleSpecificQuickGuide(role: "merchant" | "user") {
   if (role === "merchant") {
     return [
-      "*Merchant Command Center*",
-      "Catalog",
-      "- Add product: add product name=... category=... price=... stockQuantity=...",
-      "- Update product: update product productName=... price=... stockQuantity=...",
-      "- Check stock: stock query <product name>",
+      "*Merchant*",
+      "Choose one:",
+      "1) add product",
+      "2) active orders",
+      "3) stock query <product name>",
+      "4) total sales today",
+      "5) best selling items",
       "",
-      "Orders",
-      "- See active orders: active orders",
-      "- Update an order: update order status orderId=... status=Shipped",
-      "",
-      "Business insights",
-      "- total sales today",
-      "- total sales last month",
-      "- best selling items",
-      "- what needs restocking",
-      "- users with active carts",
-      "",
-      "Setup",
-      "- Storefront settings: update storefront storeName=... logoUrl=https://... coverImageUrl=https://...",
-      "- Bulk CSV help: bulk upload help",
-      "- Restart chat: clear context",
-      "- Switch role: switch to user",
+      "Examples:",
+      "add product name=Canvas Lamp category=home price=1499 stockQuantity=20",
+      "update order status orderId=ORD123 status=Shipped",
+      "update storefront storeName=Acme Decor",
     ].join("\n");
   }
 
   return [
-    "*Shopping Quick Guide*",
-    "Start",
-    "- Register: register userName=... userEmail=...",
-    "- Discover: discover products query=... maxPrice=...",
-    "- Enter a merchant shop: shop <merchant-slug>",
+    "*Shopping*",
+    "Choose one:",
+    "1) discover products",
+    "2) buy a product",
+    "3) my orders",
+    "4) refund or replacement",
     "",
-    "Buy and track",
-    "- Buy: buy productName=... quantity=... shippingAddress=... paymentRail=razorpay",
-    "- My orders: my orders",
-    "- Track one: track order orderId=...",
-    "",
-    "Support",
-    "- Service request: refund/replacement/cancel orderId=... reason=...",
-    "- Restart chat: clear context",
-    "- Switch role: switch to merchant",
-  ].join("\n");
+    "Examples:",
+    "discover products query=gift under 1500",
+    "buy productName=Canvas Lamp quantity=1 shippingAddress=Flat 4B, MG Road, Hyderabad, Telangana, 500001",
+    "confirm payment orderId=<orderId>",
+    ].join("\n");
 }
 
 function normalizePhone(input: string) {
@@ -2266,22 +2259,21 @@ async function handleUserOrderCreate(
       ? [
           "Saved addresses:",
           ...savedAddresses.map((addr, idx) => `${idx + 1}) ${addr}`),
-          "Select one with: addressOption=1",
+          "Reply with: addressOption=1",
           "",
         ].join("\n")
       : "";
     return {
       done: false,
       reply: [
-        "Delivery address is required before creating the order.",
+        "I need a delivery address before I can create this order.",
         savedBlock,
-        "You can either:",
-        "1) Select a saved address: addressOption=<number>",
-        "2) Provide a new address: shippingAddress=<full address>",
+        "Reply with one of these:",
+        "1) addressOption=<number>",
+        "2) shippingAddress=<full address>",
         "",
-        "Required address format:",
-        "House/Flat, Street/Area, City, State, PIN",
-        "Example: shippingAddress=Flat 4B, MG Road, Hyderabad, Telangana, 500001",
+        "Example:",
+        "shippingAddress=Flat 4B, MG Road, Hyderabad, Telangana, 500001",
         checklist,
       ]
         .filter(Boolean)
@@ -2411,16 +2403,16 @@ async function handleUserOrderCreate(
       paymentRail: "razorpay",
     };
     paymentMessageLines = [
-      `Order created: ${paymentLink.id}`,
+      `Order ready: ${paymentLink.id}`,
       `Merchant: ${merchant?.name || merchantId}`,
       `Item: ${product.name} x${quantity}`,
       `Amount: ₹${totalRupees}`,
-      `Delivery address: ${shippingAddress}`,
+      `Delivery: ${shippingAddress}`,
       "",
       "Pay now:",
       String(paymentLink.short_url || "").trim() || "Payment link unavailable",
       "",
-      `After payment, reply: confirm payment orderId=${paymentLink.id}`,
+      `Next step: confirm payment orderId=${paymentLink.id}`,
     ];
   } else {
     let merchantConfig: Awaited<ReturnType<typeof getMerchantSeedhapeConfig>>;
@@ -2478,12 +2470,12 @@ async function handleUserOrderCreate(
     const qrImageLink = buildUpiQrImageLink(seedhapeOrder.id);
     const primaryPayLink = upiChooserLink || links.hostedStatusUrl;
     paymentMessageLines = [
-      `Order created: ${seedhapeOrder.id}`,
+      `Order ready: ${seedhapeOrder.id}`,
       `Merchant: ${merchant?.name || merchantId}`,
       `Item: ${product.name} x${quantity}`,
       `Amount: ₹${totalRupees}`,
-      `UPI verified name: ${upiVerifiedName}`,
-      `Delivery address: ${shippingAddress}`,
+      `UPI name: ${upiVerifiedName}`,
+      `Delivery: ${shippingAddress}`,
       "",
       "Pay now:",
       primaryPayLink,
@@ -2493,7 +2485,7 @@ async function handleUserOrderCreate(
     }
     paymentMessageLines.push(
       "",
-      `After payment, reply: confirm payment orderId=${seedhapeOrder.id}`
+      `Next step: confirm payment orderId=${seedhapeOrder.id}`
     );
   }
 
@@ -2540,8 +2532,7 @@ async function handleUserOrderCreate(
 
   const lines = [
     ...paymentMessageLines.slice(0, 1),
-    `App order ID: ${createdOrder.receipt || "n/a"}`,
-    `Internal order ID: ${createdOrder.id}`,
+    `Ref: ${createdOrder.receipt || "n/a"}`,
     ...paymentMessageLines.slice(1),
   ];
 
@@ -2582,7 +2573,7 @@ async function handleUserPaymentConfirm(
       return {
         done: true,
         reply:
-          "No pending payment orders found. Share `confirm payment orderId=<orderId>` if you want to check a specific order.",
+          "No pending payment orders found.\nIf needed, reply with: confirm payment orderId=<orderId>",
         nextIntent: undefined,
         nextDraft: {},
       };
@@ -2611,8 +2602,9 @@ async function handleUserPaymentConfirm(
         return `${index + 1}. ${order.orderId} • ₹${order.amount} • ${merchantName}`;
       }),
       "",
-      "Reply with: use order 1",
-      "or: confirm payment orderId=<orderId>",
+      "Next step:",
+      "use order 1",
+      "or confirm payment orderId=<orderId>",
     ];
 
     return {
