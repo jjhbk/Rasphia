@@ -23,6 +23,10 @@ import {
   ClipboardList,
   Store,
   RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  FileText,
 } from "lucide-react";
 import AdminProductForm from "../components/AdminProductForm";
 import Navbar from "../components/Navbar";
@@ -43,6 +47,10 @@ type ManagementOrder = {
   id: string;
   status: string;
   amount?: number;
+  currency?: string;
+  paymentId?: string | null;
+  receipt?: string | null;
+  mode?: string | null;
   trackingNumber?: string | null;
   shippingProvider?: string | null;
   trackingUrl?: string | null;
@@ -51,7 +59,31 @@ type ManagementOrder = {
   customer?: {
     name?: string;
     email?: string;
+    phone?: string;
+    address?: string;
+    addressLine1?: string;
+    addressLine2?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    paymentProvider?: string;
   };
+  products?: Array<{
+    productId?: string;
+    name?: string;
+    brand?: string | null;
+    category?: string | null;
+    price?: number | null;
+    quantity?: number | null;
+  }>;
+  invoiceId?: string | null;
+  invoiceNumber?: string | null;
+  invoicePdfUrl?: string | null;
+  invoiceGeneratedAt?: string | null;
+  invoiceSyncStatus?: string | null;
+  invoiceSyncError?: string | null;
+  verifiedAt?: string | null;
+  statusHistory?: Array<Record<string, unknown>>;
   createdAt?: string;
 };
 
@@ -183,6 +215,7 @@ export default function ManagementDashboard() {
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [imageCopiedId, setImageCopiedId] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<Section>("products");
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (sessionStatus !== "authenticated") return;
@@ -251,6 +284,24 @@ export default function ManagementDashboard() {
         id: String(o.orderId || o.order_id || o.id || o._id || ""),
         status: String(o.status || ""),
         amount: typeof o.amount === "number" ? o.amount : undefined,
+        currency:
+          typeof o.currency === "string"
+            ? o.currency
+            : undefined,
+        paymentId:
+          typeof o.paymentId === "string"
+            ? o.paymentId
+            : typeof o.payment_id === "string"
+            ? o.payment_id
+            : null,
+        receipt:
+          typeof o.receipt === "string"
+            ? o.receipt
+            : null,
+        mode:
+          typeof o.mode === "string"
+            ? o.mode
+            : null,
         trackingNumber:
           typeof o.trackingNumber === "string"
             ? o.trackingNumber
@@ -283,8 +334,58 @@ export default function ManagementDashboard() {
             : null,
         customer:
           o.customer && typeof o.customer === "object"
-            ? (o.customer as { name?: string; email?: string })
+            ? (o.customer as ManagementOrder["customer"])
             : {},
+        products: Array.isArray(o.products)
+          ? (o.products as ManagementOrder["products"])
+          : [],
+        invoiceId:
+          typeof o.invoiceId === "string"
+            ? o.invoiceId
+            : typeof o.invoice_id === "string"
+            ? o.invoice_id
+            : null,
+        invoiceNumber:
+          typeof o.invoiceNumber === "string"
+            ? o.invoiceNumber
+            : typeof o.invoice_number === "string"
+            ? o.invoice_number
+            : null,
+        invoicePdfUrl:
+          typeof o.invoicePdfUrl === "string"
+            ? o.invoicePdfUrl
+            : typeof o.invoice_pdf_url === "string"
+            ? o.invoice_pdf_url
+            : null,
+        invoiceGeneratedAt:
+          typeof o.invoiceGeneratedAt === "string"
+            ? o.invoiceGeneratedAt
+            : typeof o.invoice_generated_at === "string"
+            ? o.invoice_generated_at
+            : null,
+        invoiceSyncStatus:
+          typeof o.invoiceSyncStatus === "string"
+            ? o.invoiceSyncStatus
+            : typeof o.invoice_sync_status === "string"
+            ? o.invoice_sync_status
+            : null,
+        invoiceSyncError:
+          typeof o.invoiceSyncError === "string"
+            ? o.invoiceSyncError
+            : typeof o.invoice_sync_error === "string"
+            ? o.invoice_sync_error
+            : null,
+        verifiedAt:
+          typeof o.verifiedAt === "string"
+            ? o.verifiedAt
+            : typeof o.verified_at === "string"
+            ? o.verified_at
+            : null,
+        statusHistory: Array.isArray(o.statusHistory)
+          ? (o.statusHistory as Array<Record<string, unknown>>)
+          : Array.isArray(o.status_history)
+          ? (o.status_history as Array<Record<string, unknown>>)
+          : [],
         createdAt: typeof o.createdAt === "string" ? o.createdAt : undefined,
       }));
       setOrders(normalized);
@@ -294,6 +395,80 @@ export default function ManagementDashboard() {
     } finally {
       setIsLoadingOrders(false);
     }
+  };
+
+  const formatCurrency = (amount?: number, currency = "INR") =>
+    new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(Number(amount || 0));
+
+  const downloadOrdersCsv = () => {
+    const escapeCsv = (value: unknown) => {
+      const text = String(value ?? "");
+      if (/[",\n]/.test(text)) {
+        return `"${text.replace(/"/g, '""')}"`;
+      }
+      return text;
+    };
+
+    const header = [
+      "order_id",
+      "created_at",
+      "verified_at",
+      "status",
+      "amount",
+      "currency",
+      "payment_id",
+      "invoice_number",
+      "invoice_pdf_url",
+      "customer_name",
+      "customer_email",
+      "customer_phone",
+      "customer_address",
+      "products",
+    ];
+
+    const rows = orders.map((order) => [
+      order.id,
+      order.createdAt || "",
+      order.verifiedAt || "",
+      order.status,
+      order.amount ?? "",
+      order.currency || "INR",
+      order.paymentId || "",
+      order.invoiceNumber || "",
+      order.invoicePdfUrl || "",
+      order.customer?.name || "",
+      order.customer?.email || "",
+      order.customer?.phone || "",
+      order.customer?.address ||
+        [
+          order.customer?.addressLine1 || "",
+          order.customer?.addressLine2 || "",
+          order.customer?.city || "",
+          order.customer?.state || "",
+          order.customer?.zipCode || "",
+        ]
+          .filter(Boolean)
+          .join(", "),
+      (order.products || [])
+        .map((item) => `${item?.name || "Item"} x${item?.quantity || 1}`)
+        .join(" | "),
+    ]);
+
+    const csv = [header, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `managed-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
   };
 
   const loadServiceRequests = async () => {
@@ -972,10 +1147,20 @@ export default function ManagementDashboard() {
             <section className="animate-fade-up space-y-4">
               <div className="section-header">
                 <h2 className="section-title">Orders</h2>
-                <button onClick={loadOrders} className="btn btn-ghost btn-sm">
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Refresh
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={downloadOrdersCsv}
+                    className="btn btn-secondary btn-sm"
+                    disabled={orders.length === 0}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Export CSV
+                  </button>
+                  <button onClick={loadOrders} className="btn btn-ghost btn-sm">
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Refresh
+                  </button>
+                </div>
               </div>
 
               {orderUpdateFeedback && (
@@ -1006,110 +1191,279 @@ export default function ManagementDashboard() {
                     <table className="rasphia-table">
                       <thead>
                         <tr>
+                          <th>Details</th>
                           <th>Order ID</th>
                           <th>Customer</th>
                           <th>Amount</th>
                           <th>Status</th>
+                          <th>Invoice</th>
                           <th>Shipping</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {orders.map((o) => (
-                          <tr key={o.id}>
-                            <td>
-                              <span className="font-mono text-xs text-brand-stone/70 truncate block max-w-[120px]">
-                                {o.id}
-                              </span>
-                              {o.createdAt && (
-                                <span className="text-xs text-brand-stone/50">
-                                  {new Date(o.createdAt).toLocaleDateString()}
-                                </span>
-                              )}
-                            </td>
-                            <td>
-                              <p className="font-medium text-sm text-brand-charcoal">
-                                {o.customer?.name || "—"}
-                              </p>
-                              <p className="text-xs text-brand-stone">{o.customer?.email || "—"}</p>
-                            </td>
-                            <td>
-                              <span className="font-semibold text-brand-charcoal">
-                                ₹{o.amount ?? 0}
-                              </span>
-                            </td>
-                            <td>
-                              <select
-                                value={o.status}
-                                onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
-                                disabled={Boolean(updatingOrderIds[o.id])}
-                                className={`${inputClass} min-w-[110px]`}
-                              >
-                                {ORDER_STATUSES.map((s) => (
-                                  <option key={s} value={s}>{s}</option>
-                                ))}
-                              </select>
-                            </td>
-                            <td>
-                              <div className="flex flex-wrap gap-1.5 items-center">
-                                <input
-                                  value={o.shippingProvider || ""}
-                                  onChange={(e) =>
-                                    setOrders((prev) =>
-                                      prev.map((row) =>
-                                        row.id === o.id
-                                          ? { ...row, shippingProvider: e.target.value }
-                                          : row
-                                      )
-                                    )
-                                  }
-                                  placeholder="Carrier"
-                                  className={`${inputClass} w-20`}
-                                />
-                                <input
-                                  value={o.trackingNumber || ""}
-                                  onChange={(e) =>
-                                    setOrders((prev) =>
-                                      prev.map((row) =>
-                                        row.id === o.id
-                                          ? { ...row, trackingNumber: e.target.value }
-                                          : row
-                                      )
-                                    )
-                                  }
-                                  placeholder="Tracking #"
-                                  className={`${inputClass} w-24`}
-                                />
-                                <input
-                                  value={o.trackingUrl || ""}
-                                  onChange={(e) =>
-                                    setOrders((prev) =>
-                                      prev.map((row) =>
-                                        row.id === o.id
-                                          ? { ...row, trackingUrl: e.target.value }
-                                          : row
-                                      )
-                                    )
-                                  }
-                                  placeholder="Tracking URL"
-                                  className={`${inputClass} w-32`}
-                                />
-                                <button
-                                  onClick={() =>
-                                    handleUpdateOrderStatus(o.id, o.status, {
-                                      shippingProvider: o.shippingProvider,
-                                      trackingNumber: o.trackingNumber,
-                                      trackingUrl: o.trackingUrl,
-                                    })
-                                  }
-                                  disabled={Boolean(updatingOrderIds[o.id])}
-                                  className="btn btn-secondary btn-sm"
-                                >
-                                  {updatingOrderIds[o.id] ? "Saving…" : "Save"}
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                        {orders.map((o) => {
+                          const isExpanded = expandedOrderId === o.id;
+                          return (
+                            <React.Fragment key={o.id}>
+                              <tr>
+                                <td>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedOrderId((prev) => (prev === o.id ? null : o.id))
+                                    }
+                                    className="btn btn-ghost btn-sm"
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronUp className="h-4 w-4" />
+                                    ) : (
+                                      <ChevronDown className="h-4 w-4" />
+                                    )}
+                                    Expand
+                                  </button>
+                                </td>
+                                <td>
+                                  <span className="font-mono text-xs text-brand-stone/70 truncate block max-w-[120px]">
+                                    {o.id}
+                                  </span>
+                                  {o.createdAt && (
+                                    <span className="text-xs text-brand-stone/50">
+                                      {new Date(o.createdAt).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                </td>
+                                <td>
+                                  <p className="font-medium text-sm text-brand-charcoal">
+                                    {o.customer?.name || "—"}
+                                  </p>
+                                  <p className="text-xs text-brand-stone">{o.customer?.email || "—"}</p>
+                                </td>
+                                <td>
+                                  <span className="font-semibold text-brand-charcoal">
+                                    {formatCurrency(o.amount, o.currency || "INR")}
+                                  </span>
+                                </td>
+                                <td>
+                                  <select
+                                    value={o.status}
+                                    onChange={(e) => handleUpdateOrderStatus(o.id, e.target.value)}
+                                    disabled={Boolean(updatingOrderIds[o.id])}
+                                    className={`${inputClass} min-w-[110px]`}
+                                  >
+                                    {ORDER_STATUSES.map((s) => (
+                                      <option key={s} value={s}>{s}</option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td>
+                                  <div className="flex min-w-[140px] flex-col gap-1">
+                                    {o.invoiceNumber ? (
+                                      <>
+                                        <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-charcoal">
+                                          <FileText className="h-3.5 w-3.5" />
+                                          {o.invoiceNumber}
+                                        </span>
+                                        {o.invoicePdfUrl ? (
+                                          <a
+                                            href={o.invoicePdfUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-xs text-brand-sage underline"
+                                          >
+                                            View invoice
+                                          </a>
+                                        ) : (
+                                          <span className="text-xs text-brand-stone">
+                                            Invoice generated
+                                          </span>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <span className="text-xs text-brand-stone">Not generated yet</span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td>
+                                  <div className="flex flex-wrap gap-1.5 items-center">
+                                    <input
+                                      value={o.shippingProvider || ""}
+                                      onChange={(e) =>
+                                        setOrders((prev) =>
+                                          prev.map((row) =>
+                                            row.id === o.id
+                                              ? { ...row, shippingProvider: e.target.value }
+                                              : row
+                                          )
+                                        )
+                                      }
+                                      placeholder="Carrier"
+                                      className={`${inputClass} w-20`}
+                                    />
+                                    <input
+                                      value={o.trackingNumber || ""}
+                                      onChange={(e) =>
+                                        setOrders((prev) =>
+                                          prev.map((row) =>
+                                            row.id === o.id
+                                              ? { ...row, trackingNumber: e.target.value }
+                                              : row
+                                          )
+                                        )
+                                      }
+                                      placeholder="Tracking #"
+                                      className={`${inputClass} w-24`}
+                                    />
+                                    <input
+                                      value={o.trackingUrl || ""}
+                                      onChange={(e) =>
+                                        setOrders((prev) =>
+                                          prev.map((row) =>
+                                            row.id === o.id
+                                              ? { ...row, trackingUrl: e.target.value }
+                                              : row
+                                          )
+                                        )
+                                      }
+                                      placeholder="Tracking URL"
+                                      className={`${inputClass} w-32`}
+                                    />
+                                    <button
+                                      onClick={() =>
+                                        handleUpdateOrderStatus(o.id, o.status, {
+                                          shippingProvider: o.shippingProvider,
+                                          trackingNumber: o.trackingNumber,
+                                          trackingUrl: o.trackingUrl,
+                                        })
+                                      }
+                                      disabled={Boolean(updatingOrderIds[o.id])}
+                                      className="btn btn-secondary btn-sm"
+                                    >
+                                      {updatingOrderIds[o.id] ? "Saving…" : "Save"}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                              {isExpanded ? (
+                                <tr>
+                                  <td colSpan={7} className="bg-brand-sand/10">
+                                    <div className="grid gap-4 p-4 md:grid-cols-2">
+                                      <div className="space-y-3">
+                                        <div>
+                                          <p className="text-xs font-semibold uppercase tracking-wide text-brand-stone">
+                                            Customer
+                                          </p>
+                                          <p className="text-sm text-brand-charcoal">
+                                            {o.customer?.name || "—"} · {o.customer?.email || "—"}
+                                          </p>
+                                          <p className="text-sm text-brand-stone">{o.customer?.phone || "—"}</p>
+                                          <p className="text-sm text-brand-stone">
+                                            {o.customer?.address ||
+                                              [
+                                                o.customer?.addressLine1 || "",
+                                                o.customer?.addressLine2 || "",
+                                                o.customer?.city || "",
+                                                o.customer?.state || "",
+                                                o.customer?.zipCode || "",
+                                              ]
+                                                .filter(Boolean)
+                                                .join(", ") ||
+                                              "—"}
+                                          </p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs font-semibold uppercase tracking-wide text-brand-stone">
+                                            Payment
+                                          </p>
+                                          <p className="text-sm text-brand-charcoal">
+                                            Provider: {o.customer?.paymentProvider || o.mode || "—"}
+                                          </p>
+                                          <p className="text-sm text-brand-stone">Payment ID: {o.paymentId || "—"}</p>
+                                          <p className="text-sm text-brand-stone">Receipt: {o.receipt || "—"}</p>
+                                          <p className="text-sm text-brand-stone">
+                                            Verified: {o.verifiedAt ? new Date(o.verifiedAt).toLocaleString() : "—"}
+                                          </p>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs font-semibold uppercase tracking-wide text-brand-stone">
+                                            Invoice
+                                          </p>
+                                          <p className="text-sm text-brand-charcoal">
+                                            {o.invoiceNumber || "Not generated"}
+                                          </p>
+                                          <p className="text-sm text-brand-stone">
+                                            Status: {o.invoiceSyncStatus || "—"}
+                                          </p>
+                                          {o.invoiceGeneratedAt ? (
+                                            <p className="text-sm text-brand-stone">
+                                              Generated: {new Date(o.invoiceGeneratedAt).toLocaleString()}
+                                            </p>
+                                          ) : null}
+                                          {o.invoiceSyncError ? (
+                                            <p className="text-sm text-red-700">{o.invoiceSyncError}</p>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                      <div className="space-y-3">
+                                        <div>
+                                          <p className="text-xs font-semibold uppercase tracking-wide text-brand-stone">
+                                            Products
+                                          </p>
+                                          <div className="space-y-2">
+                                            {(o.products || []).length > 0 ? (
+                                              (o.products || []).map((item, index) => (
+                                                <div
+                                                  key={`${o.id}-item-${index}`}
+                                                  className="rounded-xl border border-brand-sand/50 bg-white/70 p-3"
+                                                >
+                                                  <p className="text-sm font-medium text-brand-charcoal">
+                                                    {item?.name || "Item"} x{item?.quantity || 1}
+                                                  </p>
+                                                  <p className="text-xs text-brand-stone">
+                                                    {item?.brand || "—"} ·{" "}
+                                                    {formatCurrency(Number(item?.price || 0), o.currency || "INR")}
+                                                  </p>
+                                                  {item?.productId ? (
+                                                    <p className="font-mono text-[11px] text-brand-stone/70">
+                                                      {item.productId}
+                                                    </p>
+                                                  ) : null}
+                                                </div>
+                                              ))
+                                            ) : (
+                                              <p className="text-sm text-brand-stone">No product details available.</p>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <p className="text-xs font-semibold uppercase tracking-wide text-brand-stone">
+                                            Status history
+                                          </p>
+                                          <div className="space-y-1">
+                                            {(o.statusHistory || []).length > 0 ? (
+                                              (o.statusHistory || []).map((entry, index) => (
+                                                <p
+                                                  key={`${o.id}-history-${index}`}
+                                                  className="text-xs text-brand-stone"
+                                                >
+                                                  {String(entry.status || "status")} · {String(entry.note || "—")} ·{" "}
+                                                  {typeof entry.at === "string"
+                                                    ? new Date(entry.at).toLocaleString()
+                                                    : "—"}
+                                                </p>
+                                              ))
+                                            ) : (
+                                              <p className="text-xs text-brand-stone">No status history available.</p>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ) : null}
+                            </React.Fragment>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
