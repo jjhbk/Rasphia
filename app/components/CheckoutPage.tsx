@@ -233,6 +233,52 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
     }
   };
 
+  const handleVerifiedPaymentSuccess = (
+    orderId: string,
+    normalizedCustomer?: CheckoutCustomer
+  ) => {
+    if (!activePayment) {
+      throw new Error("Active payment context is missing.");
+    }
+
+    if (pendingPaymentsRef.current.length > 0) {
+      const [nextOrder, ...rest] = pendingPaymentsRef.current;
+      pendingPaymentsRef.current = rest;
+      setIsSeedhapeModalOpen(false);
+      setActivePayment(nextOrder);
+      setPaymentProgress((prev) =>
+        prev ? { ...prev, current: Math.min(prev.current + 1, prev.total) } : prev
+      );
+      setPaymentStatusText(
+        `Payment confirmed for ${orderId}. Continue with next ${
+          nextOrder.provider === "razorpay" ? "Razorpay" : "SeedhaPe"
+        } payment.`
+      );
+      if (nextOrder.provider === "seedhape") {
+        window.setTimeout(() => setIsSeedhapeModalOpen(true), 120);
+      } else if (normalizedCustomer) {
+        window.setTimeout(() => {
+          void openRazorpayCheckout(nextOrder, normalizedCustomer);
+        }, 120);
+      }
+      return;
+    }
+
+    setPaymentStatusText("Payment verified. Finalizing order...");
+    setIsSeedhapeModalOpen(false);
+    pendingPaymentsRef.current = [];
+    setPendingCustomer(null);
+    setIsProcessing(false);
+    setPaymentProgress(null);
+    if (normalizedCustomer) {
+      onPlaceOrder(
+        normalizedCustomer,
+        `${activePayment.provider}_${activePayment.seedhapeOrderId || activePayment.razorpayOrderId || orderId}`
+      );
+    }
+    setActivePayment(null);
+  };
+
   const checkPaymentStatus = async (orderId: string, normalizedCustomer?: CheckoutCustomer) => {
     const activeOrder = activePayment && activePayment.id === orderId ? activePayment : null;
     if (!activeOrder) {
@@ -259,41 +305,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
     });
     const verify = await verifyRes.json();
     if (verify.status === "ok") {
-      if (pendingPaymentsRef.current.length > 0) {
-        const [nextOrder, ...rest] = pendingPaymentsRef.current;
-        pendingPaymentsRef.current = rest;
-        setIsSeedhapeModalOpen(false);
-        setActivePayment(nextOrder);
-        setPaymentProgress((prev) =>
-          prev ? { ...prev, current: Math.min(prev.current + 1, prev.total) } : prev
-        );
-        setPaymentStatusText(
-          `Payment confirmed for ${orderId}. Continue with next ${
-            nextOrder.provider === "razorpay" ? "Razorpay" : "SeedhaPe"
-          } payment.`
-        );
-        if (nextOrder.provider === "seedhape") {
-          window.setTimeout(() => setIsSeedhapeModalOpen(true), 120);
-        } else if (normalizedCustomer) {
-          window.setTimeout(() => {
-            void openRazorpayCheckout(nextOrder, normalizedCustomer);
-          }, 120);
-        }
-        return;
-      }
-      setPaymentStatusText("Payment verified. Finalizing order...");
-      setIsSeedhapeModalOpen(false);
-      pendingPaymentsRef.current = [];
-      setPendingCustomer(null);
-      setIsProcessing(false);
-      setPaymentProgress(null);
-      if (normalizedCustomer) {
-        onPlaceOrder(
-          normalizedCustomer,
-          `${activeOrder.provider}_${activeOrder.seedhapeOrderId || activeOrder.razorpayOrderId || orderId}`
-        );
-      }
-      setActivePayment(null);
+      handleVerifiedPaymentSuccess(orderId, normalizedCustomer);
       return;
     }
     if (verify.status === "expired") {
@@ -369,7 +381,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
           if (verify.status !== "ok") {
             throw new Error(verify.message || "Razorpay verification failed.");
           }
-          await checkPaymentStatus(razorpayOrderId, normalizedCustomer);
+          handleVerifiedPaymentSuccess(razorpayOrderId, normalizedCustomer);
         } catch (err) {
           console.error("Razorpay verify error:", err);
           setPaymentStatusText(
