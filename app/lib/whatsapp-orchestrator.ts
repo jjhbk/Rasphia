@@ -19,10 +19,11 @@ import { finalizeOrderAsPaid } from "@/app/lib/order-payment";
 import { ensureMerchantSeedhapeDefaults, getMerchantSeedhapeConfig } from "@/app/lib/merchant-seedhape";
 import { getMerchantRazorpayConfig } from "@/app/lib/merchant-razorpay";
 import {
-  createRazorpayPaymentLinkWithConfig,
+  createRazorpayOrderWithConfig,
   getRazorpayPaymentLinkWithConfig,
 } from "@/app/lib/razorpay";
 import { getMerchantAnalyticsSummary } from "@/app/lib/merchant-analytics";
+import { createWhatsAppCheckoutToken } from "@/app/lib/whatsapp-checkout";
 
 const geminiApiKey =
   process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "";
@@ -159,6 +160,29 @@ type MerchantChatContext = {
   slug: string;
   name: string;
   status: string;
+};
+
+type AddressBookEntry = {
+  name: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  address: string;
+};
+
+type CheckoutCustomerSnapshot = {
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  zipCode: string;
 };
 
 const WHATSAPP_CONTEXT_WINDOW = Number(process.env.WHATSAPP_CONTEXT_WINDOW || 20);
@@ -1868,6 +1892,115 @@ function readOrderCustomer(customer: Prisma.JsonValue) {
   };
 }
 
+function normalizeAddressKey(value: string) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/\s*,\s*/g, ",");
+}
+
+function composeAddress(parts: {
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+}) {
+  return [
+    String(parts.addressLine1 || "").trim(),
+    String(parts.addressLine2 || "").trim(),
+    [
+      String(parts.city || "").trim(),
+      String(parts.state || "").trim(),
+      String(parts.zipCode || "").trim(),
+    ]
+      .filter(Boolean)
+      .join(", "),
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+function toAddressBookEntry(raw: unknown): AddressBookEntry | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const entry = raw as Record<string, unknown>;
+  const addressLine1 = String(entry.addressLine1 || "").trim();
+  const addressLine2 = String(entry.addressLine2 || "").trim();
+  const city = String(entry.city || "").trim();
+  const state = String(entry.state || "").trim();
+  const zipCode = String(entry.zipCode || "").trim();
+  const address =
+    String(entry.address || "").trim() ||
+    composeAddress({ addressLine1, addressLine2, city, state, zipCode });
+  if (!address) return null;
+  return {
+    name: String(entry.name || "").trim(),
+    phone: String(entry.phone || "").trim(),
+    addressLine1,
+    addressLine2,
+    city,
+    state,
+    zipCode,
+    address,
+  };
+}
+
+function parseShippingAddress(address: string): AddressBookEntry | null {
+  const raw = String(address || "").trim();
+  if (!raw) return null;
+  const parts = raw
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length < 4) return null;
+
+  let addressLine1 = parts[0] || "";
+  let addressLine2 = parts[1] || "";
+  let city = "";
+  let state = "";
+  let zipCode = "";
+
+  if (parts.length >= 5) {
+    city = parts[parts.length - 3] || "";
+    state = parts[parts.length - 2] || "";
+    zipCode = parts[parts.length - 1] || "";
+    addressLine2 =
+      parts.slice(1, Math.max(parts.length - 3, 2)).join(", ") || addressLine2;
+  } else {
+    city = parts[2] || "";
+    const stateZip = parts[3] || "";
+    const stateZipMatch = stateZip.match(/^(.+?)\s+([A-Za-z0-9\- ]{4,12})$/);
+    if (stateZipMatch) {
+      state = stateZipMatch[1].trim();
+      zipCode = stateZipMatch[2].trim();
+    } else {
+      state = stateZip.trim();
+    }
+  }
+
+  const entry: AddressBookEntry = {
+    name: "",
+    phone: "",
+    addressLine1,
+    addressLine2,
+    city: city.trim(),
+    state: state.trim(),
+    zipCode: zipCode.trim(),
+    address: raw,
+  };
+  if (
+    entry.addressLine1.length < 3 ||
+    entry.addressLine2.length < 2 ||
+    entry.city.length < 2 ||
+    entry.state.length < 2 ||
+    !/^[A-Za-z0-9\- ]{4,12}$/.test(entry.zipCode)
+  ) {
+    return null;
+  }
+  return entry;
+}
+
 function buildOrderDetailLines(
   order: {
     orderId: string;
@@ -1931,17 +2064,37 @@ async function getSavedAddressesForUser(user: {
 }) {
   const seen = new Set<string>();
   const out: string[] = [];
-  const push = (value: unknown) => {
+  const push = (value: string) => {
     const v = String(value || "").trim();
     if (!v) return;
-    const key = v.toLowerCase();
+    const key = normalizeAddressKey(v);
     if (seen.has(key)) return;
     seen.add(key);
     out.push(v);
   };
 
-  push(user.address);
+  if (user.address) {
+    push(user.address);
+  }
+
   if (!user.email) return out;
+
+  const profile = await prisma.userProfile.findUnique({
+    where: { email: user.email },
+    select: { addressBook: true },
+  });
+
+  const addressBookEntries = Array.isArray(profile?.addressBook)
+    ? (profile.addressBook as unknown[])
+    : [];
+  for (const rawEntry of addressBookEntries) {
+    const entry = toAddressBookEntry(rawEntry);
+    if (!entry) continue;
+    push(entry.address);
+    if (out.length >= 5) break;
+  }
+
+  if (out.length >= 5) return out;
 
   const recentOrders = await prisma.order.findMany({
     orderBy: { createdAt: "desc" },
@@ -1956,11 +2109,200 @@ async function getSavedAddressesForUser(user: {
     const customer = order.customer as Record<string, unknown>;
     const email = String(customer.email || "").trim().toLowerCase();
     if (email !== user.email.toLowerCase()) continue;
-    push(customer.address);
+    push(String(customer.address || "").trim());
     if (out.length >= 5) break;
   }
 
   return out;
+}
+
+async function getSavedAddressEntriesForUser(user: {
+  email: string;
+  address?: string | null;
+  name?: string | null;
+  phone?: string | null;
+}) {
+  const seen = new Set<string>();
+  const out: AddressBookEntry[] = [];
+  const push = (entry: AddressBookEntry | null) => {
+    if (!entry) return;
+    const key = normalizeAddressKey(entry.address);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(entry);
+  };
+
+  if (!user.email) return out;
+
+  const profile = await prisma.userProfile.findUnique({
+    where: { email: user.email },
+    select: { addressBook: true, name: true, phone: true, address: true },
+  });
+
+  const addressBookEntries = Array.isArray(profile?.addressBook)
+    ? (profile.addressBook as unknown[])
+    : [];
+  for (const rawEntry of addressBookEntries) {
+    const entry = toAddressBookEntry(rawEntry);
+    if (entry) {
+      if (!entry.name) entry.name = String(profile?.name || user.name || "").trim();
+      if (!entry.phone) entry.phone = String(profile?.phone || user.phone || "").trim();
+    }
+    push(entry);
+  }
+
+  if (!out.length) {
+    const parsed = parseShippingAddress(String(profile?.address || user.address || "").trim());
+    if (parsed) {
+      parsed.name = String(profile?.name || user.name || "").trim();
+      parsed.phone = String(profile?.phone || user.phone || "").trim();
+      push(parsed);
+    }
+  }
+
+  const recentOrders = await prisma.order.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 80,
+    select: { customer: true },
+  });
+
+  for (const order of recentOrders) {
+    if (!order.customer || typeof order.customer !== "object" || Array.isArray(order.customer)) {
+      continue;
+    }
+    const customer = order.customer as Record<string, unknown>;
+    const email = String(customer.email || "").trim().toLowerCase();
+    if (email !== user.email.toLowerCase()) continue;
+    push(
+      toAddressBookEntry({
+        name: customer.name,
+        phone: customer.phone,
+        addressLine1: customer.addressLine1,
+        addressLine2: customer.addressLine2,
+        city: customer.city,
+        state: customer.state,
+        zipCode: customer.zipCode,
+        address: customer.address,
+      })
+    );
+    if (out.length >= 5) break;
+  }
+
+  return out;
+}
+
+async function resolveWhatsAppCheckoutCustomer(args: {
+  user: { email: string; name?: string | null; phone?: string | null; address?: string | null };
+  shippingAddress: string;
+}) {
+  const savedEntries = await getSavedAddressEntriesForUser(args.user);
+  const normalizedTarget = normalizeAddressKey(args.shippingAddress);
+  const matchedEntry =
+    savedEntries.find((entry) => normalizeAddressKey(entry.address) === normalizedTarget) ||
+    null;
+  const parsedEntry = matchedEntry || parseShippingAddress(args.shippingAddress);
+  if (!parsedEntry) return null;
+
+  const name = String(args.user.name || parsedEntry.name || "").trim();
+  const phone = String(args.user.phone || parsedEntry.phone || "").trim();
+  const addressLine1 = String(parsedEntry.addressLine1 || "").trim();
+  const addressLine2 = String(parsedEntry.addressLine2 || "").trim();
+  const city = String(parsedEntry.city || "").trim();
+  const state = String(parsedEntry.state || "").trim();
+  const zipCode = String(parsedEntry.zipCode || "").trim();
+  const address =
+    String(parsedEntry.address || "").trim() ||
+    composeAddress({ addressLine1, addressLine2, city, state, zipCode });
+
+  if (
+    !name ||
+    !phone ||
+    addressLine1.length < 3 ||
+    addressLine2.length < 2 ||
+    city.length < 2 ||
+    state.length < 2 ||
+    !/^[A-Za-z0-9\- ]{4,12}$/.test(zipCode)
+  ) {
+    return null;
+  }
+
+  return {
+    name,
+    email: args.user.email,
+    phone,
+    address,
+    addressLine1,
+    addressLine2,
+    city,
+    state,
+    zipCode,
+  } satisfies CheckoutCustomerSnapshot;
+}
+
+async function upsertWhatsAppCheckoutCustomerProfile(customer: CheckoutCustomerSnapshot) {
+  const addressEntry: AddressBookEntry = {
+    name: customer.name,
+    phone: customer.phone,
+    addressLine1: customer.addressLine1,
+    addressLine2: customer.addressLine2,
+    city: customer.city,
+    state: customer.state,
+    zipCode: customer.zipCode,
+    address: customer.address,
+  };
+
+  await prisma.user.upsert({
+    where: { email: customer.email },
+    create: {
+      email: customer.email,
+      name: customer.name,
+      phone: customer.phone,
+      address: customer.address,
+      metadata: Prisma.JsonNull,
+    },
+    update: {
+      name: customer.name,
+      phone: customer.phone,
+      address: customer.address,
+      updatedAt: new Date(),
+    },
+  });
+
+  const existingProfile = await prisma.userProfile.findUnique({
+    where: { email: customer.email },
+    select: { addressBook: true },
+  });
+  const existingAddressBook: AddressBookEntry[] = Array.isArray(existingProfile?.addressBook)
+    ? (existingProfile.addressBook as AddressBookEntry[])
+    : [];
+  const mergedAddressBook = existingAddressBook.some(
+    (entry) => normalizeAddressKey(entry.address) === normalizeAddressKey(addressEntry.address)
+  )
+    ? existingAddressBook.map((entry) =>
+        normalizeAddressKey(entry.address) === normalizeAddressKey(addressEntry.address)
+          ? addressEntry
+          : entry
+      )
+    : [addressEntry, ...existingAddressBook];
+
+  await prisma.userProfile.upsert({
+    where: { email: customer.email },
+    create: {
+      email: customer.email,
+      name: customer.name,
+      phone: customer.phone,
+      address: customer.address,
+      addressBook: mergedAddressBook,
+      credits: 0,
+    },
+    update: {
+      name: customer.name,
+      phone: customer.phone,
+      address: customer.address,
+      addressBook: mergedAddressBook,
+      updatedAt: new Date(),
+    },
+  });
 }
 
 const TERMINAL_SERVICE_REQUEST_STATUSES = new Set(["completed", "rejected"]);
@@ -2230,11 +2572,15 @@ async function handleUserOrderCreate(
   const directShippingAddress = String(draft.shippingAddress || "").trim();
   const addressChoice = pickAddressChoice(draft.addressChoice);
   const savedAddresses = await getSavedAddressesForUser(user);
+  const autoSelectedAddress =
+    !directShippingAddress && !addressChoice && savedAddresses.length === 1
+      ? savedAddresses[0]
+      : "";
   const chosenSavedAddress =
     addressChoice && addressChoice <= savedAddresses.length
       ? savedAddresses[addressChoice - 1]
       : "";
-  const shippingAddress = directShippingAddress || chosenSavedAddress;
+  const shippingAddress = directShippingAddress || chosenSavedAddress || autoSelectedAddress;
   const product = await prisma.product.findFirst({
     where: {
       name: { contains: productName, mode: "insensitive" },
@@ -2278,6 +2624,25 @@ async function handleUserOrderCreate(
       ]
         .filter(Boolean)
         .join("\n"),
+      nextIntent: "user_order_create" as WaIntent,
+      nextDraft: draft,
+    };
+  }
+
+  const checkoutCustomer = await resolveWhatsAppCheckoutCustomer({
+    user,
+    shippingAddress,
+  });
+  if (!checkoutCustomer) {
+    return {
+      done: false,
+      reply: [
+        "I could not prepare your checkout details from the current address.",
+        "Next step: send your address in this format:",
+        "shippingAddress=Flat 4B, MG Road, Hyderabad, Telangana, 500001",
+        "",
+        "I use this to auto-fill payment verification and invoice details.",
+      ].join("\n"),
       nextIntent: "user_order_create" as WaIntent,
       nextDraft: draft,
     };
@@ -2344,10 +2709,15 @@ async function handleUserOrderCreate(
   let orderMode = "";
   let paymentMessageLines: string[] = [];
   let customerPayload: Record<string, unknown> = {
-    name: customerName,
-    email: user.email,
-    phone: customerPhone,
-    address: shippingAddress,
+    name: checkoutCustomer.name,
+    email: checkoutCustomer.email,
+    phone: checkoutCustomer.phone,
+    address: checkoutCustomer.address,
+    addressLine1: checkoutCustomer.addressLine1,
+    addressLine2: checkoutCustomer.addressLine2,
+    city: checkoutCustomer.city,
+    state: checkoutCustomer.state,
+    zipCode: checkoutCustomer.zipCode,
     channel: "whatsapp",
   };
 
@@ -2366,28 +2736,21 @@ async function handleUserOrderCreate(
       };
     }
 
-    const paymentLink = await createRazorpayPaymentLinkWithConfig(
+    const razorpayOrder = await createRazorpayOrderWithConfig(
       {
         amount: totalPaise,
         currency: "INR",
-        referenceId: externalOrderId,
-        description: `WhatsApp order: ${product.name} x${quantity}`,
-        customer: {
-          name: customerName || undefined,
-          email: user.email || undefined,
-          contact: customerPhone || undefined,
-        },
+        receipt: externalOrderId,
         notes: {
           source: "whatsapp",
           merchantId,
-          customerEmail: user.email,
-          customerPhone: customerPhone || "",
-          shippingAddress,
+          customerEmail: checkoutCustomer.email,
+          customerPhone: checkoutCustomer.phone || "",
+          shippingAddress: checkoutCustomer.address,
           productId: product.id,
-          quantity: String(quantity),
+          quantities: String(quantity),
           productName: product.name,
         },
-        expireBy: Math.floor(Date.now() / 1000) + 30 * 60,
       },
       {
         keyId: merchantConfig.keyId,
@@ -2395,25 +2758,13 @@ async function handleUserOrderCreate(
       }
     );
 
-    providerOrderId = paymentLink.id;
-    orderMode = "razorpay_whatsapp";
+    providerOrderId = razorpayOrder.id;
+    orderMode = "razorpay";
     customerPayload = {
       ...customerPayload,
-      paymentLinkUrl: paymentLink.short_url || null,
       paymentRail: "razorpay",
+      paymentProvider: "razorpay",
     };
-    paymentMessageLines = [
-      `Order ready: ${paymentLink.id}`,
-      `Merchant: ${merchant?.name || merchantId}`,
-      `Item: ${product.name} x${quantity}`,
-      `Amount: ₹${totalRupees}`,
-      `Delivery: ${shippingAddress}`,
-      "",
-      "Pay now:",
-      String(paymentLink.short_url || "").trim() || "Payment link unavailable",
-      "",
-      `Next step: confirm payment orderId=${paymentLink.id}`,
-    ];
   } else {
     let merchantConfig: Awaited<ReturnType<typeof getMerchantSeedhapeConfig>>;
     try {
@@ -2435,12 +2786,12 @@ async function handleUserOrderCreate(
         description: `WhatsApp order: ${product.name} x${quantity}`,
         externalOrderId,
         expectedSenderName: upiVerifiedName || customerName || undefined,
-        customerEmail: user.email,
-        customerPhone: customerPhone || undefined,
+        customerEmail: checkoutCustomer.email,
+        customerPhone: checkoutCustomer.phone || customerPhone || undefined,
         expiresInMinutes: 30,
         metadata: {
           source: "whatsapp",
-          customerEmail: user.email,
+          customerEmail: checkoutCustomer.email,
           merchantId,
           productId: product.id,
           quantity,
@@ -2453,12 +2804,13 @@ async function handleUserOrderCreate(
     );
 
     providerOrderId = seedhapeOrder.id;
-    orderMode = "seedhape_whatsapp";
+    orderMode = "seedhape";
     customerPayload = {
       ...customerPayload,
       upiVerifiedName: upiVerifiedName || null,
       paymentQrCode: seedhapeOrder.qrCode,
       paymentRail: "seedhape",
+      paymentProvider: "seedhape",
     };
 
     const links = buildSeedhapePaymentLinks(
@@ -2475,7 +2827,7 @@ async function handleUserOrderCreate(
       `Item: ${product.name} x${quantity}`,
       `Amount: ₹${totalRupees}`,
       `UPI name: ${upiVerifiedName}`,
-      `Delivery: ${shippingAddress}`,
+      `Delivery: ${checkoutCustomer.address}`,
       "",
       "Pay now:",
       primaryPayLink,
@@ -2513,7 +2865,7 @@ async function handleUserOrderCreate(
       statusHistory: [
         {
           status: "created",
-          note: `Order created via WhatsApp with ${orderMode === "razorpay_whatsapp" ? "Razorpay" : "SeedhaPe"}`,
+          note: `Order created via WhatsApp with ${orderMode === "razorpay" ? "Razorpay" : "SeedhaPe"}`,
           by: "whatsapp_user",
           at: new Date().toISOString(),
         },
@@ -2523,12 +2875,47 @@ async function handleUserOrderCreate(
     },
   });
 
-  if (user.email) {
-    await prisma.userProfile.updateMany({
-      where: { email: user.email },
-      data: { address: shippingAddress, updatedAt: new Date() },
+  if (orderMode === "razorpay") {
+    const checkoutToken = createWhatsAppCheckoutToken({
+      orderId: createdOrder.orderId,
+      internalOrderId: createdOrder.id,
+      email: checkoutCustomer.email,
+      expiresInSeconds: 60 * 60,
     });
+    const checkoutBase = resolvePublicBaseUrl();
+    const hostedCheckoutUrl = checkoutBase
+      ? `${checkoutBase}/checkout/whatsapp?token=${encodeURIComponent(checkoutToken)}`
+      : `/checkout/whatsapp?token=${encodeURIComponent(checkoutToken)}`;
+
+    customerPayload = {
+      ...customerPayload,
+      hostedCheckoutUrl,
+    };
+
+    await prisma.order.update({
+      where: { id: createdOrder.id },
+      data: {
+        customer: customerPayload as Prisma.InputJsonValue,
+        updatedAt: new Date(),
+      },
+    });
+
+    paymentMessageLines = [
+      `Order ready: ${createdOrder.orderId}`,
+      `Merchant: ${merchant?.name || merchantId}`,
+      `Item: ${product.name} x${quantity}`,
+      `Amount: ₹${totalRupees}`,
+      `Delivery: ${checkoutCustomer.address}`,
+      "",
+      "Pay on Rasphia:",
+      hostedCheckoutUrl,
+      "",
+      "After payment, Rasphia checkout will verify the order automatically.",
+      `If you come back here, you can also reply: confirm payment orderId=${createdOrder.orderId}`,
+    ];
   }
+
+  await upsertWhatsAppCheckoutCustomerProfile(checkoutCustomer);
 
   const lines = [
     ...paymentMessageLines.slice(0, 1),
@@ -2693,6 +3080,37 @@ async function handleUserPaymentConfirm(
   }
 
   if (mode.startsWith("razorpay")) {
+    if (String(order.status || "").toLowerCase() === "paid") {
+      return {
+        done: true,
+        reply: await buildWhatsAppPaymentConfirmationReply({ orderId }),
+        nextIntent: undefined,
+        nextDraft: {},
+      };
+    }
+
+    const orderCustomer =
+      order.customer && typeof order.customer === "object" && !Array.isArray(order.customer)
+        ? (order.customer as Record<string, unknown>)
+        : {};
+    const hostedCheckoutUrl = String(orderCustomer.hostedCheckoutUrl || "").trim();
+    const legacyPaymentLinkUrl = String(orderCustomer.paymentLinkUrl || "").trim();
+
+    if (hostedCheckoutUrl) {
+      return {
+        done: true,
+        reply: [
+          `I still show order ${orderId} as pending.`,
+          "Next step: reopen your Rasphia checkout page and complete payment there.",
+          hostedCheckoutUrl,
+          "",
+          "That page uses the same Razorpay verification flow as the website.",
+        ].join("\n"),
+        nextIntent: undefined,
+        nextDraft: {},
+      };
+    }
+
     const merchantConfig = await getMerchantRazorpayConfig(merchantId);
     const paymentLink = await getRazorpayPaymentLinkWithConfig(orderId, {
       keyId: merchantConfig.keyId,
@@ -2711,7 +3129,13 @@ async function handleUserPaymentConfirm(
       }
       return {
         done: true,
-        reply: `Payment is still ${String(paymentLink.status || "pending").toUpperCase()}. Please complete payment and retry in a few seconds.`,
+        reply: [
+          `Payment is still ${String(paymentLink.status || "pending").toUpperCase()}.`,
+          legacyPaymentLinkUrl ? "Complete payment here:" : "Please complete payment and retry in a few seconds.",
+          legacyPaymentLinkUrl || "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
         nextIntent: undefined,
         nextDraft: {},
       };
