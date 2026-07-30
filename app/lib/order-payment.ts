@@ -20,7 +20,7 @@ export async function finalizeOrderAsPaid(input: FinalizeOrderPaymentInput) {
   }
 
   if (order.status === "paid") {
-    return { ok: true as const, alreadyPaid: true as const, order };
+    return { ok: true as const, alreadyPaid: true as const, order, invoiceWarning: null };
   }
 
   const orderedItems = Array.isArray(order.products)
@@ -90,15 +90,17 @@ export async function finalizeOrderAsPaid(input: FinalizeOrderPaymentInput) {
     });
   });
 
+  let invoiceWarning: string | null = null;
   try {
     await generateInternalInvoiceForOrder(input.orderId);
   } catch (error) {
     // Never fail payment finalization because downstream invoice generation failed.
+    invoiceWarning = "Payment verified, but invoice generation or invoice email failed.";
     console.error("[order-payment] Internal invoice generation failed", {
       orderId: input.orderId,
       message: error instanceof Error ? error.message : String(error),
     });
   }
 
-  return { ok: true as const, alreadyPaid: false as const, order };
+  return { ok: true as const, alreadyPaid: false as const, order, invoiceWarning };
 }

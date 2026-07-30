@@ -138,6 +138,7 @@ export async function POST(req: Request) {
         status: "ok",
         providerStatus: "paid",
         verifiedAt: new Date().toISOString(),
+        invoiceWarning: finalizeResult.invoiceWarning || null,
         mapping: {
           internalOrderId: order.id,
           appOrderId: order.receipt || null,
@@ -185,6 +186,7 @@ export async function POST(req: Request) {
         status: "ok",
         providerStatus: providerStatus.status,
         verifiedAt: providerStatus.verifiedAt || null,
+        invoiceWarning: finalizeResult.invoiceWarning || null,
         mapping: {
           internalOrderId: order.id,
           appOrderId: order.receipt || null,

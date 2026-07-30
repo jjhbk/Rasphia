@@ -235,7 +235,8 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   const handleVerifiedPaymentSuccess = (
     orderId: string,
-    normalizedCustomer?: CheckoutCustomer
+    normalizedCustomer?: CheckoutCustomer,
+    invoiceWarning?: string | null
   ) => {
     if (!activePayment) {
       throw new Error("Active payment context is missing.");
@@ -264,7 +265,9 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
       return;
     }
 
-    setPaymentStatusText("Payment verified. Finalizing order...");
+    setPaymentStatusText(
+      invoiceWarning || "Payment verified. Finalizing order..."
+    );
     setIsSeedhapeModalOpen(false);
     pendingPaymentsRef.current = [];
     setPendingCustomer(null);
@@ -305,7 +308,11 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
     });
     const verify = await verifyRes.json();
     if (verify.status === "ok") {
-      handleVerifiedPaymentSuccess(orderId, normalizedCustomer);
+      handleVerifiedPaymentSuccess(
+        orderId,
+        normalizedCustomer,
+        typeof verify.invoiceWarning === "string" ? verify.invoiceWarning : null
+      );
       return;
     }
     if (verify.status === "expired") {
@@ -381,7 +388,11 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
           if (verify.status !== "ok") {
             throw new Error(verify.message || "Razorpay verification failed.");
           }
-          handleVerifiedPaymentSuccess(razorpayOrderId, normalizedCustomer);
+          handleVerifiedPaymentSuccess(
+            razorpayOrderId,
+            normalizedCustomer,
+            typeof verify.invoiceWarning === "string" ? verify.invoiceWarning : null
+          );
         } catch (err) {
           console.error("Razorpay verify error:", err);
           setPaymentStatusText(
