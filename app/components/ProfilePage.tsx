@@ -242,15 +242,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
   );
 
   return (
-    <div className="relative h-screen w-full bg-brand-hero overflow-hidden font-body">
-      <div className="absolute inset-0 -z-10">
-        <div className="absolute -top-20 right-[-5%] h-80 w-80 rounded-full bg-brand-clay/15 blur-[90px]" />
-        <div className="absolute bottom-[-10%] left-[10%] h-60 w-60 rounded-full bg-brand-sage/12 blur-[80px]" />
-      </div>
-
-      <div className="h-full w-full max-w-5xl mx-auto flex flex-col p-2 sm:p-3">
+    <div className="app-shell overflow-hidden font-body">
+      <div className="app-shell-inner flex min-h-screen flex-col">
         {/* Header */}
-        <header className="flex-shrink-0 h-14 px-4 flex items-center justify-between bg-white/70 backdrop-blur-xl border border-brand-sand/40 rounded-2xl mb-3 shadow-soft">
+        <header className="surface-card flex-shrink-0 mb-4 flex h-16 items-center justify-between px-4 backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <button
               onClick={onBack}
@@ -277,51 +272,60 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
         </header>
 
         {/* Main content */}
-        <div className="flex-1 overflow-hidden flex flex-col bg-white/75 backdrop-blur-xl border border-brand-sand/30 rounded-2xl shadow-soft-md">
+        <div className="hero-panel flex flex-1 flex-col overflow-hidden">
 
           {/* User hero band */}
-          <div className="flex-shrink-0 px-6 py-5 border-b border-brand-sand/30 bg-gradient-to-r from-brand-parchment/60 to-transparent flex items-center gap-4">
-            <div className="h-14 w-14 rounded-2xl bg-brand-terracotta/10 border border-brand-sand/40 flex items-center justify-center flex-shrink-0 shadow-soft">
-              {(profile as any).profileImage ? (
-                <img src={(profile as any).profileImage} className="h-full w-full object-cover rounded-2xl" alt="avatar" />
-              ) : (
-                <span className="text-xl font-semibold text-brand-terracotta font-heading">
-                  {(profile.name?.[0] ?? profile.email?.[0] ?? "?").toUpperCase()}
-                </span>
-              )}
-            </div>
-            <div className="min-w-0">
-              <h2 className="font-heading text-lg text-brand-charcoal truncate">{profile.name || "Your Account"}</h2>
-              <p className="text-xs text-brand-stone truncate">{profile.email}</p>
-            </div>
-            <div className="ml-auto hidden sm:flex items-center gap-4">
-              <div className="text-center">
-                <p className="font-heading text-xl text-brand-charcoal">{orders.length}</p>
-                <p className="text-[10px] text-brand-stone uppercase tracking-widest">Orders</p>
+          <div className="flex-shrink-0 border-b border-brand-sand/30 px-6 py-6 sm:px-7">
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-end">
+              <div className="min-w-0">
+                <span className="hero-kicker">Rasphia Account</span>
+                <div className="mt-4 flex items-center gap-4">
+                  <div className="h-16 w-16 rounded-[1.35rem] bg-brand-terracotta/10 border border-brand-sand/40 flex items-center justify-center flex-shrink-0 shadow-soft">
+                    {(profile as any).profileImage ? (
+                      <img src={(profile as any).profileImage} className="h-full w-full object-cover rounded-[1.35rem]" alt="avatar" />
+                    ) : (
+                      <span className="text-2xl font-semibold text-brand-terracotta font-heading">
+                        {(profile.name?.[0] ?? profile.email?.[0] ?? "?").toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="font-heading text-2xl text-brand-charcoal truncate">{profile.name || "Your Account"}</h2>
+                    <p className="mt-1 text-sm text-brand-stone truncate">{profile.email}</p>
+                    <p className="mt-2 max-w-2xl text-sm leading-relaxed text-brand-stone">
+                      Manage your details, track every order, and keep your saved products and support requests in one place.
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="h-8 w-px bg-brand-sand/40" />
-              <div className="text-center">
-                <p className="font-heading text-xl text-brand-charcoal">{profile.wishlist?.length ?? 0}</p>
-                <p className="text-[10px] text-brand-stone uppercase tracking-widest">Wishlist</p>
-              </div>
-              <div className="h-8 w-px bg-brand-sand/40" />
-              <div className="text-center">
-                <p className="font-heading text-xl text-brand-terracotta">{formatPrice(totalSpend)}</p>
-                <p className="text-[10px] text-brand-stone uppercase tracking-widest">Spent</p>
+              <div className="metric-strip sm:grid-cols-3 lg:grid-cols-1">
+                <div className="metric-pill">
+                  <p className="metric-pill-label">Orders</p>
+                  <p className="metric-pill-value">{orders.length}</p>
+                </div>
+                <div className="metric-pill">
+                  <p className="metric-pill-label">Wishlist</p>
+                  <p className="metric-pill-value">{profile.wishlist?.length ?? 0}</p>
+                </div>
+                <div className="metric-pill">
+                  <p className="metric-pill-label">Lifetime Spend</p>
+                  <p className="metric-pill-value text-brand-terracotta">{formatPrice(totalSpend)}</p>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Tab bar */}
-          <div className="flex-shrink-0 flex border-b border-brand-sand/30 bg-white/40 px-2 gap-0.5 overflow-x-auto">
+          <div className="flex-shrink-0 border-b border-brand-sand/30 px-4 py-3">
+            <div className="tab-nav overflow-x-auto">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+                className={`tab-item whitespace-nowrap ${
                   activeTab === tab.id
-                    ? "border-brand-terracotta text-brand-charcoal"
-                    : "border-transparent text-brand-stone hover:text-brand-charcoal hover:bg-brand-parchment/40"
+                    ? "tab-item-active"
+                    : ""
                 }`}
               >
                 {tab.icon}
@@ -335,10 +339,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 )}
               </button>
             ))}
+            </div>
           </div>
 
           {/* Tab content */}
-          <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+          <div className="flex-1 overflow-y-auto p-5 sm:p-6 lg:p-7">
 
             {/* ── PROFILE TAB ── */}
             {activeTab === "profile" && (
@@ -359,7 +364,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-5 bg-white/60 border border-brand-sand/30 rounded-2xl">
+                <div className="surface-card grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
                   {(["name", "email", "phone", "address"] as const).map((field) => (
                     <div key={field} className={field === "address" ? "sm:col-span-2" : ""}>
                       <label className="text-[10px] uppercase tracking-widest font-semibold text-brand-stone/60 block mb-1.5">
@@ -381,7 +386,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                           />
                         )
                       ) : (
-                        <div className="px-3 py-2 rounded-xl bg-brand-parchment/40 border border-brand-sand/30 text-sm text-brand-charcoal min-h-[38px] flex items-center">
+                      <div className="surface-card-soft min-h-[42px] flex items-center rounded-xl px-3 py-2 text-sm text-brand-charcoal">
                           {(profile[field as keyof UserProfile] as string) || (
                             <span className="text-brand-stone/40 italic text-xs">Not set</span>
                           )}
@@ -395,14 +400,14 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                   <div className="flex justify-end gap-2">
                     <button
                       onClick={() => setIsEditing(false)}
-                      className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-brand-stone border border-brand-sand/50 rounded-xl hover:bg-brand-parchment transition-colors"
+                        className="btn btn-secondary"
                     >
                       <X className="h-4 w-4" />
                       Cancel
                     </button>
                     <button
                       onClick={handleSave}
-                      className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-brand-charcoal rounded-xl hover:bg-brand-warm-black transition-colors shadow-soft"
+                        className="btn btn-primary"
                     >
                       <Check className="h-4 w-4" />
                       Save changes
@@ -440,7 +445,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     return (
                       <div
                         key={order.id}
-                        className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 bg-white/70 border border-brand-sand/30 rounded-2xl hover:shadow-soft transition-all"
+                        className="surface-card hover-lift flex flex-col gap-4 p-4 sm:flex-row sm:items-center"
                       >
                         <div className="h-16 w-16 rounded-xl overflow-hidden flex-shrink-0 border border-brand-sand/20 bg-brand-parchment/40">
                           <img
@@ -589,7 +594,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
             {activeTab === "wishlist" && (
               <div>
                 {profile.wishlist?.length ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {profile.wishlist.map((product) => (
                       <ProductCard
                         key={product.name}
@@ -627,7 +632,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                   serviceRequests.map((req) => (
                     <div
                       key={req.requestId}
-                      className="p-4 bg-white/70 border border-brand-sand/30 rounded-2xl"
+                      className="surface-card p-4"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2">
@@ -678,7 +683,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
             className="absolute inset-0 bg-brand-warm-black/35 backdrop-blur-sm"
             onClick={() => setRequestModal({ open: false, orderId: "", type: null, reason: "", details: "" })}
           />
-          <div className="relative w-full max-w-md rounded-2xl border border-brand-sand/40 bg-white p-6 shadow-soft-xl animate-scale-in">
+          <div className="hero-panel relative w-full max-w-md p-6 animate-scale-in">
             <h3 className="font-heading text-lg text-brand-charcoal mb-1">
               Request{" "}
               {requestModal.type === "refund"

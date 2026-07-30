@@ -1000,9 +1000,10 @@ export default function ManagementDashboard() {
   return (
     <>
       <Navbar />
-      <div className="flex min-h-screen bg-brand-cream font-body">
+      <div className="app-shell font-body">
+        <div className="app-shell-inner flex min-h-screen gap-4 md:gap-6">
         {/* ─── Sidebar ─── */}
-        <aside className="dash-sidebar sticky top-[64px] self-start hidden md:flex">
+        <aside className="dash-sidebar sticky top-[80px] self-start hidden md:flex rounded-[1.6rem] border border-brand-sand/40 shadow-soft backdrop-blur-xl">
           {/* Role badge */}
           <div className="px-3 mb-3">
             <span className={`badge ${isAdmin ? "badge-primary" : "badge-accent"}`}>
@@ -1054,38 +1055,39 @@ export default function ManagementDashboard() {
         </aside>
 
         {/* ─── Main Content ─── */}
-        <main className="flex-1 min-w-0 p-4 md:p-6 lg:p-8 space-y-6">
+        <main className="flex-1 min-w-0 space-y-6 pb-8">
           {/* Page Header */}
           <div className="animate-fade-up">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-              <div>
-                <h1 className="font-heading text-2xl md:text-3xl text-brand-charcoal">
+            <div className="hero-panel mb-6 p-6 md:p-7">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="max-w-2xl">
+                  <span className="hero-kicker">{isAdmin ? "Platform Control" : "Store Operations"}</span>
+                  <h1 className="mt-4 font-heading text-3xl md:text-4xl text-brand-charcoal">
                   {isAdmin ? "Admin Dashboard" : "Merchant Dashboard"}
-                </h1>
-                <p className="text-brand-stone text-sm mt-0.5">
+                  </h1>
+                  <p className="mt-3 text-brand-stone text-sm leading-relaxed">
                   {isAdmin
                     ? "Manage all products, orders, and merchants."
                     : "Manage your products, orders, and storefront."}
-                </p>
+                  </p>
+                </div>
+                <div className="flex md:hidden gap-2 flex-wrap">
+                  <select
+                    value={activeSection}
+                    onChange={(e) => setActiveSection(e.target.value as Section)}
+                    className="border border-brand-sand/50 rounded-xl px-3 py-2 text-sm bg-white text-brand-charcoal"
+                  >
+                    {sidebarItems.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              {/* Mobile section nav */}
-              <div className="flex md:hidden gap-2 flex-wrap">
-                <select
-                  value={activeSection}
-                  onChange={(e) => setActiveSection(e.target.value as Section)}
-                  className="border border-brand-sand/50 rounded-xl px-3 py-2 text-sm bg-white text-brand-charcoal"
-                >
-                  {sidebarItems.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
 
             {/* Stats Row */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+              <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Products" value={products.length} icon={<Package className="h-4 w-4 text-brand-terracotta" />} />
               <StatCard label="Orders" value={orders.length} icon={<ShoppingBag className="h-4 w-4 text-brand-sage" />} />
               <StatCard
@@ -1108,10 +1110,11 @@ export default function ManagementDashboard() {
                 />
               )}
             </div>
+            </div>
 
             {/* Merchant storefront banner */}
             {!isAdmin && (
-              <div className="panel animate-fade-up delay-75 mb-6">
+              <div className="panel animate-fade-up delay-75 mb-6 overflow-hidden">
                 <div className="panel-header">
                   <div className="flex items-center gap-2">
                     <Store className="h-4 w-4 text-brand-terracotta" />
@@ -2213,6 +2216,7 @@ export default function ManagementDashboard() {
             </section>
           )}
         </main>
+        </div>
       </div>
     </>
   );

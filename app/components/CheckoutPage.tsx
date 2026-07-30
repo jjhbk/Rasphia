@@ -500,11 +500,11 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
         undefined
       }
     >
-      <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-brand-warm-black/30 backdrop-blur-sm p-4 sm:p-6">
-        <div className="relative w-full max-w-4xl my-auto bg-white rounded-3xl shadow-[0_32px_80px_rgba(30,22,18,0.22)] border border-brand-sand/30 overflow-hidden">
+      <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-brand-warm-black/35 backdrop-blur-md p-4 sm:p-6">
+        <div className="hero-panel relative my-auto w-full max-w-5xl overflow-hidden">
 
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-brand-sand/20 bg-brand-parchment/40">
+          <div className="flex items-center justify-between border-b border-brand-sand/20 px-6 py-5 sm:px-7">
             <div className="flex items-center gap-3">
               <button
                 onClick={onCancel}
@@ -515,17 +515,8 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
               <BrandLogo size={22} showWordmark wordmarkClassName="text-[13px] font-semibold hidden sm:block" />
             </div>
 
-            {/* Steps */}
-            <div className="flex items-center gap-2 text-[11px] font-medium">
-              <span className="flex items-center gap-1.5 text-brand-terracotta">
-                <span className="h-5 w-5 rounded-full bg-brand-terracotta text-white text-[10px] flex items-center justify-center font-bold">1</span>
-                Details
-              </span>
-              <span className="w-8 h-px bg-brand-sand/60" />
-              <span className="flex items-center gap-1.5 text-brand-stone/50">
-                <span className="h-5 w-5 rounded-full border border-brand-sand/60 text-[10px] flex items-center justify-center">2</span>
-                Payment
-              </span>
+            <div className="hidden md:block">
+              <span className="hero-kicker">Secure Checkout</span>
             </div>
 
             <button
@@ -536,12 +527,27 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2">
+          <div className="grid grid-cols-1 md:grid-cols-[1.04fr_0.96fr]">
             {/* LEFT — Order summary */}
-            <div className="p-6 sm:p-8 bg-brand-parchment/30 flex flex-col border-b md:border-b-0 md:border-r border-brand-sand/30 max-h-[75vh] overflow-y-auto custom-scrollbar">
+            <div className="border-b border-brand-sand/30 bg-brand-parchment/25 p-6 md:border-b-0 md:border-r md:p-8 max-h-[75vh] overflow-y-auto custom-scrollbar">
               <div className="flex items-center gap-2 mb-5">
                 <Package className="h-4 w-4 text-brand-terracotta" />
                 <h2 className="font-heading text-lg text-brand-charcoal">Order summary</h2>
+              </div>
+
+              <div className="surface-card-soft mb-5 rounded-[1.25rem] p-4">
+                <p className="metric-pill-label">Checkout Flow</p>
+                <div className="mt-3 flex items-center gap-3 text-sm">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-brand-charcoal shadow-soft">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-terracotta text-[11px] font-bold text-white">1</span>
+                    Details
+                  </span>
+                  <span className="h-px flex-1 bg-brand-sand/60" />
+                  <span className="inline-flex items-center gap-2 rounded-full border border-brand-sand/60 bg-white/70 px-3 py-2 text-brand-stone">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full border border-brand-sand/60 text-[11px]">2</span>
+                    Payment
+                  </span>
+                </div>
               </div>
 
               <div className="space-y-3 mb-6">
@@ -551,7 +557,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   return (
                     <div
                       key={key}
-                      className="flex items-start gap-4 p-4 bg-white rounded-2xl border border-brand-sand/30 shadow-soft"
+                      className="surface-card flex items-start gap-4 p-4"
                     >
                       <div className="h-16 w-16 rounded-xl overflow-hidden flex-shrink-0 border border-brand-sand/20 bg-brand-parchment/40">
                         <img
@@ -640,10 +646,17 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
             </div>
 
             {/* RIGHT — Shipping form */}
-            <div className="p-6 sm:p-8 bg-white flex flex-col max-h-[75vh] overflow-y-auto custom-scrollbar">
+            <div className="bg-white/78 p-6 sm:p-8 flex flex-col max-h-[75vh] overflow-y-auto custom-scrollbar">
               <div className="flex items-center gap-2 mb-6">
                 <MapPin className="h-4 w-4 text-brand-terracotta" />
                 <h2 className="font-heading text-lg text-brand-charcoal">Shipping details</h2>
+              </div>
+
+              <div className="surface-card-soft mb-5 rounded-[1.25rem] p-4">
+                <p className="metric-pill-label">What We Preload</p>
+                <p className="mt-2 text-sm leading-relaxed text-brand-stone">
+                  Your profile and saved addresses are used to prefill details when available. You can still adjust anything before paying.
+                </p>
               </div>
 
               {formError && (
@@ -752,7 +765,7 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   <button
                     type="submit"
                     disabled={isProcessing}
-                    className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-brand-charcoal text-brand-cream font-medium text-sm hover:bg-brand-warm-black transition-all shadow-soft-md disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn btn-primary w-full py-3.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isProcessing ? (
                       <>

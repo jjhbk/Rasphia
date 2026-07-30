@@ -3247,6 +3247,9 @@ async function handleUserOrderQuery(
 ) {
   const inputOrderId = String(draft.orderId || "").trim().toLowerCase();
   const activeOnly = Boolean(draft.activeOnly);
+  const visibleStatuses = activeOnly
+    ? ["paid", "Processing", "Shipped"]
+    : ["paid", "Processing", "Shipped", "Delivered"];
   const orders = await prisma.order.findMany({
     where: {
       customer: {
@@ -3254,12 +3257,10 @@ async function handleUserOrderQuery(
         equals: user.email.toLowerCase(),
       },
       ...(merchantContext?.id ? { merchantId: merchantContext.id } : {}),
-      ...(activeOnly
-        ? { status: { in: ["created", "paid", "Processing", "Shipped"] } }
-        : {}),
+      status: { in: visibleStatuses },
     },
     orderBy: { createdAt: "desc" },
-    take: 150,
+    take: 5,
   });
 
   const userOrders = orders.filter((order) => {
@@ -3273,8 +3274,8 @@ async function handleUserOrderQuery(
       reply: inputOrderId
         ? `No orders found for order ID "${draft.orderId}".`
         : activeOnly
-        ? "No active orders found for your account."
-        : "No orders found for your account yet.",
+        ? "No paid or in-transit orders found for your account."
+        : "No paid, shipped, or delivered orders found for your account yet.",
       nextIntent: undefined,
       nextDraft: {},
     };
@@ -3317,7 +3318,7 @@ async function handleUserOrderQuery(
 
   return {
     done: true,
-    reply: `${merchantContext?.name ? `Merchant: ${merchantContext.name}\n` : ""}${activeOnly ? "Your active orders:\n\n" : "Your orders:\n\n"}${lines.join("\n\n")}\n\nReply with: use order 1`,
+    reply: `${merchantContext?.name ? `Merchant: ${merchantContext.name}\n` : ""}${activeOnly ? "Your current fulfilled orders:\n\n" : "Your latest 5 orders:\n\n"}${lines.join("\n\n")}\n\nReply with: use order 1`,
     nextIntent: undefined,
     nextDraft: {
       __orderOptions: userOrders.slice(0, 5).map((order) => ({
