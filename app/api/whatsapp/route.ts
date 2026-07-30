@@ -66,6 +66,15 @@ function extractImageCardsFromReply(reply: string) {
   return cards;
 }
 
+function stripInlineImageLines(reply: string) {
+  return String(reply || "")
+    .split("\n")
+    .filter((line) => !/^Image:\s*https?:\/\/\S+/i.test(line.trim()))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export async function GET(req: NextRequest) {
   const mode = req.nextUrl.searchParams.get("hub.mode");
   const token = req.nextUrl.searchParams.get("hub.verify_token");
@@ -162,7 +171,7 @@ export async function POST(req: NextRequest) {
             // Non-blocking; continue with text reply.
           }
         }
-        await sendText(from, reply);
+        await sendText(from, stripInlineImageLines(reply));
         processed += 1;
         diagnostics.push({
           messageId: String(message.id || ""),
