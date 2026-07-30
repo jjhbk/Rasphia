@@ -17,6 +17,17 @@ type CustomerPayload = {
   zipCode?: string;
 };
 
+type SavedAddressPayload = {
+  name: string;
+  phone: string;
+  address: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  zipCode: string;
+};
+
 function buildAddress(customer: CustomerPayload) {
   return [
     String(customer.addressLine1 || "").trim(),
@@ -58,6 +69,46 @@ function toProductItems(raw: unknown) {
   return Array.isArray(raw) ? (raw as Array<Record<string, unknown>>) : [];
 }
 
+function toSavedAddresses(raw: unknown): SavedAddressPayload[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry) => {
+      const addressEntry =
+        entry && typeof entry === "object" && !Array.isArray(entry)
+          ? (entry as Record<string, unknown>)
+          : null;
+      if (!addressEntry) return null;
+
+      const savedAddress: SavedAddressPayload = {
+        name: String(addressEntry.name || "").trim(),
+        phone: String(addressEntry.phone || "").trim(),
+        addressLine1: String(addressEntry.addressLine1 || "").trim(),
+        addressLine2: String(addressEntry.addressLine2 || "").trim(),
+        city: String(addressEntry.city || "").trim(),
+        state: String(addressEntry.state || "").trim(),
+        zipCode: String(addressEntry.zipCode || "").trim(),
+        address: String(addressEntry.address || "").trim(),
+      };
+
+      savedAddress.address =
+        savedAddress.address ||
+        buildAddress({
+          addressLine1: savedAddress.addressLine1,
+          addressLine2: savedAddress.addressLine2,
+          city: savedAddress.city,
+          state: savedAddress.state,
+          zipCode: savedAddress.zipCode,
+        });
+
+      if (!savedAddress.address && !savedAddress.addressLine1) {
+        return null;
+      }
+
+      return savedAddress;
+    })
+    .filter((entry): entry is SavedAddressPayload => Boolean(entry));
+}
+
 export async function GET(req: NextRequest) {
   try {
     const token = String(req.nextUrl.searchParams.get("token") || "").trim();
@@ -97,6 +148,17 @@ export async function GET(req: NextRequest) {
       order.customer && typeof order.customer === "object" && !Array.isArray(order.customer)
         ? (order.customer as Record<string, unknown>)
         : {};
+    const profile = await prisma.userProfile.findUnique({
+      where: { email: payload.email.toLowerCase() },
+      select: {
+        name: true,
+        phone: true,
+        address: true,
+        addressBook: true,
+      },
+    });
+    const savedAddresses = toSavedAddresses(profile?.addressBook);
+    const preferredAddressBookEntry = savedAddresses[0] ?? null;
 
     const items = toProductItems(order.products);
     const productSummary = items
@@ -122,16 +184,23 @@ export async function GET(req: NextRequest) {
         quantity: Math.max(1, Number(item.quantity || 1)),
       })),
       customer: {
-        name: String(customer.name || "").trim(),
-        email: String(customer.email || "").trim(),
-        phone: String(customer.phone || "").trim(),
-        address: String(customer.address || "").trim(),
-        addressLine1: String(customer.addressLine1 || "").trim(),
-        addressLine2: String(customer.addressLine2 || "").trim(),
-        city: String(customer.city || "").trim(),
-        state: String(customer.state || "").trim(),
-        zipCode: String(customer.zipCode || "").trim(),
+        name: String(profile?.name || customer.name || "").trim(),
+        email: payload.email.toLowerCase(),
+        phone: String(profile?.phone || customer.phone || "").trim(),
+        address: String(
+          preferredAddressBookEntry?.address || profile?.address || customer.address || ""
+        ).trim(),
+        addressLine1: String(
+          preferredAddressBookEntry?.addressLine1 || customer.addressLine1 || ""
+        ).trim(),
+        addressLine2: String(
+          preferredAddressBookEntry?.addressLine2 || customer.addressLine2 || ""
+        ).trim(),
+        city: String(preferredAddressBookEntry?.city || customer.city || "").trim(),
+        state: String(preferredAddressBookEntry?.state || customer.state || "").trim(),
+        zipCode: String(preferredAddressBookEntry?.zipCode || customer.zipCode || "").trim(),
       },
+      savedAddresses,
       invoice: {
         invoiceNumber: order.invoiceNumber || null,
         invoicePdfUrl: order.invoicePdfUrl || null,
@@ -223,6 +292,17 @@ export async function POST(req: NextRequest) {
       order.customer && typeof order.customer === "object" && !Array.isArray(order.customer)
         ? (order.customer as Record<string, unknown>)
         : {};
+    const profile = await prisma.userProfile.findUnique({
+      where: { email: payload.email.toLowerCase() },
+      select: {
+        name: true,
+        phone: true,
+        address: true,
+        addressBook: true,
+      },
+    });
+    const savedAddresses = toSavedAddresses(profile?.addressBook);
+    const preferredAddressBookEntry = savedAddresses[0] ?? null;
 
     const productItems = toProductItems(order.products);
     const primaryItem = productItems[0];
@@ -257,17 +337,30 @@ export async function POST(req: NextRequest) {
     }
 
     const customer: CustomerPayload = {
-      name: String(body.customer?.name || existingCustomer.name || "").trim(),
-      email: String(body.customer?.email || existingCustomer.email || "").trim().toLowerCase(),
-      phone: String(body.customer?.phone || existingCustomer.phone || "").trim(),
-      addressLine1: String(body.customer?.addressLine1 || existingCustomer.addressLine1 || "").trim(),
-      addressLine2: String(body.customer?.addressLine2 || existingCustomer.addressLine2 || "").trim(),
-      city: String(body.customer?.city || existingCustomer.city || "").trim(),
-      state: String(body.customer?.state || existingCustomer.state || "").trim(),
-      zipCode: String(body.customer?.zipCode || existingCustomer.zipCode || "").trim(),
+      name: String(body.customer?.name || profile?.name || existingCustomer.name || "").trim(),
+      email: String(body.customer?.email || payload.email || "").trim().toLowerCase(),
+      phone: String(body.customer?.phone || profile?.phone || existingCustomer.phone || "").trim(),
+      addressLine1: String(
+        body.customer?.addressLine1 ||
+          preferredAddressBookEntry?.addressLine1 ||
+          existingCustomer.addressLine1 ||
+          ""
+      ).trim(),
+      addressLine2: String(
+        body.customer?.addressLine2 ||
+          preferredAddressBookEntry?.addressLine2 ||
+          existingCustomer.addressLine2 ||
+          ""
+      ).trim(),
+      city: String(body.customer?.city || preferredAddressBookEntry?.city || existingCustomer.city || "").trim(),
+      state: String(body.customer?.state || preferredAddressBookEntry?.state || existingCustomer.state || "").trim(),
+      zipCode: String(
+        body.customer?.zipCode || preferredAddressBookEntry?.zipCode || existingCustomer.zipCode || ""
+      ).trim(),
     };
     customer.address =
-      String(body.customer?.address || "").trim() || buildAddress(customer);
+      String(body.customer?.address || preferredAddressBookEntry?.address || profile?.address || "").trim() ||
+      buildAddress(customer);
 
     const validationError = validateCustomer(customer);
     if (validationError) {

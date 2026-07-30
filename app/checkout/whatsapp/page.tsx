@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Minus, Plus, ShieldCheck, MapPin, Package, CreditCard } from "lucide-react";
-import type { CheckoutCustomer } from "@/app/types";
+import type { CheckoutCustomer, SavedAddress } from "@/app/types";
 
 declare global {
   interface Window {
@@ -33,6 +33,7 @@ type CheckoutSessionResponse = {
     quantity: number;
   }>;
   customer: CheckoutCustomer;
+  savedAddresses?: SavedAddress[];
   invoice: {
     invoiceNumber?: string | null;
     invoicePdfUrl?: string | null;
@@ -41,6 +42,20 @@ type CheckoutSessionResponse = {
   };
   paymentId?: string | null;
 };
+
+function normalizeSavedAddress(address: SavedAddress): CheckoutCustomer {
+  return {
+    name: address.name || "",
+    email: "",
+    phone: address.phone || "",
+    address: address.address || "",
+    addressLine1: address.addressLine1 || "",
+    addressLine2: address.addressLine2 || "",
+    city: address.city || "",
+    state: address.state || "",
+    zipCode: address.zipCode || "",
+  };
+}
 
 const loadRazorpay = () =>
   new Promise<void>((resolve, reject) => {
@@ -113,6 +128,7 @@ export default function WhatsAppCheckoutPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPreparingCheckout, setIsPreparingCheckout] = useState(false);
   const [statusText, setStatusText] = useState("");
+  const [selectedAddressIndex, setSelectedAddressIndex] = useState("0");
   const token = useMemo(() => {
     if (typeof window === "undefined") return "";
     return new URLSearchParams(window.location.search).get("token") || "";
@@ -137,6 +153,7 @@ export default function WhatsAppCheckoutPage() {
         ...nextSession.customer,
         address: nextSession.customer.address || buildAddress(nextSession.customer),
       });
+      setSelectedAddressIndex(nextSession.savedAddresses?.length ? "0" : "");
       setQuantity(Math.max(1, Number(nextSession.products?.[0]?.quantity || 1)));
       if (nextSession.paid) {
         setStatusText("Payment already verified for this order.");
@@ -159,6 +176,30 @@ export default function WhatsAppCheckoutPage() {
   const handleCustomerChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = event.target;
     setCustomer((current) => ({ ...current, [name]: value }));
+    if (selectedAddressIndex) {
+      setSelectedAddressIndex("");
+    }
+    if (error) setError(null);
+  };
+
+  const handleSavedAddressChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextIndex = event.target.value;
+    setSelectedAddressIndex(nextIndex);
+    if (!session?.savedAddresses || !nextIndex) {
+      return;
+    }
+    const selectedAddress = session.savedAddresses[Number(nextIndex)];
+    if (!selectedAddress) {
+      return;
+    }
+    setCustomer((current) => ({
+      ...current,
+      ...normalizeSavedAddress(selectedAddress),
+      name: current.name || selectedAddress.name || "",
+      email: current.email,
+      phone: selectedAddress.phone || current.phone || "",
+      address: selectedAddress.address || buildAddress(normalizeSavedAddress(selectedAddress)),
+    }));
     if (error) setError(null);
   };
 
@@ -376,6 +417,25 @@ export default function WhatsAppCheckoutPage() {
                     <MapPin className="h-4 w-4 text-brand-terracotta" />
                     <p className="text-sm font-semibold">Customer details</p>
                   </div>
+                  {session.savedAddresses?.length ? (
+                    <div className="mt-4">
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-brand-stone">
+                        Saved address
+                      </label>
+                      <select
+                        value={selectedAddressIndex}
+                        onChange={handleSavedAddressChange}
+                        className="w-full rounded-2xl border border-brand-sand/50 bg-white px-4 py-3 text-sm"
+                      >
+                        {session.savedAddresses.map((address, index) => (
+                          <option key={`${address.address}-${index}`} value={String(index)}>
+                            {address.address || `${address.addressLine1}, ${address.city}`}
+                          </option>
+                        ))}
+                        <option value="">Enter a different address manually</option>
+                      </select>
+                    </div>
+                  ) : null}
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <input
                       name="name"
