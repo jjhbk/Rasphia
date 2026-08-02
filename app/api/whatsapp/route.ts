@@ -3,7 +3,17 @@ import {
   buildRoleAwareWhatsAppUsageTemplate,
   processMerchantWhatsAppMessage,
 } from "@/app/lib/whatsapp-orchestrator";
-import { sendImage, sendText } from "@/app/lib/whatsapp";
+import {
+  downloadWhatsAppMedia,
+  sendAudio,
+  sendImage,
+  sendText,
+  uploadBufferToBlob,
+} from "@/app/lib/whatsapp";
+import {
+  synthesizeSpeechWithSarvam,
+  transcribeAudioWithSarvam,
+} from "@/app/lib/sarvam";
 
 export const runtime = "nodejs";
 
@@ -35,6 +45,7 @@ type WhatsAppInbound = {
           type?: string;
           text?: { body?: string };
           image?: { id?: string; caption?: string };
+          audio?: { id?: string; voice?: boolean };
           interactive?: {
             button_reply?: { title?: string; id?: string };
             list_reply?: { title?: string; id?: string };
@@ -136,11 +147,16 @@ export async function POST(req: NextRequest) {
           ""
       ).trim();
       const mediaId =
-        message.type === "image" ? String(message.image?.id || "").trim() : "";
+        message.type === "image"
+          ? String(message.image?.id || "").trim()
+          : message.type === "audio"
+          ? String(message.audio?.id || "").trim()
+          : "";
       const mediaCaption =
         message.type === "image"
           ? String(message.image?.caption || "").trim()
           : "";
+      const isAudioMessage = message.type === "audio";
 
       if (!text && !mediaId && !mediaCaption) {
         skipped += 1;
@@ -154,15 +170,55 @@ export async function POST(req: NextRequest) {
       }
 
       try {
+        let inputText = text;
+        let voiceReplyUrl: string | undefined;
+        let voiceTranscript: string | undefined;
+        let voiceLanguageCode: string | undefined;
+
+        if (isAudioMessage && mediaId) {
+          const { bytes, mimeType } = await downloadWhatsAppMedia(mediaId);
+          const transcription = await transcribeAudioWithSarvam({
+            audio: bytes,
+            mimeType,
+          });
+          inputText = transcription.transcript;
+          voiceTranscript = transcription.transcript;
+          voiceLanguageCode = transcription.languageCode;
+        }
+
         const reply = await processMerchantWhatsAppMessage({
           fromPhone: from,
           recipientPhone: recipientDisplayPhone || undefined,
           recipientPhoneNumberId: recipientPhoneNumberId || undefined,
-          text,
+          text: inputText,
           messageId: message.id,
-          mediaId: mediaId || undefined,
+          mediaId: isAudioMessage ? undefined : mediaId || undefined,
           mediaCaption: mediaCaption || undefined,
         });
+
+        const strippedReply = stripInlineImageLines(reply);
+
+        if (isAudioMessage && strippedReply) {
+          try {
+            const synthesized = await synthesizeSpeechWithSarvam({
+              text: strippedReply,
+              languageCode: voiceLanguageCode,
+            });
+            voiceReplyUrl = await uploadBufferToBlob({
+              pathname: `whatsapp-audio-replies/${Date.now()}-${message.id || "reply"}.${synthesized.audioFormat}`,
+              bytes: synthesized.audio,
+              contentType:
+                synthesized.audioFormat === "mp3" ? "audio/mpeg" : `audio/${synthesized.audioFormat}`,
+            });
+          } catch (voiceError) {
+            console.error("[/api/whatsapp] voice reply generation failed", {
+              messageId: String(message.id || ""),
+              from,
+              reason: voiceError instanceof Error ? voiceError.message : "unknown_error",
+            });
+          }
+        }
+
         const cards = extractImageCardsFromReply(reply);
         for (const card of cards) {
           try {
@@ -171,13 +227,17 @@ export async function POST(req: NextRequest) {
             // Non-blocking; continue with text reply.
           }
         }
-        await sendText(from, stripInlineImageLines(reply));
+        if (voiceReplyUrl) {
+          await sendAudio(from, voiceReplyUrl, { voice: true });
+        }
+        await sendText(from, strippedReply);
         processed += 1;
         diagnostics.push({
           messageId: String(message.id || ""),
           from,
           status: "processed",
           type: String(message.type || ""),
+          ...(voiceTranscript ? { transcript: voiceTranscript } : {}),
         });
       } catch (err: unknown) {
         const reason = err instanceof Error ? err.message : "unknown_error";

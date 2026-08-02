@@ -58,6 +58,36 @@ export async function sendImage(to: string, imageUrl: string, caption?: string) 
   }
 }
 
+export async function sendAudio(
+  to: string,
+  audioUrl: string,
+  options?: {
+    voice?: boolean;
+  }
+) {
+  const url = `https://graph.facebook.com/v17.0/${PHONE_NUMBER_ID}/messages`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "audio",
+      audio: {
+        link: audioUrl,
+        ...(options?.voice ? { voice: true } : {}),
+      },
+    }),
+  });
+  if (!res.ok) {
+    const body = await parseErrorBody(res);
+    throw new Error(`WhatsApp sendAudio failed (${res.status}): ${body}`);
+  }
+}
+
 // Send an interactive list of product options (max 10 per list)
 export async function sendProductList(
   to: string,
@@ -137,6 +167,11 @@ function extFromMimeType(mimeType: string) {
   if (mimeType.includes("png")) return "png";
   if (mimeType.includes("webp")) return "webp";
   if (mimeType.includes("gif")) return "gif";
+  if (mimeType.includes("mpeg") || mimeType.includes("mp3")) return "mp3";
+  if (mimeType.includes("ogg")) return "ogg";
+  if (mimeType.includes("wav")) return "wav";
+  if (mimeType.includes("aac")) return "aac";
+  if (mimeType.includes("flac")) return "flac";
   return "bin";
 }
 
@@ -196,5 +231,17 @@ export async function uploadWhatsAppMediaToBlob(
       contentType: mimeType,
     }
   );
+  return blob.url;
+}
+
+export async function uploadBufferToBlob(args: {
+  pathname: string;
+  bytes: Buffer;
+  contentType: string;
+}) {
+  const blob = await put(args.pathname, args.bytes, {
+    access: "public",
+    contentType: args.contentType,
+  });
   return blob.url;
 }
