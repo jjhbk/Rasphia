@@ -54,6 +54,12 @@ export type SarvamTranslateResult = {
   requestId?: string;
 };
 
+export type SarvamIdentifyLanguageResult = {
+  languageCode: string;
+  scriptCode?: string;
+  requestId?: string;
+};
+
 function ensureSarvamKey() {
   if (!SARVAM_API_KEY) {
     throw new Error("SARVAM_API_KEY is not configured.");
@@ -113,6 +119,43 @@ export function resolveSarvamTtsLanguage(args: {
 
 export function isSarvamTtsLanguageSupported(languageCode?: string) {
   return SUPPORTED_TTS_LANGUAGES.has(String(languageCode || "").trim());
+}
+
+export async function identifyTextLanguageWithSarvam(input: string) {
+  ensureSarvamKey();
+
+  const response = await fetch(`${SARVAM_API_BASE}/text-lid`, {
+    method: "POST",
+    headers: {
+      "api-subscription-key": SARVAM_API_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      input,
+    }),
+  });
+
+  if (!response.ok) {
+    const details = await parseSarvamError(response);
+    throw new Error(`Sarvam text-lid failed (${response.status}): ${details}`);
+  }
+
+  const data = (await response.json()) as {
+    request_id?: string;
+    language_code?: string;
+    script_code?: string;
+  };
+
+  const languageCode = String(data.language_code || "").trim();
+  if (!languageCode) {
+    throw new Error("Sarvam text-lid returned empty language code.");
+  }
+
+  return {
+    languageCode,
+    scriptCode: String(data.script_code || "").trim() || undefined,
+    requestId: data.request_id,
+  } satisfies SarvamIdentifyLanguageResult;
 }
 
 export async function transcribeAudioWithSarvam(args: {
