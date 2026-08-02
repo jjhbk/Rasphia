@@ -11,7 +11,9 @@ import {
   uploadBufferToBlob,
 } from "@/app/lib/whatsapp";
 import {
+  isSarvamTtsLanguageSupported,
   synthesizeSpeechWithSarvam,
+  translateTextWithSarvam,
   transcribeAudioWithSarvam,
 } from "@/app/lib/sarvam";
 
@@ -84,6 +86,35 @@ function stripInlineImageLines(reply: string) {
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function buildVoiceAcknowledgement(args: {
+  inboundText: string;
+  assistantReply: string;
+}) {
+  const inbound = String(args.inboundText || "").trim().toLowerCase();
+  const reply = String(args.assistantReply || "").trim();
+
+  if (!reply) {
+    return "Okay, I got it.";
+  }
+  if (/\b(order|track|refund|replacement|cancel)\b/.test(inbound)) {
+    return "Okay, I got your order request. I’ve sent the details in text.";
+  }
+  if (/\b(buy|purchase|checkout|pay|payment)\b/.test(inbound)) {
+    return "Okay, I got your purchase request. I’ve shared the next steps in text.";
+  }
+  if (/\b(product|products|gift|decor|show me|find)\b/.test(inbound)) {
+    return "Okay, I found something for you. I’ve sent the details in text.";
+  }
+  if (/\b(register|signup|sign up|merchant|storefront|stock|inventory)\b/.test(inbound)) {
+    return "Okay, I got your request. I’ve sent the next steps in text.";
+  }
+  if (/^(hi|hello|hey|start|help)\b/.test(inbound)) {
+    return "Okay, I’m here to help. Please check the text message I sent.";
+  }
+
+  return "Okay, got it. I’ve sent the details in text.";
 }
 
 export async function GET(req: NextRequest) {
@@ -197,19 +228,67 @@ export async function POST(req: NextRequest) {
         });
 
         const strippedReply = stripInlineImageLines(reply);
+        let outboundTextReply = strippedReply;
 
-        if (isAudioMessage && strippedReply) {
+        if (
+          isAudioMessage &&
+          strippedReply &&
+          voiceLanguageCode &&
+          voiceLanguageCode !== "en-IN"
+        ) {
           try {
-            const synthesized = await synthesizeSpeechWithSarvam({
-              text: strippedReply,
-              languageCode: voiceLanguageCode,
+            const translation = await translateTextWithSarvam({
+              input: strippedReply,
+              sourceLanguageCode: "en-IN",
+              targetLanguageCode: voiceLanguageCode,
             });
-            voiceReplyUrl = await uploadBufferToBlob({
-              pathname: `whatsapp-audio-replies/${Date.now()}-${message.id || "reply"}.${synthesized.audioFormat}`,
-              bytes: synthesized.audio,
-              contentType:
-                synthesized.audioFormat === "mp3" ? "audio/mpeg" : `audio/${synthesized.audioFormat}`,
+            outboundTextReply = translation.translatedText;
+          } catch (translationError) {
+            console.error("[/api/whatsapp] text translation failed", {
+              messageId: String(message.id || ""),
+              from,
+              targetLanguageCode: voiceLanguageCode,
+              reason:
+                translationError instanceof Error
+                  ? translationError.message
+                  : "unknown_error",
             });
+          }
+        }
+
+        if (isAudioMessage && outboundTextReply) {
+          try {
+            const requestedVoiceLanguage = voiceLanguageCode || "en-IN";
+            if (isSarvamTtsLanguageSupported(requestedVoiceLanguage)) {
+              let voiceAck = buildVoiceAcknowledgement({
+                inboundText: inputText,
+                assistantReply: outboundTextReply,
+              });
+              if (requestedVoiceLanguage !== "en-IN") {
+                const ackTranslation = await translateTextWithSarvam({
+                  input: voiceAck,
+                  sourceLanguageCode: "en-IN",
+                  targetLanguageCode: requestedVoiceLanguage,
+                });
+                voiceAck = ackTranslation.translatedText;
+              }
+              const synthesized = await synthesizeSpeechWithSarvam({
+                text: voiceAck,
+                languageCode: requestedVoiceLanguage,
+              });
+              voiceReplyUrl = await uploadBufferToBlob({
+                pathname: `whatsapp-audio-replies/${Date.now()}-${message.id || "reply"}.${synthesized.audioFormat}`,
+                bytes: synthesized.audio,
+                contentType:
+                  synthesized.audioFormat === "mp3" ? "audio/mpeg" : `audio/${synthesized.audioFormat}`,
+              });
+            } else {
+              console.warn("[/api/whatsapp] skipping voice reply for unsupported TTS language", {
+                messageId: String(message.id || ""),
+                from,
+                languageCode: requestedVoiceLanguage,
+              });
+            }
           } catch (voiceError) {
             console.error("[/api/whatsapp] voice reply generation failed", {
               messageId: String(message.id || ""),
@@ -230,7 +309,7 @@ export async function POST(req: NextRequest) {
         if (voiceReplyUrl) {
           await sendAudio(from, voiceReplyUrl, { voice: true });
         }
-        await sendText(from, strippedReply);
+        await sendText(from, outboundTextReply);
         processed += 1;
         diagnostics.push({
           messageId: String(message.id || ""),

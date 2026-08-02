@@ -10,8 +10,10 @@ const DEFAULT_TTS_SAMPLE_RATE = Number(process.env.SARVAM_TTS_SAMPLE_RATE || 240
 const DEFAULT_TTS_FORMAT = process.env.SARVAM_TTS_FORMAT?.trim() || "mp3";
 const DEFAULT_TTS_FALLBACK_LANGUAGE =
   process.env.SARVAM_TTS_FALLBACK_LANGUAGE?.trim() || "en-IN";
+const DEFAULT_TRANSLATE_MODEL =
+  process.env.SARVAM_TRANSLATE_MODEL?.trim() || "mayura:v1";
 
-const SUPPORTED_TTS_LANGUAGES = new Set([
+export const SUPPORTED_TTS_LANGUAGES = new Set([
   "en-IN",
   "hi-IN",
   "bn-IN",
@@ -43,6 +45,12 @@ export type SarvamTextToSpeechResult = {
   audio: Buffer;
   audioFormat: string;
   languageCode: string;
+  requestId?: string;
+};
+
+export type SarvamTranslateResult = {
+  translatedText: string;
+  sourceLanguageCode: string;
   requestId?: string;
 };
 
@@ -101,6 +109,10 @@ export function resolveSarvamTtsLanguage(args: {
     return detected;
   }
   return DEFAULT_TTS_FALLBACK_LANGUAGE;
+}
+
+export function isSarvamTtsLanguageSupported(languageCode?: string) {
+  return SUPPORTED_TTS_LANGUAGES.has(String(languageCode || "").trim());
 }
 
 export async function transcribeAudioWithSarvam(args: {
@@ -201,4 +213,48 @@ export async function synthesizeSpeechWithSarvam(args: {
     languageCode: targetLanguageCode,
     requestId: data.request_id,
   } satisfies SarvamTextToSpeechResult;
+}
+
+export async function translateTextWithSarvam(args: {
+  input: string;
+  targetLanguageCode: string;
+  sourceLanguageCode?: string;
+}) {
+  ensureSarvamKey();
+
+  const response = await fetch(`${SARVAM_API_BASE}/translate`, {
+    method: "POST",
+    headers: {
+      "api-subscription-key": SARVAM_API_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      input: args.input,
+      source_language_code: args.sourceLanguageCode?.trim() || "auto",
+      target_language_code: args.targetLanguageCode,
+      model: DEFAULT_TRANSLATE_MODEL,
+    }),
+  });
+
+  if (!response.ok) {
+    const details = await parseSarvamError(response);
+    throw new Error(`Sarvam translate failed (${response.status}): ${details}`);
+  }
+
+  const data = (await response.json()) as {
+    request_id?: string;
+    translated_text?: string;
+    source_language_code?: string;
+  };
+
+  const translatedText = String(data.translated_text || "").trim();
+  if (!translatedText) {
+    throw new Error("Sarvam translate returned empty text.");
+  }
+
+  return {
+    translatedText,
+    sourceLanguageCode: String(data.source_language_code || "auto").trim(),
+    requestId: data.request_id,
+  } satisfies SarvamTranslateResult;
 }
