@@ -94,7 +94,7 @@ export default function MetaEmbeddedSignupButton({
 
     let cancelled = false;
     let attempts = 0;
-    let timer: ReturnType<typeof window.setInterval> | null = null;
+    let timer: number | null = null;
 
     const tryInit = () => {
       if (cancelled || !window.FB || !config?.appId) return;
@@ -108,6 +108,7 @@ export default function MetaEmbeddedSignupButton({
       setErrorText("");
       if (timer) {
         window.clearInterval(timer);
+        timer = null;
       }
     };
 
@@ -118,6 +119,7 @@ export default function MetaEmbeddedSignupButton({
       tryInit();
       if (attempts >= 20 && timer) {
         window.clearInterval(timer);
+        timer = null;
         if (!cancelled && !window.FB) {
           setErrorText(
             "Meta SDK could not load in this browser session. Refresh once and try again."
@@ -128,7 +130,10 @@ export default function MetaEmbeddedSignupButton({
 
     return () => {
       cancelled = true;
-      if (timer) window.clearInterval(timer);
+      if (timer) {
+        window.clearInterval(timer);
+        timer = null;
+      }
     };
   }, [config?.appId, metaEnabled, sdkReady, sdkRequested]);
 
