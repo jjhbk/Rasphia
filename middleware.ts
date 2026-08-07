@@ -10,6 +10,7 @@ export function middleware(req: NextRequest) {
     "/api/agent",
     "/api/extension",
     "/api/mobile/auth",
+    "/api/meta/embedded-signup/config",
     "/api/storefronts",
     "/api/whatsapp",
     "/api/whatsapp/send-otp",

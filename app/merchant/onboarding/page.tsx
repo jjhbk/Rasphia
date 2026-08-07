@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Store, CheckCircle2, Clock, XCircle, AlertCircle } from "lucide-react";
 import BrandLogo from "@/app/components/brand/BrandLogo";
 import Navbar from "@/app/components/Navbar";
@@ -26,6 +27,8 @@ type Merchant = {
 
 export default function MerchantOnboardingPage() {
   const { data: session, status } = useSession();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [merchant, setMerchant] = useState<Merchant | null>(null);
   const [form, setForm] = useState({
     businessName: "",
@@ -41,6 +44,10 @@ export default function MerchantOnboardingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [metaConnecting, setMetaConnecting] = useState(false);
+
+  const metaSignupStatus = String(searchParams.get("meta_signup") || "").trim();
+  const metaCode = String(searchParams.get("code") || "").trim();
 
   useEffect(() => {
     if (status === "loading") {
@@ -80,8 +87,55 @@ export default function MerchantOnboardingPage() {
     })();
   }, [status]);
 
-  const inputClass =
-    "w-full rounded-xl border border-brand-sand/50 bg-brand-parchment/50 px-3 py-2.5 text-sm text-brand-charcoal placeholder:text-brand-stone/50 outline-none focus:border-brand-terracotta/40 focus:ring-2 focus:ring-brand-terracotta/10 transition-all";
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    if (metaSignupStatus !== "success" || !metaCode) return;
+    if (metaConnecting) return;
+
+    (async () => {
+      try {
+        setMetaConnecting(true);
+        setError("");
+        const res = await fetch("/api/meta/embedded-signup/exchange", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: metaCode }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.error || "Failed to connect Meta business assets.");
+        }
+
+        if (data?.merchant) {
+          setMerchant(data.merchant);
+          setForm({
+            businessName: data.merchant.name || "",
+            phone: data.merchant.phone || "",
+            addressLine1: data.merchant.addressLine1 || "",
+            addressLine2: data.merchant.addressLine2 || "",
+            city: data.merchant.city || "",
+            state: data.merchant.state || "",
+            zipCode: data.merchant.zipCode || "",
+            locationLink: data.merchant.locationLink || "",
+          });
+        }
+
+        setMessage(
+          data?.message ||
+            "Meta business connection saved. Complete the remaining merchant details below."
+        );
+        router.replace("/merchant/onboarding");
+      } catch (e) {
+        setError(
+          e instanceof Error
+            ? e.message
+            : "Failed to connect Meta business assets."
+        );
+      } finally {
+        setMetaConnecting(false);
+      }
+    })();
+  }, [metaCode, metaConnecting, metaSignupStatus, router, status]);
 
   if (status === "loading" || loading) {
     return (
@@ -108,7 +162,14 @@ export default function MerchantOnboardingPage() {
               <p className="text-brand-stone text-sm mt-2">Sign in to submit your merchant application and get your own storefront on Rasphia.</p>
             </div>
             <button
-              onClick={() => signIn("google")}
+              onClick={() =>
+                signIn("google", {
+                  callbackUrl:
+                    typeof window !== "undefined"
+                      ? window.location.href
+                      : "/merchant/onboarding",
+                })
+              }
               className="btn btn-primary w-full justify-center"
             >
               Continue with Google
@@ -261,6 +322,12 @@ export default function MerchantOnboardingPage() {
           <div className="alert alert-success animate-fade-in">
             <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-green-600" />
             {message}
+          </div>
+        )}
+        {metaConnecting && (
+          <div className="alert alert-info animate-fade-in">
+            <Clock className="h-4 w-4 flex-shrink-0" />
+            Connecting your Meta business assets and saving them to Rasphia…
           </div>
         )}
         {error && (
