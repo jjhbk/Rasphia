@@ -30,7 +30,10 @@ function createAddressPlaceholder() {
 export async function POST(req: NextRequest) {
   try {
     const { sessionEmail, body, errorResponse } = await authGuard(req);
-    if (errorResponse || !sessionEmail) return errorResponse;
+    if (errorResponse) return errorResponse;
+    if (!sessionEmail) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const code = String(body?.code || "").trim();
     if (!code) {
